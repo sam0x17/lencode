@@ -19,8 +19,9 @@
 /// * `buf` holds an unsigned integer in little-endian order.
 /// * Returns a subslice of `buf` containing the encoded value.
 /// * Never grows beyond the original width; falls back to raw form if needed.
+/// * Encoded values can be decoded using [`decode_leb128_capped`].
 #[inline(always)]
-pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
+pub fn encode_leb128_capped_inplace(buf: &mut [u8]) -> &[u8] {
     let w = buf.len();
     if w == 0 {
         return buf;
@@ -82,7 +83,7 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
     &buf[..groups]
 }
 
-/// Decode the "capped" LEB‑128 produced by [`encode_leb128_ceiling_inplace`].
+/// Decode the "capped" LEB‑128 produced by [`encode_leb128_capped_inplace`].
 ///
 /// * `N` is the fixed byte‑width of the target integer (1, 2, 4, 8, 16, 32…).
 /// * `input` may hold:
@@ -96,7 +97,7 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
 ///   fixed-width value (exactly N bytes).
 /// * On success returns the little-endian bytes of width **N**.
 #[inline(always)]
-pub fn decode_leb128_ceiling<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
+pub fn decode_leb128_capped<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
     if N == 0 {
         return None;
     }
@@ -151,8 +152,8 @@ mod tests {
     #[inline(always)]
     fn roundtrip<const N: usize>(bytes: [u8; N]) {
         let mut buf = bytes;
-        let enc = encode_leb128_ceiling_inplace(&mut buf);
-        let dec = decode_leb128_ceiling::<N>(enc).expect("decode failed");
+        let enc = encode_leb128_capped_inplace(&mut buf);
+        let dec = decode_leb128_capped::<N>(enc).expect("decode failed");
 
         assert_eq!(dec, bytes, "round-trip mismatch for {bytes:?}");
         assert!(enc.len() <= N, "encoded length exceeds width");
