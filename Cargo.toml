@@ -10,3 +10,10 @@ repository = "https://github.com/sam0x17/lencode"
 documentation = "https://docs.rs/lencode/latest/lencode/"
 
 [dependencies]
+serde = { version = "1", optional = true }
+
+
+[features]
+default = ["std", "serde"]
+std = []
+serde = ["dep:serde"]
