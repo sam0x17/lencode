@@ -1,0 +1,12 @@
+[package]
+name = "lencode"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "A crate for encoding and decoding variable-length data using an optimal LEB128 lencoding scheme"
+keywords = ["encoding", "decoding", "bincode", "leb128", "serde"]
+authors = ["sam0x17"]
+repository = "https://github.com/sam0x17/lencode"
+documentation = "https://docs.rs/lencode/latest/lencode/"
+
+[dependencies]
