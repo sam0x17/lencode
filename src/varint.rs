@@ -1,3 +1,10 @@
+//! Contains our custom "capped" LEB-128 integer encoding scheme, which is similar to normal
+//! LEB-128 but will never waste more bytes than the native integer representation.
+//!
+//! Encoding is performed by [`encode_leb128_capped_inplace`].
+//!
+//! Decoding is performed by [`decode_leb128_capped`].
+
 /// In-place "capped" LEB-128. This scheme uses LEB-128 up until the point where using it would
 /// cost more bytes than simply using the native representation of the integer. As a result
 /// this scheme will never result in a representation larger than the native one, and often can
