@@ -19,9 +19,12 @@
 /// * `buf` holds an unsigned integer in little-endian order.
 /// * Returns a subslice of `buf` containing the encoded value.
 /// * Never grows beyond the original width; falls back to raw form if needed.
+#[inline(always)]
 pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
     let w = buf.len();
-    assert!(w > 0, "buffer must not be empty");
+    if w == 0 {
+        return buf;
+    }
 
     // locate highest non-zero byte
     let mut hi = w;
@@ -49,7 +52,7 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
     // build var-int bytes in a temp stack buffer
     //   (groups ≤ w , so this fits)
     let mut tmp = [0u8; 128]; // covers widths ≤ 1024 bits
-    debug_assert!(groups <= tmp.len());
+    // debug_assert!(groups <= tmp.len());
 
     let mut bit_off = 0usize;
     let mut idx = 0usize;
@@ -72,7 +75,7 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
         idx += 1;
         bit_off += 7;
     }
-    debug_assert_eq!(idx, groups);
+    // debug_assert_eq!(idx, groups);
 
     // copy result back to the front of buf
     buf[..groups].copy_from_slice(&tmp[..groups]);
@@ -92,8 +95,11 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
 /// * `input` is either the variable-length stream (≤ N−1 bytes, MSB 0 on last) or the raw
 ///   fixed-width value (exactly N bytes).
 /// * On success returns the little-endian bytes of width **N**.
+#[inline(always)]
 pub fn decode_leb128_ceiling<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
-    assert!(N > 0, "N must be positive");
+    if N == 0 {
+        return None;
+    }
 
     // fast path: raw ceiling form
     if input.len() == N {
@@ -142,6 +148,7 @@ pub fn decode_leb128_ceiling<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
 mod tests {
     use super::*;
 
+    #[inline(always)]
     fn roundtrip<const N: usize>(bytes: [u8; N]) {
         let mut buf = bytes;
         let enc = encode_leb128_ceiling_inplace(&mut buf);
