@@ -146,114 +146,110 @@ pub fn decode_leb128_capped<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[inline(always)]
+fn roundtrip<const N: usize>(bytes: [u8; N]) {
+    let mut buf = bytes;
+    let enc = encode_leb128_capped_inplace(&mut buf);
+    let dec = decode_leb128_capped::<N>(enc).expect("decode failed");
 
-    #[inline(always)]
-    fn roundtrip<const N: usize>(bytes: [u8; N]) {
-        let mut buf = bytes;
-        let enc = encode_leb128_capped_inplace(&mut buf);
-        let dec = decode_leb128_capped::<N>(enc).expect("decode failed");
+    assert_eq!(dec, bytes, "round-trip mismatch for {bytes:?}");
+    assert!(enc.len() <= N, "encoded length exceeds width");
+}
 
-        assert_eq!(dec, bytes, "round-trip mismatch for {bytes:?}");
-        assert!(enc.len() <= N, "encoded length exceeds width");
+// exhaustive u8
+#[test]
+fn u8_all() {
+    for v in 0u8..=u8::MAX {
+        roundtrip::<1>(v.to_le_bytes());
     }
+}
 
-    // exhaustive u8
-    #[test]
-    fn u8_all() {
-        for v in 0u8..=u8::MAX {
-            roundtrip::<1>(v.to_le_bytes());
-        }
+// exhaustive u16
+#[test]
+fn u16_all() {
+    for v in 0u16..=u16::MAX {
+        roundtrip::<2>(v.to_le_bytes());
     }
+}
 
-    // exhaustive u16
-    #[test]
-    fn u16_all() {
-        for v in 0u16..=u16::MAX {
-            roundtrip::<2>(v.to_le_bytes());
-        }
+#[test]
+fn u32_all() {
+    use rayon::prelude::*;
+    (0u32..=u32::MAX).into_par_iter().for_each(|v| {
+        roundtrip::<4>(v.to_le_bytes());
+    });
+}
+
+// u32 boundaries
+#[test]
+fn u32_boundaries() {
+    let s = [
+        0,
+        1,
+        127,
+        128,
+        16_383,
+        16_384,
+        (1 << 21) - 1,
+        1 << 21,
+        (1 << 28) - 1,
+        1 << 28,
+        u32::MAX,
+    ];
+    for &v in &s {
+        roundtrip::<4>(v.to_le_bytes());
     }
+}
 
-    #[test]
-    fn u32_all() {
-        use rayon::prelude::*;
-        (0u32..=u32::MAX).into_par_iter().for_each(|v| {
-            roundtrip::<4>(v.to_le_bytes());
-        });
+// u64 edges
+#[test]
+fn u64_edges() {
+    let s = [
+        0,
+        1,
+        127,
+        128,
+        (1 << 14) - 1,
+        1 << 14,
+        (1 << 21) - 1,
+        1 << 21,
+        (1 << 28) - 1,
+        1 << 28,
+        (1 << 49) - 1,
+        1 << 49,
+        1 << 56,
+        (1 << 63) - 1,
+        1 << 63,
+        u64::MAX,
+    ];
+    for &v in &s {
+        roundtrip::<8>(v.to_le_bytes());
     }
+}
 
-    // u32 boundaries
-    #[test]
-    fn u32_boundaries() {
-        let s = [
-            0,
-            1,
-            127,
-            128,
-            16_383,
-            16_384,
-            (1 << 21) - 1,
-            1 << 21,
-            (1 << 28) - 1,
-            1 << 28,
-            u32::MAX,
-        ];
-        for &v in &s {
-            roundtrip::<4>(v.to_le_bytes());
-        }
+#[test]
+fn u128_selected() {
+    let s = [0u128, 1, 127, ((1u128 << 127) - 1), 1u128 << 127];
+    for &v in &s {
+        roundtrip::<16>(v.to_le_bytes());
     }
+}
 
-    // u64 edges
-    #[test]
-    fn u64_edges() {
-        let s = [
-            0,
-            1,
-            127,
-            128,
-            (1 << 14) - 1,
-            1 << 14,
-            (1 << 21) - 1,
-            1 << 21,
-            (1 << 28) - 1,
-            1 << 28,
-            (1 << 49) - 1,
-            1 << 49,
-            1 << 56,
-            (1 << 63) - 1,
-            1 << 63,
-            u64::MAX,
-        ];
-        for &v in &s {
-            roundtrip::<8>(v.to_le_bytes());
-        }
+// 256-bit buffer tests
+#[test]
+fn u256_buffer() {
+    // zero compresses
+    roundtrip::<32>([0u8; 32]);
+
+    // mid-range pattern
+    let mut mid = [0u8; 32];
+    for i in 0..32 {
+        mid[i] = 0xEFu8.wrapping_add(i as u8).wrapping_mul(0x11);
     }
+    roundtrip::<32>(mid);
 
-    #[test]
-    fn u128_selected() {
-        let s = [0u128, 1, 127, ((1u128 << 127) - 1), 1u128 << 127];
-        for &v in &s {
-            roundtrip::<16>(v.to_le_bytes());
-        }
-    }
-
-    // 256-bit buffer tests
-    #[test]
-    fn u256_buffer() {
-        // zero compresses
-        roundtrip::<32>([0u8; 32]);
-
-        // mid-range pattern
-        let mut mid = [0u8; 32];
-        for i in 0..32 {
-            mid[i] = 0xEFu8.wrapping_add(i as u8).wrapping_mul(0x11);
-        }
-        roundtrip::<32>(mid);
-
-        // near-max (top bit 0) triggers ceiling
-        let mut near_max = [0xFF; 32];
-        near_max[31] = 0x7F;
-        roundtrip::<32>(near_max);
-    }
+    // near-max (top bit 0) triggers ceiling
+    let mut near_max = [0xFF; 32];
+    near_max[31] = 0x7F;
+    roundtrip::<32>(near_max);
 }
