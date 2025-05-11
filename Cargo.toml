@@ -12,8 +12,16 @@ documentation = "https://docs.rs/lencode/latest/lencode/"
 [dependencies]
 serde = { version = "1", optional = true }
 
+[dev-dependencies]
+rayon = "1"
 
 [features]
 default = ["std", "serde"]
 std = []
 serde = ["dep:serde"]
+
+[profile.test]
+opt-level = 3
+
+[profile.dev]
+opt-level = 3

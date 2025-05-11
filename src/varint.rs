@@ -147,7 +147,7 @@ pub fn decode_leb128_ceiling<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_leb128_ceiling, encode_leb128_ceiling_inplace};
+    use super::*;
 
     fn roundtrip<const N: usize>(bytes: [u8; N]) {
         let mut buf = bytes;
@@ -176,9 +176,10 @@ mod tests {
 
     #[test]
     fn u32_all() {
-        for v in 0u32..=u32::MAX {
+        use rayon::prelude::*;
+        (0u32..=u32::MAX).into_par_iter().for_each(|v| {
             roundtrip::<4>(v.to_le_bytes());
-        }
+        });
     }
 
     /* u32 boundaries */
@@ -228,7 +229,6 @@ mod tests {
         }
     }
 
-    /* selected u128 */
     #[test]
     fn u128_selected() {
         let s = [0u128, 1, 127, ((1u128 << 127) - 1), 1u128 << 127];
@@ -237,20 +237,20 @@ mod tests {
         }
     }
 
-    /* 256-bit buffer tests */
+    // 256-bit buffer tests
     #[test]
     fn u256_buffer() {
-        /* zero compresses */
+        // zero compresses
         roundtrip::<32>([0u8; 32]);
 
-        /* mid-range pattern */
+        // mid-range pattern
         let mut mid = [0u8; 32];
         for i in 0..32 {
             mid[i] = 0xEFu8.wrapping_add(i as u8).wrapping_mul(0x11);
         }
         roundtrip::<32>(mid);
 
-        /* near-max (top bit 0) triggers ceiling */
+        // near-max (top bit 0) triggers ceiling
         let mut near_max = [0xFF; 32];
         near_max[31] = 0x7F;
         roundtrip::<32>(near_max);
