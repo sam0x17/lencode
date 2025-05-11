@@ -1,17 +1,20 @@
-/// In-place “capped” LEB-128.
+/// In-place "capped" LEB-128. This scheme uses LEB-128 up until the point where using it would
+/// cost more bytes than simply using the native representation of the integer. As a result
+/// this scheme will never result in a representation larger than the native one, and often can
+/// compress down to a smaller number of bytes depending on the value. All values less than 127
+/// are encoded using a single byte.
 ///
 /// * `buf` must contain an **unsigned** integer in *little-endian* order.
-/// * `buf.len()` can be any positive width (8, 16, 32, 64… bits; even 256, 512,
-///   …).  There is no hard upper bound other than available memory.
+/// * `buf.len()` can be any positive width (8, 16, 32, 64… bits; even 256, 512, …).  There is
+///   no hard upper bound other than available memory.
 /// * The function never allocates and never writes past the original slice.
 ///
-/// Returns: a subslice of `buf` that is the encoded value.
-/// In-place, size-capped LEB-128.
+/// Returns: a subslice of `buf` that is the encoded value. In-place, size-capped LEB-128.
 ///
 /// * `buf` contains an **unsigned** integer in little-endian order.
 /// * The routine never allocates and never grows the slice.
-/// * Returns a subslice of `buf` that is the encoded value.
-/// In-place, size-capped LEB-128 encoder.
+/// * Returns a subslice of `buf` that is the encoded value. In-place, size-capped LEB-128
+/// encoder.
 ///
 /// * `buf` holds an unsigned integer in little-endian order.
 /// * Returns a subslice of `buf` containing the encoded value.
@@ -20,9 +23,7 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
     let w = buf.len();
     assert!(w > 0, "buffer must not be empty");
 
-    /* ------------------------------------------------------------------
-     * 1. locate highest non-zero byte
-     * ------------------------------------------------------------------ */
+    // locate highest non-zero byte
     let mut hi = w;
     while hi > 0 && buf[hi - 1] == 0 {
         hi -= 1;
@@ -33,26 +34,20 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
         return &buf[..1];
     }
 
-    /* ------------------------------------------------------------------
-     * 2. exact bit-length
-     * ------------------------------------------------------------------ */
+    // exact bit-length
     let msb_byte = buf[hi - 1];
     let msb_pos = 7usize - msb_byte.leading_zeros() as usize; // 0-based
     let bit_len = (hi - 1) * 8 + msb_pos + 1;
 
-    /* ------------------------------------------------------------------
-     * 3. compute groups and ceiling check
-     * ------------------------------------------------------------------ */
+    // compute groups and ceiling check
     let groups = (bit_len + 6) / 7; // ceil(bit_len / 7)
     if groups >= w {
         // would not shrink → keep raw
         return &buf[..];
     }
 
-    /* ------------------------------------------------------------------
-     * 4. build var-int bytes in a temp stack buffer
-     *    (groups ≤ w , so this fits)
-     * ------------------------------------------------------------------ */
+    // build var-int bytes in a temp stack buffer
+    //   (groups ≤ w , so this fits)
     let mut tmp = [0u8; 128]; // covers widths ≤ 1024 bits
     debug_assert!(groups <= tmp.len());
 
@@ -79,30 +74,28 @@ pub fn encode_leb128_ceiling_inplace(buf: &mut [u8]) -> &[u8] {
     }
     debug_assert_eq!(idx, groups);
 
-    /* ------------------------------------------------------------------
-     * 5. copy result back to the front of buf
-     * ------------------------------------------------------------------ */
+    // copy result back to the front of buf
     buf[..groups].copy_from_slice(&tmp[..groups]);
     &buf[..groups]
 }
 
-/// Decode the “capped LEB‑128” produced by `encode_leb128_ceiling_inplace`.
+/// Decode the "capped" LEB‑128 produced by [`encode_leb128_ceiling_inplace`].
 ///
 /// * `N` is the fixed byte‑width of the target integer (1, 2, 4, 8, 16, 32…).
 /// * `input` may hold:
 ///     * the variable‑length stream (≤ N−1 bytes, terminator bit = 0), or
 ///     * the raw fixed‑width little‑endian integer (exactly **N** bytes).
 /// * On success returns the value as a little‑endian `[u8; N]`.  
-///   Returns `None` on malformed input (unterminated, overflow, etc.).
-/// Decode the capped LEB-128 produced above.
+///   Returns `None` on malformed input (unterminated, overflow, etc.). Decode the capped
+/// LEB-128 produced above.
 ///
-/// * `input` is either the variable-length stream (≤ N−1 bytes, MSB 0 on last)
-///   or the raw fixed-width value (exactly N bytes).
+/// * `input` is either the variable-length stream (≤ N−1 bytes, MSB 0 on last) or the raw
+///   fixed-width value (exactly N bytes).
 /// * On success returns the little-endian bytes of width **N**.
 pub fn decode_leb128_ceiling<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
     assert!(N > 0, "N must be positive");
 
-    /* fast path: raw ceiling form */
+    // fast path: raw ceiling form
     if input.len() == N {
         let mut out = [0u8; N];
         out.copy_from_slice(input);
@@ -119,7 +112,7 @@ pub fn decode_leb128_ceiling<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
     for (i, &byte) in input.iter().enumerate() {
         let payload = byte & 0x7F;
 
-        /* write 7 payload bits */
+        // write 7 payload bits
         for b in 0..7 {
             if payload & (1 << b) != 0 {
                 let gb = bit_offset + b;
@@ -134,7 +127,7 @@ pub fn decode_leb128_ceiling<const N: usize>(input: &[u8]) -> Option<[u8; N]> {
 
         bit_offset += 7;
 
-        /* last byte? (MSB 0) */
+        // last byte? (MSB 0)
         if byte & 0x80 == 0 {
             if i + 1 != input.len() {
                 return None;
@@ -158,7 +151,7 @@ mod tests {
         assert!(enc.len() <= N, "encoded length exceeds width");
     }
 
-    /* exhaustive u8 */
+    // exhaustive u8
     #[test]
     fn u8_all() {
         for v in 0u8..=u8::MAX {
@@ -166,7 +159,7 @@ mod tests {
         }
     }
 
-    /* exhaustive u16 */
+    // exhaustive u16
     #[test]
     fn u16_all() {
         for v in 0u16..=u16::MAX {
@@ -182,7 +175,7 @@ mod tests {
         });
     }
 
-    /* u32 boundaries */
+    // u32 boundaries
     #[test]
     fn u32_boundaries() {
         let s = [
@@ -203,7 +196,7 @@ mod tests {
         }
     }
 
-    /* u64 edges */
+    // u64 edges
     #[test]
     fn u64_edges() {
         let s = [
