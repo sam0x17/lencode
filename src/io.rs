@@ -1,25 +1,58 @@
+#[derive(Debug)]
+pub enum Error {
+    InvalidData,
+    IncorrectLength,
+    #[cfg(any(feature = "std", test))]
+    StdIo(std::io::Error),
+    #[cfg(not(any(feature = "std", test)))]
+    StdIo(StdIoShim),
+}
+
+#[cfg(not(any(feature = "std", test)))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum StdIoShim {}
+
+#[cfg(any(feature = "std", test))]
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::StdIo(err)
+    }
+}
+
+#[cfg(any(feature = "std", test))]
+impl From<Error> for std::io::Error {
+    fn from(err: Error) -> Self {
+        match err {
+            Error::InvalidData => {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid data")
+            }
+            Error::IncorrectLength => {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "Incorrect length")
+            }
+            #[cfg(any(feature = "std", test))]
+            Error::StdIo(e) => e,
+        }
+    }
+}
+
 pub trait Read {
-    type Error;
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error>;
 }
 
 pub trait Write {
-    type Error;
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error>;
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error>;
 }
 
 #[cfg(any(feature = "std", test))]
 impl<R: std::io::Read> Read for R {
-    type Error = std::io::Error;
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        self.read(buf)
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        self.read(buf).map_err(|e| Error::from(e))
     }
 }
 
 #[cfg(any(feature = "std", test))]
 impl<W: std::io::Write> Write for W {
-    type Error = std::io::Error;
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        self.write(buf)
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        self.write(buf).map_err(|e| Error::from(e))
     }
 }

@@ -10,6 +10,7 @@ repository = "https://github.com/sam0x17/lencode"
 documentation = "https://docs.rs/lencode/latest/lencode/"
 
 [dependencies]
+endian-cast = "0.1.0"
 serde = { version = "1", optional = true }
 
 [dev-dependencies]
