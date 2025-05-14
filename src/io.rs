@@ -1,7 +1,12 @@
+mod buffered_reader;
+
+pub use buffered_reader::BufferedReader;
+
 #[derive(Debug)]
 pub enum Error {
     InvalidData,
     IncorrectLength,
+    EndOfData,
     #[cfg(any(feature = "std", test))]
     StdIo(std::io::Error),
     #[cfg(not(any(feature = "std", test)))]
@@ -31,6 +36,9 @@ impl From<Error> for std::io::Error {
             }
             #[cfg(any(feature = "std", test))]
             Error::StdIo(e) => e,
+            Error::EndOfData => {
+                std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "End of data")
+            }
         }
     }
 }
