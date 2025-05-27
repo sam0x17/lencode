@@ -198,3 +198,72 @@ fn test_read_bytes_after_bits() {
     // then EOF
     assert!(matches!(br.read(&mut buf), Err(Error::EndOfData)));
 }
+
+#[test]
+fn test_empty_input_errors() {
+    let data = Vec::<u8>::new();
+    let mut br = BitReader::<_, 1>::new(Cursor::new(data));
+
+    // reading any bit immediately errors
+    assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
+    assert!(matches!(br.peek_bit(), Err(Error::EndOfData)));
+
+    // reading bytes also errors (because fill_buffer finds zero bytes)
+    let mut buf = [0u8; 4];
+    assert!(matches!(br.read(&mut buf), Err(Error::EndOfData)));
+}
+
+#[test]
+fn test_exact_buffer_refill() {
+    // Create a data stream just over one BUFFER_SIZE so we force multiple refills.
+    // Use BUFFER_SIZE=2 to keep this small.
+    let data = vec![0b1010_1010, 0b0101_0101, 0b1111_0000];
+    let mut br = BitReader::<_, 2>::new(Cursor::new(data.clone()));
+
+    // Read all bits in sequence
+    let mut bits = Vec::new();
+    while let Ok(b) = br.read_bit() {
+        bits.push(b);
+    }
+    // Should be 3 bytes * 8 = 24 bits
+    assert_eq!(bits.len(), 24);
+
+    // Reconstruct bytes MSB0→u8:
+    let mut out = Vec::new();
+    let mut cursor = 0;
+    while cursor + 8 <= bits.len() {
+        let byte = bits[cursor..cursor + 8]
+            .iter()
+            .fold(0u8, |acc, &b| (acc << 1) | (b as u8));
+        out.push(byte);
+        cursor += 8;
+    }
+    assert_eq!(out, data);
+}
+
+#[test]
+fn test_mixed_bit_and_byte_reads_misaligned() {
+    let data = vec![0xF0, 0x0F, 0xAA];
+    let mut br = BitReader::<_, 3>::new(Cursor::new(data.clone()));
+
+    // Read 3 bits: 111
+    for expected in [true, true, true] {
+        assert_eq!(br.read_bit().unwrap(), expected);
+    }
+
+    // now read two bytes via .read(); because cursor=3, .read() will floor(cursor/8)=0
+    let mut buf = [0u8; 2];
+    let n = br.read(&mut buf).unwrap();
+    assert_eq!(n, 2);
+    // buf[0] should be first byte (0xF0), buf[1] second (0x0F)
+    assert_eq!(buf, [0xF0, 0x0F]);
+
+    // advance the three bits we consumed + 16 bits from read = 19 bits
+    // total bits = 3*8 = 24, so 5 bits remain: from last byte 0xAA
+    let mut tail_bits = Vec::new();
+    while let Ok(b) = br.read_bit() {
+        tail_bits.push(b);
+    }
+    let expected_tail = [false, true, false, true, false];
+    assert_eq!(tail_bits, expected_tail);
+}
