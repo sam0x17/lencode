@@ -99,43 +99,49 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
 
 impl<R: Read, const BUFFER_SIZE: usize> Read for BitReader<R, BUFFER_SIZE> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-        let mut written = 0;
+        // 1) On the very first read, prime the buffer if it's empty
+        if self.filled == 0 {
+            self.fill_buffer()?;
+        }
 
+        let mut written = 0;
         while written < buf.len() {
-            // 1) make sure we have 8 bits available
-            if self.cursor + 8 > self.filled * 8 {
-                self.fill_buffer()?;
-                if self.cursor + 8 > self.filled * 8 {
-                    return Err(Error::EndOfData);
-                }
+            // how many bits remain
+            let bits_available = self.filled * 8 - self.cursor;
+            if bits_available < 8 {
+                // not enough for one full byte → EOF
+                break;
             }
 
-            // 2) now borrow raw only *after* any mutable calls
             let raw = self.buffer.as_raw_slice();
             let bit_offset = self.cursor % 8;
             let byte_idx = self.cursor / 8;
 
-            // 3) extract one aligned or misaligned byte
             let b = if bit_offset == 0 {
+                // aligned
                 raw[byte_idx]
             } else {
+                // misaligned: stitch hi/lo
                 let hi = raw[byte_idx];
                 let lo = if byte_idx + 1 < self.filled {
                     raw[byte_idx + 1]
                 } else {
                     0
                 };
-                // MSB0: high bits of hi shifted left, plus high bits of lo shifted right
+                // MSB0 packing:
                 (hi << bit_offset) | (lo >> (8 - bit_offset))
             };
 
-            // 4) write and advance
             buf[written] = b;
-            self.cursor += 8;
             written += 1;
+            self.cursor += 8;
         }
 
-        Ok(written)
+        if written > 0 {
+            Ok(written)
+        } else {
+            Err(Error::EndOfData)
+        }
     }
 }
 
