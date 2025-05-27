@@ -1,7 +1,6 @@
-#![cfg_attr(not(any(feature = "std", test)), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 pub mod io;
-pub mod varint;
 
 pub mod prelude {
     pub use crate::io::*;
