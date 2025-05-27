@@ -18,6 +18,21 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         }
     }
 
+    /// Returns `Ok(true)` if there are *any* unread bits remaining in the stream,
+    /// `Ok(false)` at real EOF, or an `Err` on I/O error.
+    pub fn has_bits(&mut self) -> Result<bool, Error> {
+        // If we’re completely drained, try to fill once:
+        if self.cursor >= self.filled * 8 {
+            match self.fill_buffer() {
+                Err(Error::EndOfData) => return Ok(false),
+                Err(e) => return Err(e),
+                Ok(()) => {}
+            }
+        }
+        // If cursor < filled*8, there’s at least one bit available:
+        Ok(self.cursor < self.filled * 8)
+    }
+
     fn fill_buffer(&mut self) -> Result<(), Error> {
         // 1) How many bits are still unread?
         let total_bits = self.filled * 8;
@@ -309,4 +324,41 @@ fn test_mixed_bit_and_byte_reads_misaligned() {
     }
     let expected_tail = [false, true, false, true, false];
     assert_eq!(tail_bits, expected_tail);
+}
+
+#[test]
+fn test_has_bits() {
+    use crate::io::Cursor;
+
+    // 1) Empty stream → no bits
+    let mut br = BitReader::<_, 1>::new(Cursor::new(vec![]));
+    assert_eq!(br.has_bits().unwrap(), false);
+
+    // 2) Fresh stream of one byte → bits present
+    let mut br = BitReader::<_, 1>::new(Cursor::new(vec![0b1010_1010]));
+    assert_eq!(br.has_bits().unwrap(), true);
+
+    // 3) Consume a few bits → still bits
+    for _ in 0..4 {
+        br.read_bit().unwrap();
+    }
+    assert_eq!(br.has_bits().unwrap(), true);
+
+    // 4) Consume the rest → EOF
+    while br.read_bit().is_ok() {}
+    assert_eq!(br.has_bits().unwrap(), false);
+
+    // 5) Mixed byte‐ and bit‐reads
+    let mut br = BitReader::<_, 2>::new(Cursor::new(vec![0xFF, 0x00]));
+    // read 8 bits via .read()
+    let mut buf = [0u8; 1];
+    assert_eq!(br.read(&mut buf).unwrap(), 1);
+    assert_eq!(buf[0], 0xFF);
+    // now only 8 bits remain → has_bits is true
+    assert_eq!(br.has_bits().unwrap(), true);
+    // consume 8 bits via bit‐reads:
+    for _ in 0..8 {
+        br.read_bit().unwrap();
+    }
+    assert_eq!(br.has_bits().unwrap(), false);
 }
