@@ -90,3 +90,16 @@ impl Read for Vec<u8> {
         Ok(len)
     }
 }
+
+#[cfg(not(any(feature = "std", test)))]
+impl Read for &[u8] {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        if self.is_empty() {
+            return Err(Error::EndOfData);
+        }
+        let len = buf.len().min(self.len());
+        buf[..len].copy_from_slice(&self[..len]);
+        *self = &self[len..];
+        Ok(len)
+    }
+}
