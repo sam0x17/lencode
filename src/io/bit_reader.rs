@@ -19,47 +19,55 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
     }
 
     fn fill_buffer(&mut self) -> Result<(), Error> {
+        // 1) How many bits are still unread?
         let total_bits = self.filled * 8;
         let bits_remaining = total_bits.saturating_sub(self.cursor);
 
-        // 1) Slide every unread bit down to the front
-        for i in 0..bits_remaining {
-            let b = self.buffer[self.cursor + i];
-            self.buffer.set(i, b);
-        }
-
-        // 2) Zero out the now-free tail of the backing bytes
+        // 2) Slide leftover bytes *in-place* (byte-aligned):
         let raw = self.buffer.as_raw_mut_slice();
+        let start_byte = self.cursor / 8;
         let bytes_remaining = bits_remaining / 8;
         let bit_offset = bits_remaining % 8;
-        for byte in &mut raw[bytes_remaining..] {
-            *byte = 0;
+
+        if bit_offset == 0 {
+            // simple: move [start_byte..self.filled) → [0..bytes_remaining)
+            raw.copy_within(start_byte..self.filled, 0);
+        } else {
+            // move whole bytes first (we’ll fix the partial byte in a moment)
+            raw.copy_within((start_byte + 1)..self.filled, 1);
+            raw[0] = 0; // will OR in the leftover bits below
         }
 
-        // 3) Read fresh data directly into a small temp
-        let mut tmp = [0u8; BUFFER_SIZE];
-        let bytes_read = self.reader.read(&mut tmp)?;
+        // 3) Zero out the tail so new data ORs cleanly
+        for b in &mut raw[bytes_remaining..] {
+            *b = 0;
+        }
+
+        // 4) Read *straight into* the freed region
+        let dest = &mut raw[bytes_remaining..];
+        let bytes_read = self.reader.read(dest)?;
         if bytes_read == 0 {
             return Err(Error::EndOfData);
         }
 
-        // 4) Splice it into `raw` at the right bit-offset (MSB-first!)
-        if bit_offset == 0 {
-            raw[bytes_remaining..bytes_remaining + bytes_read].copy_from_slice(&tmp[..bytes_read]);
-        } else {
+        // 5) If we were mid-byte, rotate each newly-read byte
+        if bit_offset != 0 {
+            let mut carry = 0u8;
             for i in 0..bytes_read {
-                let byte = tmp[i];
-                let dst = bytes_remaining + i;
-                // New byte’s MSB → raw[dst] bit (7 − bit_offset)
-                raw[dst] |= byte >> bit_offset;
-                // The “leftover” LSBs carry into the next byte’s MSB side
-                if dst + 1 < BUFFER_SIZE {
-                    raw[dst + 1] |= byte << (8 - bit_offset);
-                }
+                let b = dest[i];
+                // high (8 - bit_offset) bits move into low bits of carry
+                let new_carry = b >> (8 - bit_offset);
+                // shift this byte up by bit_offset, OR in the previous carry
+                dest[i] = (b << bit_offset) | carry;
+                carry = new_carry;
+            }
+            // tuck the final carry bit into the next raw byte if there is one
+            if bytes_remaining + bytes_read < BUFFER_SIZE {
+                raw[bytes_remaining + bytes_read] |= carry;
             }
         }
 
-        // 5) Recompute valid bytes & reset cursor
+        // 6) Recompute how many bytes are valid now, reset cursor
         let new_total_bits = bits_remaining + bytes_read * 8;
         self.filled = (new_total_bits + 7) / 8;
         self.cursor = 0;
