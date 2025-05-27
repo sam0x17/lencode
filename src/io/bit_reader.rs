@@ -107,10 +107,18 @@ impl<R: Read, const BUFFER_SIZE: usize> Read for BitReader<R, BUFFER_SIZE> {
     }
 }
 
+#[cfg(all(test, not(feature = "std")))]
+extern crate alloc;
+#[cfg(all(test, not(feature = "std")))]
+use alloc::{vec, vec::Vec};
+
+#[cfg(all(test, not(feature = "std")))]
+use crate::io::Cursor;
+#[cfg(all(test, feature = "std"))]
+use std::io::Cursor;
+
 #[test]
 fn test_read_bit_msb0_single_byte() {
-    use std::io::Cursor;
-
     // 0b1010_1101 → bits: 1,0,1,0,1,1,0,1 (MSB-first)
     let data = vec![0b1010_1101];
     let mut br = BitReader::<_, 1>::new(Cursor::new(data));
@@ -126,8 +134,6 @@ fn test_read_bit_msb0_single_byte() {
 
 #[test]
 fn test_peek_bit_does_not_advance() {
-    use std::io::Cursor;
-
     let data = vec![0b1100_0000];
     let mut br = BitReader::<_, 1>::new(Cursor::new(data));
 
@@ -139,12 +145,19 @@ fn test_peek_bit_does_not_advance() {
     assert_eq!(br.read_bit().unwrap(), true);
     // next bit is still the second MSB:
     assert_eq!(br.read_bit().unwrap(), true);
+    assert_eq!(br.read_bit().unwrap(), false);
+    assert_eq!(br.read_bit().unwrap(), false);
+    assert_eq!(br.read_bit().unwrap(), false);
+    assert_eq!(br.read_bit().unwrap(), false);
+    assert_eq!(br.read_bit().unwrap(), false);
+    assert_eq!(br.read_bit().unwrap(), false);
+
+    // now we should be at EOF
+    assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
 }
 
 #[test]
 fn test_fill_and_read_across_buffer_boundary() {
-    use std::io::Cursor;
-
     // Force a refill after 1 byte
     let data = vec![0b1111_0000, 0b0000_1111];
     let mut br = BitReader::<_, 1>::new(Cursor::new(data));
@@ -165,8 +178,6 @@ fn test_fill_and_read_across_buffer_boundary() {
 
 #[test]
 fn test_read_bytes_after_bits() {
-    use std::io::Cursor;
-
     let data = vec![0xAB, 0xCD];
     let mut br = BitReader::<_, 2>::new(Cursor::new(data.clone()));
 

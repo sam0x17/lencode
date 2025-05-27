@@ -1,4 +1,8 @@
-pub mod bit_reader;
+mod bit_reader;
+mod cursor;
+
+pub use bit_reader::*;
+pub use cursor::*;
 
 #[derive(Debug)]
 pub enum Error {
