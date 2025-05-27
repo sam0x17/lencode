@@ -1,3 +1,5 @@
+pub mod bit_reader;
+
 #[derive(Debug)]
 pub enum Error {
     InvalidData,
