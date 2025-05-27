@@ -99,18 +99,42 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
 
 impl<R: Read, const BUFFER_SIZE: usize> Read for BitReader<R, BUFFER_SIZE> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-        // Enforce byte-alignment or auto-align here if you prefer...
-        if self.cursor / 8 >= self.filled {
-            self.fill_buffer()?;
-        }
-
         let mut written = 0;
-        let raw = self.buffer.as_raw_slice();
-        while written < buf.len() && (self.cursor / 8) < self.filled {
-            buf[written] = raw[self.cursor / 8];
+
+        while written < buf.len() {
+            // 1) make sure we have 8 bits available
+            if self.cursor + 8 > self.filled * 8 {
+                self.fill_buffer()?;
+                if self.cursor + 8 > self.filled * 8 {
+                    return Err(Error::EndOfData);
+                }
+            }
+
+            // 2) now borrow raw only *after* any mutable calls
+            let raw = self.buffer.as_raw_slice();
+            let bit_offset = self.cursor % 8;
+            let byte_idx = self.cursor / 8;
+
+            // 3) extract one aligned or misaligned byte
+            let b = if bit_offset == 0 {
+                raw[byte_idx]
+            } else {
+                let hi = raw[byte_idx];
+                let lo = if byte_idx + 1 < self.filled {
+                    raw[byte_idx + 1]
+                } else {
+                    0
+                };
+                // MSB0: high bits of hi shifted left, plus high bits of lo shifted right
+                (hi << bit_offset) | (lo >> (8 - bit_offset))
+            };
+
+            // 4) write and advance
+            buf[written] = b;
             self.cursor += 8;
             written += 1;
         }
+
         Ok(written)
     }
 }
@@ -187,24 +211,28 @@ fn test_fill_and_read_across_buffer_boundary() {
 #[test]
 fn test_read_bytes_after_bits() {
     let data = vec![0xAB, 0xCD];
-    let mut br = BitReader::<_, 2>::new(Cursor::new(data.clone()));
+    let mut br = BitReader::<_, 2>::new(Cursor::new(data));
 
     // consume 4 bits (misaligned)
     for _ in 0..4 {
         br.read_bit().unwrap();
     }
 
-    // now read whole bytes
+    // Now the first full byte at bit-offset 4 comes from
+    // (0xAB << 4) | (0xCD >> 4) = 0xBC
     let mut buf = [0u8; 1];
     assert_eq!(br.read(&mut buf).unwrap(), 1);
-    // should get the first byte (0xAB)
-    assert_eq!(buf[0], 0xAB);
+    assert_eq!(buf[0], 0xBC);
 
-    assert_eq!(br.read(&mut buf).unwrap(), 1);
-    assert_eq!(buf[0], 0xCD);
-
-    // then EOF
+    // No more whole bytes left → EOF
     assert!(matches!(br.read(&mut buf), Err(Error::EndOfData)));
+
+    // Now consume the remaining 4 bits (low nibble of 0xCD = 0xD → 1101)
+    let mut tail = Vec::new();
+    while let Ok(bit) = br.read_bit() {
+        tail.push(bit);
+    }
+    assert_eq!(tail, [true, true, false, true]);
 }
 
 #[test]
@@ -254,20 +282,21 @@ fn test_mixed_bit_and_byte_reads_misaligned() {
     let data = vec![0xF0, 0x0F, 0xAA];
     let mut br = BitReader::<_, 3>::new(Cursor::new(data.clone()));
 
-    // Read 3 bits: 111
+    // Read 3 bits: 1,1,1
     for expected in [true, true, true] {
         assert_eq!(br.read_bit().unwrap(), expected);
     }
 
-    // now read two bytes via .read(); because cursor=3, .read() will floor(cursor/8)=0
+    // now read two bytes at bit-offset 3:
+    // first = (0xF0 << 3) | (0x0F >> 5) = 0x80
+    // second = (0x0F << 3) | (0xAA >> 5) = 0x7D
     let mut buf = [0u8; 2];
     let n = br.read(&mut buf).unwrap();
     assert_eq!(n, 2);
-    // buf[0] should be first byte (0xF0), buf[1] second (0x0F)
-    assert_eq!(buf, [0xF0, 0x0F]);
+    assert_eq!(buf, [0x80, 0x7D]);
 
     // advance the three bits we consumed + 16 bits from read = 19 bits
-    // total bits = 3*8 = 24, so 5 bits remain: from last byte 0xAA
+    // total bits = 24, so 5 bits remain: from last byte 0xAA
     let mut tail_bits = Vec::new();
     while let Ok(b) = br.read_bit() {
         tail_bits.push(b);
