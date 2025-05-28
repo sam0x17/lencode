@@ -1,9 +1,12 @@
 use super::{Error, Read};
-use bitvec::prelude::{BitArray, Msb0};
+use bitvec::{
+    order::BitOrder,
+    prelude::{BitArray, Msb0},
+};
 
-pub struct BitReader<R: Read, const BUFFER_SIZE: usize = 64_000> {
+pub struct BitReader<R: Read, const BUFFER_SIZE: usize = 64_000, Order: BitOrder = Msb0> {
     reader: R,
-    buffer: BitArray<[u8; BUFFER_SIZE], Msb0>,
+    buffer: BitArray<[u8; BUFFER_SIZE], Order>,
     filled: usize, // how many bytes of `buffer` are valid
     cursor: usize, // next bit position [0..filled*8)
 }
