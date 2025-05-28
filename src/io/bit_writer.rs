@@ -57,7 +57,7 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
     /// Flush full bytes in the buffer to the underlying writer.
     #[inline(always)]
     fn flush_buffer(&mut self) -> Result<(), Error> {
-        let bytes = (self.cursor + 7) / 8;
+        let bytes = self.cursor.div_ceil(8);
         let raw = self.buffer.as_raw_slice();
         let w = self.writer.as_mut().expect("writer missing");
         let written = w.write(&raw[..bytes])?;
@@ -116,7 +116,7 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Msb
                 byte_idx += 1;
                 if byte_idx >= BUFFER_SIZE {
                     self.flush_buffer()?;
-                    byte_idx = self.cursor >> 3 + 1;
+                    byte_idx = self.cursor >> (3 + 1);
                 }
                 let raw = self.buffer.as_raw_mut_slice();
                 raw[byte_idx] |= byte << (8 - bit_offset);
@@ -155,7 +155,7 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Lsb
                 byte_idx += 1;
                 if byte_idx >= BUFFER_SIZE {
                     self.flush_buffer()?;
-                    byte_idx = self.cursor >> 3 + 1;
+                    byte_idx = self.cursor >> (3 + 1);
                 }
                 let raw = self.buffer.as_raw_mut_slice();
                 raw[byte_idx] |= rev >> (8 - bit_offset);
