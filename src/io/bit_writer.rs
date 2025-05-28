@@ -23,17 +23,27 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
     /// Write a single bit into the buffer.
     #[inline(always)]
     pub fn write_bit(&mut self, bit: bool) -> Result<(), Error> {
-        let bit_idx = self.cursor;
-        let byte_idx = bit_idx >> 3;
-        let bit_offset = bit_idx & 7;
-        if byte_idx >= BUFFER_SIZE {
+        // auto-flush if buffer full
+        if self.cursor >= BUFFER_SIZE * 8 {
             self.flush_buffer()?;
         }
-        let raw = self.buffer.as_raw_mut_slice();
-        if bit {
-            raw[byte_idx] |= (1u8).checked_shl(7 - bit_offset as u32).unwrap();
-        }
+        // delegate to BitArray which respects bit ordering (Msb0 vs Lsb0)
+        self.buffer.set(self.cursor, bit);
         self.cursor += 1;
+        Ok(())
+    }
+
+    /// Write up to 64 bits (LSB-first within the provided `u64`).
+    #[inline(always)]
+    pub fn write_bits<const N: usize>(&mut self, mut v: u64) -> Result<(), Error> {
+        const {
+            assert!(N <= 64, "can write at most 64 bits");
+        }
+        for _ in 0..N {
+            let b = (v & 1) != 0;
+            self.write_bit(b)?;
+            v >>= 1;
+        }
         Ok(())
     }
 
@@ -209,4 +219,25 @@ fn test_lsb0_writer() {
     writer.flush().unwrap();
     let out = writer.into_inner().unwrap();
     assert_eq!(out, vec![0x55]);
+}
+
+#[test]
+fn test_write_bits_msb0() {
+    let mut writer = BitWriter::<_, 2, Msb0>::new(Vec::new());
+    writer.write_bits::<12>(0xABC).unwrap();
+    writer.flush().unwrap();
+    let out = writer.into_inner().unwrap();
+    // 0xABC LSB-first → bits [0,0,1,1,1,1,0,1,0,1,0,1]
+    // MSB0 storage → raw bytes [0x3D, 0x50]
+    assert_eq!(out, vec![0x3D, 0x50]);
+}
+
+#[test]
+fn test_write_bits_lsb0() {
+    let mut writer = BitWriter::<_, 2, Lsb0>::new(Vec::new());
+    writer.write_bits::<12>(0xABC).unwrap();
+    writer.flush().unwrap();
+    let out = writer.into_inner().unwrap();
+    // LSB0 storage → raw bytes [0xBC, 0x0A]
+    assert_eq!(out, vec![0xBC, 0x0A]);
 }
