@@ -20,61 +20,58 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
         }
     }
 
-    /// Consumes the [`BitWriter`], returning the underlying writer.
-    ///
-    /// Useful for scenarios where you are writing directly into memory, such as into a [`Vec<u8>`].
-    #[inline(always)]
-    pub fn into_inner(mut self) -> Result<W, Error> {
-        self.flush()?;
-        let writer = self.writer.take().expect("must be defined");
-        Ok(writer)
-    }
-
     /// Write a single bit into the buffer.
     #[inline(always)]
     pub fn write_bit(&mut self, bit: bool) -> Result<(), Error> {
-        // Flush if buffer full
-        if self.cursor == BUFFER_SIZE * 8 {
+        let bit_idx = self.cursor;
+        let byte_idx = bit_idx >> 3;
+        let bit_offset = bit_idx & 7;
+        if byte_idx >= BUFFER_SIZE {
             self.flush_buffer()?;
         }
-        // Set bit
-        self.buffer.set(self.cursor, bit);
+        let raw = self.buffer.as_raw_mut_slice();
+        if bit {
+            raw[byte_idx] |= (1u8).checked_shl(7 - bit_offset as u32).unwrap();
+        }
         self.cursor += 1;
         Ok(())
     }
 
-    /// Flush the internal buffer to the underlying writer.
+    /// Consumes the [`BitWriter`], returning the underlying writer.
+    #[inline(always)]
+    pub fn into_inner(mut self) -> Result<W, Error> {
+        self.flush_all()?;
+        Ok(self.writer.take().expect("writer missing"))
+    }
+
+    /// Flush full bytes in the buffer to the underlying writer.
     #[inline(always)]
     fn flush_buffer(&mut self) -> Result<(), Error> {
         let bytes = (self.cursor + 7) / 8;
         let raw = self.buffer.as_raw_slice();
-        let written = self
-            .writer
-            .as_mut()
-            .expect("must be defined")
-            .write(&raw[..bytes])?;
+        let w = self.writer.as_mut().expect("writer missing");
+        let written = w.write(&raw[..bytes])?;
         if written != bytes {
             return Err(Error::WriteShort);
         }
+        // reset buffer
         self.cursor = 0;
-        // zero out buffer for next use
-        // by resetting the slice
         for byte in &mut self.buffer.as_raw_mut_slice()[..bytes] {
             *byte = 0;
         }
         Ok(())
     }
 
-    /// Flush any pending bits (padding the final byte with zeroes) and then the underlying writer.
+    /// Flush any pending bits (padding the final byte with zeroes) and underlying writer.
     #[inline(always)]
-    pub fn flush(&mut self) -> Result<(), Error> {
+    pub fn flush_all(&mut self) -> Result<(), Error> {
         if self.cursor > 0 {
             self.flush_buffer()?;
         }
-        let Some(writer) = self.writer.as_mut() else {
-            return Ok(());
-        };
-        writer.flush()
+        if let Some(w) = self.writer.as_mut() {
+            w.flush()?;
+        }
+        Ok(())
     }
 }
 
@@ -82,8 +79,86 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> Drop
     for BitWriter<W, BUFFER_SIZE, Order>
 {
     fn drop(&mut self) {
-        // Ensure we flush any remaining bits when the BitWriter is dropped
-        let _ = self.flush();
+        let _ = self.flush_all();
+    }
+}
+
+/// `Write` impl for MSB-first ordering
+impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Msb0> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        let mut written = 0;
+        for &byte in buf {
+            // determine where to insert next
+            let bit_offset = self.cursor & 7;
+            let mut byte_idx = self.cursor >> 3;
+            if byte_idx >= BUFFER_SIZE {
+                self.flush_buffer()?;
+                byte_idx = self.cursor >> 3;
+            }
+            // aligned vs misaligned split for MSB0
+            if bit_offset == 0 {
+                // aligned
+                self.buffer.as_raw_mut_slice()[byte_idx] = byte;
+            } else {
+                // misaligned: high bits into current, low bits into next
+                let raw = self.buffer.as_raw_mut_slice();
+                raw[byte_idx] |= byte >> bit_offset;
+                byte_idx += 1;
+                if byte_idx >= BUFFER_SIZE {
+                    self.flush_buffer()?;
+                    byte_idx = self.cursor >> 3 + 1;
+                }
+                let raw = self.buffer.as_raw_mut_slice();
+                raw[byte_idx] |= byte << (8 - bit_offset);
+            }
+            self.cursor += 8;
+            written += 1;
+        }
+        Ok(written)
+    }
+
+    #[inline(always)]
+    fn flush(&mut self) -> Result<(), Error> {
+        self.flush_all()
+    }
+}
+
+/// `Write` impl for LSB-first ordering
+impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Lsb0> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        let mut written = 0;
+        for &byte in buf {
+            let bit_offset = self.cursor & 7;
+            let mut byte_idx = self.cursor >> 3;
+            if byte_idx >= BUFFER_SIZE {
+                self.flush_buffer()?;
+                byte_idx = self.cursor >> 3;
+            }
+            if bit_offset == 0 {
+                // aligned: store reversed bits so LSB-first
+                self.buffer.as_raw_mut_slice()[byte_idx] = byte.reverse_bits();
+            } else {
+                // misaligned: split reversed
+                let rev = byte.reverse_bits();
+                let raw = self.buffer.as_raw_mut_slice();
+                raw[byte_idx] |= rev << bit_offset;
+                byte_idx += 1;
+                if byte_idx >= BUFFER_SIZE {
+                    self.flush_buffer()?;
+                    byte_idx = self.cursor >> 3 + 1;
+                }
+                let raw = self.buffer.as_raw_mut_slice();
+                raw[byte_idx] |= rev >> (8 - bit_offset);
+            }
+            self.cursor += 8;
+            written += 1;
+        }
+        Ok(written)
+    }
+
+    #[inline(always)]
+    fn flush(&mut self) -> Result<(), Error> {
+        self.flush_all()
     }
 }
 
@@ -94,53 +169,44 @@ use alloc::{vec, vec::Vec};
 
 #[test]
 fn test_write_and_read_roundtrip() {
-    let data = Vec::new();
-    let mut writer = BitWriter::<_, 2, Msb0>::new(data);
-
-    // Write a pattern of bits
-    let pattern = [true, false, true, true, false, false, true, false];
-    for b in &pattern {
-        writer.write_bit(*b).unwrap();
-    }
-    // flush partial
+    let mut writer = BitWriter::<_, 2, Msb0>::new(Vec::new());
+    writer.write(&[0b1011_0010]).unwrap();
     writer.flush().unwrap();
-
-    let data = writer.into_inner().unwrap();
-
-    // Should be one byte 0b10110010
-    assert_eq!(data, vec![0b1011_0010]);
+    let out = writer.into_inner().unwrap();
+    assert_eq!(out, vec![0b1011_0010]);
 }
 
 #[test]
 fn test_buffer_boundary_flush() {
-    let data = Vec::new();
-    // small buffer of 1 byte to force automatic flush
-    let mut writer = BitWriter::<_, 1, Msb0>::new(data);
+    let mut writer = BitWriter::<_, 1, Msb0>::new(Vec::new());
+    let buf = vec![0xFF; 12];
+    writer.write(&buf).unwrap();
+    writer.flush().unwrap();
+    let out = writer.into_inner().unwrap();
+    assert_eq!(out, buf);
+}
 
-    // Write 12 bits: should flush after 8, then write 4 into new byte
-    for _ in 0..12 {
+#[test]
+fn test_write_misaligned() {
+    let mut writer = BitWriter::<_, 2, Msb0>::new(Vec::new());
+    // prefill 4 bits: high nibble '1111'
+    for _ in 0..4 {
         writer.write_bit(true).unwrap();
     }
+    // write byte 0xAB at current bit offset (4)
+    writer.write(&[0xAB]).unwrap();
     writer.flush().unwrap();
-
     let out = writer.into_inner().unwrap();
-    // first byte = 0xFF, second = 0xF0 (4 ones high bits)
-    assert_eq!(out, vec![0xFF, 0xF0]);
+    // first byte = 0xF0 | (0xAB >> 4) = 0xFA
+    // second byte = (0xAB & 0x0F) << 4 = 0xB0
+    assert_eq!(out, vec![0xFA, 0xB0]);
 }
 
 #[test]
 fn test_lsb0_writer() {
-    let data = Vec::new();
-    let mut writer = BitWriter::<_, 2, Lsb0>::new(data);
-
-    // Write bits: least-significant bit first yields reversed byte
-    let pattern = [true, false, true, false, true, false, true, false];
-    for b in &pattern {
-        writer.write_bit(*b).unwrap();
-    }
+    let mut writer = BitWriter::<_, 2, Lsb0>::new(Vec::new());
+    writer.write(&[0xAA]).unwrap();
     writer.flush().unwrap();
-
     let out = writer.into_inner().unwrap();
-    // pattern bits form 0b01010101 = 0x55
     assert_eq!(out, vec![0x55]);
 }
