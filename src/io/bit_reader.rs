@@ -362,3 +362,49 @@ fn test_has_bits() {
     }
     assert_eq!(br.has_bits().unwrap(), false);
 }
+
+#[test]
+fn sanity_test() {
+    let data = vec![0b1011_0111, 0b1111_0111, 0b1101_1111, 0b1000_000];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    assert_eq!(reader.peek_bit().unwrap(), true); // 1st bit
+    assert_eq!(reader.has_bits().unwrap(), true);
+    assert_eq!(reader.read_bit().unwrap(), true); // 1st bit
+    assert_eq!(reader.peek_bit().unwrap(), false); // 2nd bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 2nd bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 3rd bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 4th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 5th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 6th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 7th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 8th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 9th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 10th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 11th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 12th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 13th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 14th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 15th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 16th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 17th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 18th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 19th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 20th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 21st bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 22nd bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 23rd bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 24th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 25th bit
+    assert_eq!(reader.read_bit().unwrap(), true); // 26th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 27th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 28th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 29th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 30th bit
+    assert_eq!(reader.read_bit().unwrap(), false); // 31st bit
+    assert_eq!(reader.has_bits().unwrap(), true); // 1 bit left
+    assert_eq!(reader.read_bit().unwrap(), false); // 32nd bit
+    assert_eq!(reader.has_bits().unwrap(), false); // no bits left
+
+    // Now we should be at EOF
+    assert!(matches!(reader.read_bit(), Err(Error::EndOfData)));
+}
