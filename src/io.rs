@@ -1,13 +1,16 @@
 mod bit_reader;
+mod bit_writer;
 mod cursor;
 
 pub use bit_reader::*;
+pub use bit_writer::*;
 pub use cursor::*;
 
 #[derive(Debug)]
 pub enum Error {
     InvalidData,
     IncorrectLength,
+    WriteShort,
     EndOfData,
     #[cfg(feature = "std")]
     StdIo(std::io::Error),
@@ -30,6 +33,7 @@ impl From<std::io::Error> for Error {
 impl From<Error> for std::io::Error {
     fn from(err: Error) -> Self {
         match err {
+            Error::WriteShort => std::io::Error::new(std::io::ErrorKind::WriteZero, "Write short"),
             Error::InvalidData => {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid data")
             }
@@ -51,6 +55,7 @@ pub trait Read {
 
 pub trait Write {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error>;
+    fn flush(&mut self) -> Result<(), Error>;
 }
 
 #[cfg(feature = "std")]
@@ -65,6 +70,10 @@ impl<W: std::io::Write> Write for W {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         self.write(buf).map_err(|e| Error::from(e))
     }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        self.flush().map_err(|e| Error::from(e))
+    }
 }
 
 #[cfg(not(feature = "std"))]
@@ -77,6 +86,11 @@ impl Write for Vec<u8> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         self.extend_from_slice(buf);
         Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        // No-op for Vec, as it doesn't have an underlying buffer to flush
+        Ok(())
     }
 }
 
