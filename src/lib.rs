@@ -8,6 +8,8 @@ pub mod prelude {
 
 use prelude::*;
 
+pub type Result<T> = core::result::Result<T, Error>;
+
 pub trait Encode {
-    fn encode<E>(&self, writer: impl Write) -> Result<usize, E>;
+    fn encode(&self, writer: impl Write) -> Result<usize>;
 }
