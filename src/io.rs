@@ -94,6 +94,45 @@ impl Write for Vec<u8> {
     }
 }
 
+impl Write for bitvec::vec::BitVec {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        let bits = buf
+            .iter()
+            .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1 != 0));
+        self.extend(bits);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        // No-op for BitVec, as it doesn't have an underlying buffer to flush
+        Ok(())
+    }
+}
+
+impl Read for bitvec::vec::BitVec {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        if self.is_empty() {
+            return Err(Error::EndOfData);
+        }
+
+        let mut bytes_read = 0;
+        for byte in buf.iter_mut() {
+            *byte = 0;
+            for bit in 0..8 {
+                if let Some(bit_value) = self.get(bytes_read * 8 + bit) {
+                    if *bit_value {
+                        *byte |= 1 << bit;
+                    }
+                } else {
+                    return Ok(bytes_read);
+                }
+            }
+            bytes_read += 1;
+        }
+        Ok(bytes_read)
+    }
+}
+
 #[test]
 fn test_write_vec() {
     let mut my_vec = Vec::new();
@@ -104,4 +143,20 @@ fn test_write_vec() {
     assert_eq!(my_vec, data);
 
     assert_eq!(my_vec, b"Hello, world!".to_vec());
+}
+
+#[test]
+fn test_write_bitvec() {
+    let mut my_bitvec = bitvec::vec::BitVec::new();
+    let data = b"Hello, world!";
+
+    // Test writing
+    assert_eq!(my_bitvec.write(data).unwrap(), data.len());
+
+    // Convert to BitVec and check contents
+    let expected_bits: Vec<bool> = data
+        .iter()
+        .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1 != 0))
+        .collect();
+    assert_eq!(my_bitvec.into_iter().collect::<Vec<_>>(), expected_bits);
 }

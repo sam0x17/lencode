@@ -1,4 +1,5 @@
 use super::{Error, Write};
+use crate::*;
 use bitvec::prelude::*;
 
 /// `BitWriter` writes bits (MSB- or LSB-first) into an underlying `Write` sink.
@@ -22,7 +23,7 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
 
     /// Write a single bit into the buffer.
     #[inline(always)]
-    pub fn write_bit(&mut self, bit: bool) -> Result<(), Error> {
+    pub fn write_bit(&mut self, bit: bool) -> Result<()> {
         // auto-flush if buffer full
         if self.cursor >= BUFFER_SIZE * 8 {
             self.flush_buffer()?;
@@ -35,7 +36,7 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
 
     /// Write up to 64 bits (LSB-first within the provided `u64`).
     #[inline(always)]
-    pub fn write_bits<const N: u8>(&mut self, mut v: u64) -> Result<(), Error> {
+    pub fn write_bits<const N: u8>(&mut self, mut v: u64) -> Result<()> {
         const {
             assert!(N <= 64, "can write at most 64 bits");
         }
@@ -49,14 +50,14 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
 
     /// Consumes the [`BitWriter`], returning the underlying writer.
     #[inline(always)]
-    pub fn into_inner(mut self) -> Result<W, Error> {
+    pub fn into_inner(mut self) -> Result<W> {
         self.flush_all()?;
         Ok(self.writer.take().expect("writer missing"))
     }
 
     /// Flush full bytes in the buffer to the underlying writer.
     #[inline(always)]
-    fn flush_buffer(&mut self) -> Result<(), Error> {
+    fn flush_buffer(&mut self) -> Result<()> {
         let bytes = self.cursor.div_ceil(8);
         let raw = self.buffer.as_raw_slice();
         let w = self.writer.as_mut().expect("writer missing");
@@ -74,7 +75,7 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
 
     /// Flush any pending bits (padding the final byte with zeroes) and underlying writer.
     #[inline(always)]
-    pub fn flush_all(&mut self) -> Result<(), Error> {
+    pub fn flush_all(&mut self) -> Result<()> {
         if self.cursor > 0 {
             self.flush_buffer()?;
         }
@@ -95,7 +96,7 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> Drop
 
 /// `Write` impl for MSB-first ordering
 impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Msb0> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let mut written = 0;
         for &byte in buf {
             // determine where to insert next
@@ -128,14 +129,14 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Msb
     }
 
     #[inline(always)]
-    fn flush(&mut self) -> Result<(), Error> {
+    fn flush(&mut self) -> Result<()> {
         self.flush_all()
     }
 }
 
 /// `Write` impl for LSB-first ordering
 impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Lsb0> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let mut written = 0;
         for &byte in buf {
             let bit_offset = self.cursor & 7;
@@ -167,15 +168,10 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Lsb
     }
 
     #[inline(always)]
-    fn flush(&mut self) -> Result<(), Error> {
+    fn flush(&mut self) -> Result<()> {
         self.flush_all()
     }
 }
-
-#[cfg(all(test, not(feature = "std")))]
-extern crate alloc;
-#[cfg(all(test, not(feature = "std")))]
-use alloc::{vec, vec::Vec};
 
 #[test]
 fn test_write_and_read_roundtrip() {
