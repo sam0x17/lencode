@@ -35,7 +35,7 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
 
     /// Write up to 64 bits (LSB-first within the provided `u64`).
     #[inline(always)]
-    pub fn write_bits<const N: usize>(&mut self, mut v: u64) -> Result<(), Error> {
+    pub fn write_bits<const N: u8>(&mut self, mut v: u64) -> Result<(), Error> {
         const {
             assert!(N <= 64, "can write at most 64 bits");
         }
