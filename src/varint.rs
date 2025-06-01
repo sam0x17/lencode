@@ -22,10 +22,7 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
         };
         if first_bit {
             let mut bitsize: usize = 0;
-            bitsize += 4 * reader
-                .read_ones()?
-                .checked_sub(1)
-                .ok_or(Error::InvalidData)?; // read 4 * ones
+            bitsize += 4 * reader.read_ones()?;
             bitsize += reader
                 .read_zeros()?
                 .checked_sub(1)
@@ -34,7 +31,6 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
             if bitsize > core::mem::size_of::<Self>() * 8 {
                 return Err(Error::InvalidData);
             }
-            panic!("bitsize: {}", bitsize);
             for i in 0..bitsize {
                 let bit = reader.read_bit()?;
                 if bit {
@@ -73,15 +69,38 @@ pub const fn reverse(bytes: &mut [u8]) {
 }
 
 #[test]
-fn test_decode_varint() {
-    // 0
-    let data = vec![0];
+fn test_decode_varint_0() {
+    let data = vec![0b0111_1111]; // pad with 1s to smoke test the zero case
     let mut reader = BitReader::<_>::new(Cursor::new(data));
     let value: u64 = VarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 0);
 
-    let data = vec![0b10011];
+    let data = vec![0];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    assert_eq!(value, 0);
+}
+
+#[test]
+fn test_decode_varint_1() {
+    let data = vec![0b10011000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
     let value: u64 = VarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 1);
+}
+
+#[test]
+fn test_decode_varint_2() {
+    let data = vec![0b10001100];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    assert_eq!(value, 2);
+}
+
+#[test]
+fn test_decode_varint_3() {
+    let data = vec![0b10001110];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    assert_eq!(value, 3);
 }
