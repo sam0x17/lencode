@@ -21,6 +21,8 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
             )
         };
         if first_bit {
+            // first bit 1 means the value is non-zero and we need to read run of 1s, run of
+            // 0s, and then the value bits
             let mut bitsize: usize = 0;
             bitsize += 4 * reader.read_ones()?;
             bitsize += reader
@@ -31,7 +33,6 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
             if bitsize > core::mem::size_of::<Self>() * 8 {
                 return Err(Error::InvalidData);
             }
-            println!("bitsize: {}", bitsize);
             for i in 0..bitsize {
                 let bit = reader.read_bit()?;
                 // each bit we read is part of the binary representation of the value, i.e.
@@ -44,7 +45,10 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
                     buf[byte_index] &= !(1 << bit_index);
                 }
             }
-        } // else the value is a zero
+        } else {
+            // first bit 0 means the value is 0 and we are done
+            return Ok(val);
+        }
         // reverse byte order if we are big-endian
         #[cfg(target_endian = "big")]
         reverse(buf);
