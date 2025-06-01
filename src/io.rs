@@ -94,6 +94,7 @@ impl Write for Vec<u8> {
     }
 }
 
+#[cfg(not(feature = "std"))]
 impl Write for bitvec::vec::BitVec {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         let bits = buf
@@ -109,6 +110,7 @@ impl Write for bitvec::vec::BitVec {
     }
 }
 
+#[cfg(not(feature = "std"))]
 impl Read for bitvec::vec::BitVec {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         if self.is_empty() {

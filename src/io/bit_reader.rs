@@ -104,6 +104,48 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         Ok(bit)
     }
 
+    pub fn read_ones(&mut self) -> Result<usize, Error> {
+        let mut count = 0;
+        while let Ok(bit) = self.peek_bit() {
+            if bit {
+                count += 1;
+            } else {
+                break;
+            }
+            self.read_bit()?;
+        }
+        Ok(count)
+    }
+
+    pub fn read_zeros(&mut self) -> Result<usize, Error> {
+        let mut count = 0;
+        while let Ok(bit) = self.peek_bit() {
+            if !bit {
+                count += 1;
+            } else {
+                break;
+            }
+            self.read_bit()?;
+        }
+        Ok(count)
+    }
+
+    pub fn read_one(&mut self) -> Result<(), Error> {
+        if self.read_bit()? {
+            Ok(())
+        } else {
+            Err(Error::InvalidData)
+        }
+    }
+
+    pub fn read_zero(&mut self) -> Result<(), Error> {
+        if !self.read_bit()? {
+            Ok(())
+        } else {
+            Err(Error::InvalidData)
+        }
+    }
+
     pub fn peek_bit(&mut self) -> Result<bool, Error> {
         if self.cursor >= self.filled * 8 {
             self.fill_buffer()?;
@@ -410,4 +452,26 @@ fn sanity_test() {
 
     // Now we should be at EOF
     assert!(matches!(reader.read_bit(), Err(Error::EndOfData)));
+}
+
+#[test]
+fn test_read_ones_and_zeros() {
+    let data = vec![0b1111_0000, 0b0000_1111];
+    let mut br = BitReader::<_, 2>::new(Cursor::new(data));
+
+    assert_eq!(br.read_ones().unwrap(), 4);
+    assert_eq!(br.read_zeros().unwrap(), 8);
+    assert_eq!(br.read_ones().unwrap(), 4);
+    assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
+}
+
+#[test]
+fn test_read_bit_basic() {
+    let data = vec![0b1];
+    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
+    assert_eq!(reader.read_bit().unwrap(), true);
+
+    let data = vec![0b0];
+    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
+    assert_eq!(reader.read_bit().unwrap(), false);
 }

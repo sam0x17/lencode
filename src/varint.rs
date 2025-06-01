@@ -1,0 +1,90 @@
+use core::ops::*;
+
+use endian_cast::Endianness;
+use generic_array::GenericArray;
+
+use crate::io::{BitReader, BitWriter, Read, Write};
+use crate::*;
+
+pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
+    /// Encodes the value into raw bits using the len4 encoding scheme.
+    fn encode<const BUFFER_SIZE: usize>(
+        self,
+        writer: &mut BitWriter<impl Write, BUFFER_SIZE>,
+    ) -> Result<usize> {
+        todo!()
+    }
+
+    /// Decodes the value from raw bits using the len4 encoding scheme.
+    fn decode<const BUFFER_SIZE: usize>(
+        reader: &mut BitReader<impl Read, BUFFER_SIZE>,
+    ) -> Result<Self> {
+        let first_bit = reader.read_bit()?;
+        let mut val = Self::default();
+        let buf: &mut [u8] = unsafe {
+            core::slice::from_raw_parts_mut(
+                &mut val as *mut Self as *mut u8,
+                core::mem::size_of::<Self>(),
+            )
+        };
+        if first_bit {
+            let mut bitsize: usize = 0;
+            bitsize += 4 * reader.read_ones()?; // read 4 * ones
+            bitsize += reader
+                .read_zeros()?
+                .checked_sub(1)
+                .ok_or(Error::InvalidData)?;
+            reader.read_one()?; // read sentinel bit
+            if bitsize > core::mem::size_of::<Self>() * 8 {
+                return Err(Error::InvalidData);
+            }
+            //panic!("bitsize: {}", bitsize);
+            for i in 0..bitsize {
+                let bit = reader.read_bit()?;
+                if bit {
+                    buf[i / 8] |= 1 << (7 - (i % 8));
+                }
+            }
+        } // else the value is a zero
+        #[cfg(target_endian = "big")]
+        reverse(buf);
+        Ok(val)
+    }
+}
+
+impl VarInt for u8 {}
+impl VarInt for u16 {}
+impl VarInt for u32 {}
+impl VarInt for u64 {}
+impl VarInt for u128 {}
+impl VarInt for usize {}
+
+#[inline(always)]
+pub const fn reverse(bytes: &mut [u8]) {
+    let mut i = 0;
+    let mut j = bytes.len() - 1;
+
+    while i < j {
+        let tmp = bytes[i];
+        bytes[i] = bytes[j];
+        bytes[j] = tmp;
+
+        i += 1;
+        j -= 1;
+    }
+}
+
+#[test]
+fn test_decode_varint() {
+    // 0
+    let data = vec![0];
+    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
+    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    assert_eq!(value, 0);
+
+    let data = vec![0b10011];
+    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
+    assert_eq!(reader.read_bit().unwrap(), true);
+    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    assert_eq!(value, 1);
+}

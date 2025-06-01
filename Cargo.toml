@@ -13,6 +13,8 @@ documentation = "https://docs.rs/lencode/latest/lencode/"
 bitvec = "1"
 endian-cast = "2"
 serde = { version = "1", optional = true }
+typenum = "1"
+generic-array = "1"
 
 [dev-dependencies]
 rayon = "1"
@@ -24,6 +26,12 @@ serde = ["dep:serde"]
 
 [profile.test]
 opt-level = 3
+lto = true
 
 [profile.dev]
 opt-level = 3
+lto = true
+
+[profile.release]
+opt-level = 3
+lto = true
