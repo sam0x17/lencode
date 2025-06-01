@@ -1,7 +1,4 @@
-use core::ops::*;
-
 use endian_cast::Endianness;
-use generic_array::GenericArray;
 
 use crate::io::{BitReader, BitWriter, Read, Write};
 use crate::*;
@@ -10,7 +7,7 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
     fn encode<const BUFFER_SIZE: usize>(
         self,
-        writer: &mut BitWriter<impl Write, BUFFER_SIZE>,
+        _writer: &mut BitWriter<impl Write, BUFFER_SIZE>,
     ) -> Result<usize> {
         todo!()
     }

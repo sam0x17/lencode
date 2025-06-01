@@ -6,6 +6,11 @@ pub use bit_reader::*;
 pub use bit_writer::*;
 pub use cursor::*;
 
+use crate::*;
+
+#[allow(unused_imports)]
+use bitvec::prelude::*;
+
 #[derive(Debug)]
 pub enum Error {
     InvalidData,
@@ -50,28 +55,28 @@ impl From<Error> for std::io::Error {
 }
 
 pub trait Read {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error>;
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
 }
 
 pub trait Write {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Error>;
-    fn flush(&mut self) -> Result<(), Error>;
+    fn write(&mut self, buf: &[u8]) -> Result<usize>;
+    fn flush(&mut self) -> Result<()>;
 }
 
 #[cfg(feature = "std")]
 impl<R: std::io::Read> Read for R {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.read(buf).map_err(|e| Error::from(e))
     }
 }
 
 #[cfg(feature = "std")]
 impl<W: std::io::Write> Write for W {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.write(buf).map_err(|e| Error::from(e))
     }
 
-    fn flush(&mut self) -> Result<(), Error> {
+    fn flush(&mut self) -> Result<()> {
         self.flush().map_err(|e| Error::from(e))
     }
 }
@@ -83,20 +88,20 @@ use alloc::vec::Vec;
 
 #[cfg(not(feature = "std"))]
 impl Write for Vec<u8> {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.extend_from_slice(buf);
         Ok(buf.len())
     }
 
-    fn flush(&mut self) -> Result<(), Error> {
+    fn flush(&mut self) -> Result<()> {
         // No-op for Vec, as it doesn't have an underlying buffer to flush
         Ok(())
     }
 }
 
 #[cfg(not(feature = "std"))]
-impl Write for bitvec::vec::BitVec {
-    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+impl<T: BitStore, O: BitOrder> Write for BitVec<T, O> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let bits = buf
             .iter()
             .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1 != 0));
@@ -104,15 +109,15 @@ impl Write for bitvec::vec::BitVec {
         Ok(buf.len())
     }
 
-    fn flush(&mut self) -> Result<(), Error> {
+    fn flush(&mut self) -> Result<()> {
         // No-op for BitVec, as it doesn't have an underlying buffer to flush
         Ok(())
     }
 }
 
 #[cfg(not(feature = "std"))]
-impl Read for bitvec::vec::BitVec {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+impl<T: BitStore, O: BitOrder> Read for BitVec<T, O> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         if self.is_empty() {
             return Err(Error::EndOfData);
         }
@@ -149,7 +154,7 @@ fn test_write_vec() {
 
 #[test]
 fn test_write_bitvec() {
-    let mut my_bitvec = bitvec::vec::BitVec::new();
+    let mut my_bitvec = BitVec::<usize>::new();
     let data = b"Hello, world!";
 
     // Test writing
