@@ -2,20 +2,16 @@ use endian_cast::Endianness;
 
 use crate::io::{BitReader, BitWriter, Read, Write};
 use crate::*;
+use bitvec::prelude::*;
 
 pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
-    fn encode<const BUFFER_SIZE: usize>(
-        self,
-        _writer: &mut BitWriter<impl Write, BUFFER_SIZE>,
-    ) -> Result<usize> {
+    fn encode<W: Write, const N: usize>(self, _writer: &mut BitWriter<W, N>) -> Result<usize> {
         todo!()
     }
 
     /// Decodes the value from raw bits using the len4 encoding scheme.
-    fn decode<const BUFFER_SIZE: usize>(
-        reader: &mut BitReader<impl Read, BUFFER_SIZE>,
-    ) -> Result<Self> {
+    fn decode<R: Read, const N: usize>(reader: &mut BitReader<R, Lsb0, N>) -> Result<Self> {
         let first_bit = reader.read_bit()?;
         let mut val = Self::default();
         let buf: &mut [u8] = unsafe {
@@ -75,13 +71,12 @@ pub const fn reverse(bytes: &mut [u8]) {
 fn test_decode_varint() {
     // 0
     let data = vec![0];
-    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
     let value: u64 = VarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 0);
 
-    let data = vec![0b10011];
-    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
-    assert_eq!(reader.read_bit().unwrap(), true);
+    let data = vec![0b10011000];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
     let value: u64 = VarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 1);
 }

@@ -1,19 +1,18 @@
 use super::{Error, Read};
-use bitvec::{
-    order::BitOrder,
-    prelude::{BitArray, Msb0},
-};
+use bitvec::prelude::*;
 
-pub struct BitReader<R: Read, const BUFFER_SIZE: usize = 64_000, Order: BitOrder = Msb0> {
+use crate::*;
+
+pub struct BitReader<R: Read, Order: BitOrder = Lsb0, const N: usize = 256> {
     reader: R,
-    buffer: BitArray<[u8; BUFFER_SIZE], Order>,
+    buffer: BitArray<[u8; N], Order>,
     filled: usize, // how many bytes of `buffer` are valid
     cursor: usize, // next bit position [0..filled*8)
 }
 
-impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
+impl<R: Read, O: BitOrder, const BUFFER_SIZE: usize> BitReader<R, O, BUFFER_SIZE> {
     pub fn new(reader: R) -> Self {
-        BitReader {
+        BitReader::<R, O, BUFFER_SIZE> {
             reader,
             buffer: BitArray::new([0u8; BUFFER_SIZE]),
             filled: 0,
@@ -23,7 +22,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
 
     /// Returns `Ok(true)` if there are *any* unread bits remaining in the stream,
     /// `Ok(false)` at real EOF, or an `Err` on I/O error.
-    pub fn has_bits(&mut self) -> Result<bool, Error> {
+    pub fn has_bits(&mut self) -> Result<bool> {
         // If we’re completely drained, try to fill once:
         if self.cursor >= self.filled * 8 {
             match self.fill_buffer() {
@@ -36,7 +35,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         Ok(self.cursor < self.filled * 8)
     }
 
-    fn fill_buffer(&mut self) -> Result<(), Error> {
+    fn fill_buffer(&mut self) -> Result<()> {
         // 1) How many bits are still unread?
         let total_bits = self.filled * 8;
         let bits_remaining = total_bits.saturating_sub(self.cursor);
@@ -92,7 +91,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         Ok(())
     }
 
-    pub fn read_bit(&mut self) -> Result<bool, Error> {
+    pub fn read_bit(&mut self) -> Result<bool> {
         if self.cursor >= self.filled * 8 {
             self.fill_buffer()?;
         }
@@ -104,7 +103,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         Ok(bit)
     }
 
-    pub fn read_ones(&mut self) -> Result<usize, Error> {
+    pub fn read_ones(&mut self) -> Result<usize> {
         let mut count = 0;
         while let Ok(bit) = self.peek_bit() {
             if bit {
@@ -117,7 +116,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         Ok(count)
     }
 
-    pub fn read_zeros(&mut self) -> Result<usize, Error> {
+    pub fn read_zeros(&mut self) -> Result<usize> {
         let mut count = 0;
         while let Ok(bit) = self.peek_bit() {
             if !bit {
@@ -130,7 +129,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         Ok(count)
     }
 
-    pub fn read_one(&mut self) -> Result<(), Error> {
+    pub fn read_one(&mut self) -> Result<()> {
         if self.read_bit()? {
             Ok(())
         } else {
@@ -138,7 +137,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         }
     }
 
-    pub fn read_zero(&mut self) -> Result<(), Error> {
+    pub fn read_zero(&mut self) -> Result<()> {
         if !self.read_bit()? {
             Ok(())
         } else {
@@ -146,7 +145,7 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
         }
     }
 
-    pub fn peek_bit(&mut self) -> Result<bool, Error> {
+    pub fn peek_bit(&mut self) -> Result<bool> {
         if self.cursor >= self.filled * 8 {
             self.fill_buffer()?;
         }
@@ -157,8 +156,8 @@ impl<R: Read, const BUFFER_SIZE: usize> BitReader<R, BUFFER_SIZE> {
     }
 }
 
-impl<R: Read, const BUFFER_SIZE: usize> Read for BitReader<R, BUFFER_SIZE> {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+impl<R: Read, O: BitOrder, const BUFFER_SIZE: usize> Read for BitReader<R, O, BUFFER_SIZE> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         // 1) On the very first read, prime the buffer if it's empty
         if self.filled == 0 {
             self.fill_buffer()?;
@@ -219,7 +218,7 @@ use std::io::Cursor;
 fn test_read_bit_msb0_single_byte() {
     // 0b1010_1101 → bits: 1,0,1,0,1,1,0,1 (MSB-first)
     let data = vec![0b1010_1101];
-    let mut br = BitReader::<_, 1>::new(Cursor::new(data));
+    let mut br = BitReader::<_, Msb0>::new(Cursor::new(data));
 
     let expected = [true, false, true, false, true, true, false, true];
     for &exp in &expected {
@@ -233,7 +232,7 @@ fn test_read_bit_msb0_single_byte() {
 #[test]
 fn test_peek_bit_does_not_advance() {
     let data = vec![0b1100_0000];
-    let mut br = BitReader::<_, 1>::new(Cursor::new(data));
+    let mut br = BitReader::<_, Msb0>::new(Cursor::new(data));
 
     // peek twice, still the same
     assert!(br.peek_bit().unwrap());
@@ -258,7 +257,7 @@ fn test_peek_bit_does_not_advance() {
 fn test_fill_and_read_across_buffer_boundary() {
     // Force a refill after 1 byte
     let data = vec![0b1111_0000, 0b0000_1111];
-    let mut br = BitReader::<_, 1>::new(Cursor::new(data));
+    let mut br = BitReader::<_, Msb0>::new(Cursor::new(data));
 
     // Read 12 bits total
     let mut bits = Vec::new();
@@ -277,7 +276,7 @@ fn test_fill_and_read_across_buffer_boundary() {
 #[test]
 fn test_read_bytes_after_bits() {
     let data = vec![0xAB, 0xCD];
-    let mut br = BitReader::<_, 2>::new(Cursor::new(data));
+    let mut br = BitReader::<_, Msb0>::new(Cursor::new(data));
 
     // consume 4 bits (misaligned)
     for _ in 0..4 {
@@ -304,7 +303,7 @@ fn test_read_bytes_after_bits() {
 #[test]
 fn test_empty_input_errors() {
     let data = Vec::<u8>::new();
-    let mut br = BitReader::<_, 1>::new(Cursor::new(data));
+    let mut br = BitReader::<_>::new(Cursor::new(data));
 
     // reading any bit immediately errors
     assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
@@ -320,7 +319,7 @@ fn test_exact_buffer_refill() {
     // Create a data stream just over one BUFFER_SIZE so we force multiple refills.
     // Use BUFFER_SIZE=2 to keep this small.
     let data = vec![0b1010_1010, 0b0101_0101, 0b1111_0000];
-    let mut br = BitReader::<_, 2>::new(Cursor::new(data.clone()));
+    let mut br = BitReader::<_, Msb0, 2>::new(Cursor::new(data.clone()));
 
     // Read all bits in sequence
     let mut bits = Vec::new();
@@ -346,7 +345,7 @@ fn test_exact_buffer_refill() {
 #[test]
 fn test_mixed_bit_and_byte_reads_misaligned() {
     let data = vec![0xF0, 0x0F, 0xAA];
-    let mut br = BitReader::<_, 3>::new(Cursor::new(data.clone()));
+    let mut br = BitReader::<_, Msb0, 3>::new(Cursor::new(data.clone()));
 
     // Read 3 bits: 1,1,1
     for expected in [true, true, true] {
@@ -376,11 +375,11 @@ fn test_has_bits() {
     use crate::io::Cursor;
 
     // 1) Empty stream → no bits
-    let mut br = BitReader::<_, 1>::new(Cursor::new(vec![]));
+    let mut br = BitReader::<_, Msb0>::new(Cursor::new(vec![]));
     assert!(!br.has_bits().unwrap());
 
     // 2) Fresh stream of one byte → bits present
-    let mut br = BitReader::<_, 1>::new(Cursor::new(vec![0b1010_1010]));
+    let mut br = BitReader::<_, Msb0>::new(Cursor::new(vec![0b1010_1010]));
     assert!(br.has_bits().unwrap());
 
     // 3) Consume a few bits → still bits
@@ -394,7 +393,7 @@ fn test_has_bits() {
     assert!(!br.has_bits().unwrap());
 
     // 5) Mixed byte‐ and bit‐reads
-    let mut br = BitReader::<_, 2>::new(Cursor::new(vec![0xFF, 0x00]));
+    let mut br = BitReader::<_, Msb0, 2>::new(Cursor::new(vec![0xFF, 0x00]));
     // read 8 bits via .read()
     let mut buf = [0u8; 1];
     assert_eq!(br.read(&mut buf).unwrap(), 1);
@@ -411,7 +410,7 @@ fn test_has_bits() {
 #[test]
 fn sanity_test() {
     let data = vec![0b1011_0111, 0b1111_0111, 0b1101_1111, 0b1000_000];
-    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let mut reader = BitReader::<_, Msb0, 2>::new(Cursor::new(data));
     assert!(reader.peek_bit().unwrap()); // 1st bit
     assert!(reader.has_bits().unwrap());
     assert!(reader.read_bit().unwrap()); // 1st bit
@@ -457,7 +456,7 @@ fn sanity_test() {
 #[test]
 fn test_read_ones_and_zeros() {
     let data = vec![0b1111_0000, 0b0000_1111];
-    let mut br = BitReader::<_, 2>::new(Cursor::new(data));
+    let mut br = BitReader::<_, Msb0>::new(Cursor::new(data));
 
     assert_eq!(br.read_ones().unwrap(), 4);
     assert_eq!(br.read_zeros().unwrap(), 8);
@@ -466,12 +465,12 @@ fn test_read_ones_and_zeros() {
 }
 
 #[test]
-fn test_read_bit_basic() {
-    let data = vec![0b1];
-    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
+fn test_read_bit_basic_lsb0() {
+    let data = vec![0b0000_0001];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
     assert_eq!(reader.read_bit().unwrap(), true);
 
-    let data = vec![0b0];
-    let mut reader = BitReader::<_, 8>::new(Cursor::new(data));
+    let data = vec![0b0000_0000];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
     assert_eq!(reader.read_bit().unwrap(), false);
 }
