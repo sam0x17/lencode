@@ -31,8 +31,10 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
             if bitsize > core::mem::size_of::<Self>() * 8 {
                 return Err(Error::InvalidData);
             }
+            println!("bitsize: {}", bitsize);
             for i in 0..bitsize {
                 let bit = reader.read_bit()?;
+                println!("bit {}: {}", i, bit);
                 // each bit we read is part of the binary representation of the value, i.e.
                 // 0b10 is 2, ob11 is 3, etc., so we set each bit in the value accordingly
                 let byte_index = i / 8;
@@ -110,4 +112,13 @@ fn test_decode_varint_3() {
     let value: u64 = VarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 3u64));
     assert_eq!(value, 3);
+}
+
+#[test]
+fn test_decode_varint_4() {
+    let data = vec![0b10000110, 0b00000000];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    assert_eq!(format!("{:064b}", value), format!("{:064b}", 4u64));
+    assert_eq!(value, 4);
 }
