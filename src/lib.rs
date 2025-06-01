@@ -3,6 +3,8 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(all(test, not(feature = "std")))]
+use alloc::format;
+#[cfg(all(test, not(feature = "std")))]
 use alloc::vec;
 #[cfg(all(test, not(feature = "std")))]
 use alloc::vec::Vec;
