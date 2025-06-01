@@ -3,7 +3,7 @@ use bitvec::prelude::*;
 
 use crate::*;
 
-pub struct BitReader<R: Read, Order: BitOrder = Lsb0, const N: usize = 256> {
+pub struct BitReader<R: Read, Order: BitOrder = Msb0, const N: usize = 256> {
     reader: R,
     buffer: BitArray<[u8; N], Order>,
     filled: usize, // how many bytes of `buffer` are valid
@@ -467,10 +467,49 @@ fn test_read_ones_and_zeros() {
 #[test]
 fn test_read_bit_basic_lsb0() {
     let data = vec![0b0000_0001];
-    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let mut reader = BitReader::<_, Lsb0>::new(Cursor::new(data));
+    assert_eq!(reader.read_bit().unwrap(), true);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+
+    let data = vec![0b1000_0000];
+    let mut reader = BitReader::<_, Lsb0>::new(Cursor::new(data));
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), true);
+}
+
+#[test]
+fn test_read_bit_basic_msb0() {
+    let data = vec![0b0000_0001];
+    let mut reader = BitReader::<_, Msb0>::new(Cursor::new(data));
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
     assert_eq!(reader.read_bit().unwrap(), true);
 
-    let data = vec![0b0000_0000];
-    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let data = vec![0b1000_0000];
+    let mut reader = BitReader::<_, Msb0>::new(Cursor::new(data));
+    assert_eq!(reader.read_bit().unwrap(), true);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
+    assert_eq!(reader.read_bit().unwrap(), false);
     assert_eq!(reader.read_bit().unwrap(), false);
 }

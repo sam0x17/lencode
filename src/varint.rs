@@ -11,7 +11,7 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
     }
 
     /// Decodes the value from raw bits using the len4 encoding scheme.
-    fn decode<R: Read, const N: usize>(reader: &mut BitReader<R, Lsb0, N>) -> Result<Self> {
+    fn decode<R: Read, const N: usize>(reader: &mut BitReader<R, Msb0, N>) -> Result<Self> {
         let first_bit = reader.read_bit()?;
         let mut val = Self::default();
         let buf: &mut [u8] = unsafe {
@@ -22,7 +22,10 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
         };
         if first_bit {
             let mut bitsize: usize = 0;
-            bitsize += 4 * reader.read_ones()?; // read 4 * ones
+            bitsize += 4 * reader
+                .read_ones()?
+                .checked_sub(1)
+                .ok_or(Error::InvalidData)?; // read 4 * ones
             bitsize += reader
                 .read_zeros()?
                 .checked_sub(1)
@@ -31,11 +34,13 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
             if bitsize > core::mem::size_of::<Self>() * 8 {
                 return Err(Error::InvalidData);
             }
-            //panic!("bitsize: {}", bitsize);
+            panic!("bitsize: {}", bitsize);
             for i in 0..bitsize {
                 let bit = reader.read_bit()?;
                 if bit {
-                    buf[i / 8] |= 1 << (7 - (i % 8));
+                    buf[i / 8] |= 1 << (i % 8);
+                } else {
+                    buf[i / 8] &= !(1 << (i % 8));
                 }
             }
         } // else the value is a zero
@@ -75,7 +80,7 @@ fn test_decode_varint() {
     let value: u64 = VarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 0);
 
-    let data = vec![0b10011000];
+    let data = vec![0b10011];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
     let value: u64 = VarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 1);
