@@ -31,21 +31,18 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
             if bitsize > core::mem::size_of::<Self>() * 8 {
                 return Err(Error::InvalidData);
             }
-            println!("bitsize: {}", bitsize);
             for i in 0..bitsize {
                 let bit = reader.read_bit()?;
-                println!("bit {}: {}", i, bit);
                 // each bit we read is part of the binary representation of the value, i.e.
                 // 0b10 is 2, ob11 is 3, etc., so we set each bit in the value accordingly
                 let byte_index = i / 8;
-                let bit_index = i % 8;
+                let bit_index = (bitsize - 1 - i) % 8;
                 if bit {
-                    buf[byte_index] |= 1 << (bit_index);
+                    buf[byte_index] |= 1 << bit_index;
                 } else {
-                    buf[byte_index] &= !(1 << (bit_index)); // clear the bit
+                    buf[byte_index] &= !(1 << bit_index);
                 }
             }
-            println!("buf: {:?}", buf);
         } // else the value is a zero
         // reverse byte order if we are big-endian
         #[cfg(target_endian = "big")]
