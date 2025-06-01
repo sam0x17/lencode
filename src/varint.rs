@@ -129,3 +129,12 @@ fn test_decode_varint_5() {
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 5u64));
     assert_eq!(value, 5);
 }
+
+#[test]
+fn test_decode_varint_6() {
+    let data = vec![0b10000111, 0b00000000];
+    let mut reader = BitReader::<_>::new(Cursor::new(data));
+    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    assert_eq!(format!("{:064b}", value), format!("{:064b}", 6u64));
+    assert_eq!(value, 6);
+}
