@@ -3,18 +3,18 @@ use bitvec::prelude::*;
 
 use crate::*;
 
-pub struct BitReader<R: Read, Order: BitOrder = Msb0, const N: usize = 256> {
+pub struct BitReader<R: Read, O: BitOrder = Msb0, const N: usize = 256> {
     reader: R,
-    buffer: BitArray<[u8; N], Order>,
+    buffer: BitArray<[u8; N], O>,
     filled: usize, // how many bytes of `buffer` are valid
     cursor: usize, // next bit position [0..filled*8)
 }
 
-impl<R: Read, O: BitOrder, const BUFFER_SIZE: usize> BitReader<R, O, BUFFER_SIZE> {
+impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
     pub fn new(reader: R) -> Self {
-        BitReader::<R, O, BUFFER_SIZE> {
+        BitReader::<R, O, N> {
             reader,
-            buffer: BitArray::new([0u8; BUFFER_SIZE]),
+            buffer: BitArray::new([0u8; N]),
             filled: 0,
             cursor: 0,
         }
@@ -79,7 +79,7 @@ impl<R: Read, O: BitOrder, const BUFFER_SIZE: usize> BitReader<R, O, BUFFER_SIZE
                 carry = new_carry;
             }
             // tuck the final carry bit into the next raw byte if there is one
-            if bytes_remaining + bytes_read < BUFFER_SIZE {
+            if bytes_remaining + bytes_read < N {
                 raw[bytes_remaining + bytes_read] |= carry;
             }
         }

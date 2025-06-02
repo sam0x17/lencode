@@ -6,7 +6,7 @@ use bitvec::prelude::*;
 
 pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
-    fn encode<W: Write, const N: usize>(self, writer: &mut BitWriter<W, N>) -> Result<usize> {
+    fn encode<W: Write, const N: usize>(self, writer: &mut BitWriter<W, Msb0, N>) -> Result<usize> {
         if self == Self::default() {
             // if the value is zero, we write a single 0 bit
             writer.write_bit(false)?;

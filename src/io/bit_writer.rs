@@ -3,20 +3,20 @@ use crate::*;
 use bitvec::prelude::*;
 
 /// `BitWriter` writes bits (MSB- or LSB-first) into an underlying `Write` sink.
-pub struct BitWriter<W: Write, const BUFFER_SIZE: usize = 64_000, Order: BitOrder = Msb0> {
+pub struct BitWriter<W: Write, O: BitOrder = Msb0, const N: usize = 256> {
     writer: Option<W>,
-    buffer: BitArray<[u8; BUFFER_SIZE], Order>,
+    buffer: BitArray<[u8; N], O>,
     /// how many bits have been written into `buffer`
     cursor: usize,
 }
 
-impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SIZE, Order> {
+impl<W: Write, O: BitOrder, const N: usize> BitWriter<W, O, N> {
     /// Create a new BitWriter over `writer`.
     #[inline(always)]
     pub fn new(writer: W) -> Self {
         BitWriter {
             writer: Some(writer),
-            buffer: BitArray::new([0u8; BUFFER_SIZE]),
+            buffer: BitArray::new([0u8; N]),
             cursor: 0,
         }
     }
@@ -25,7 +25,7 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
     #[inline(always)]
     pub fn write_bit(&mut self, bit: bool) -> Result<()> {
         // auto-flush if buffer full
-        if self.cursor >= BUFFER_SIZE * 8 {
+        if self.cursor >= N * 8 {
             self.flush_buffer()?;
         }
         // delegate to BitArray which respects bit ordering (Msb0 vs Lsb0)
@@ -36,11 +36,11 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
 
     /// Write up to 64 bits (LSB-first within the provided `u64`).
     #[inline(always)]
-    pub fn write_bits<const N: u8>(&mut self, mut v: u64) -> Result<()> {
+    pub fn write_bits<const NUM: u8>(&mut self, mut v: u64) -> Result<()> {
         const {
             assert!(N <= 64, "can write at most 64 bits");
         }
-        for _ in 0..N {
+        for _ in 0..NUM {
             let b = (v & 1) != 0;
             self.write_bit(b)?;
             v >>= 1;
@@ -86,23 +86,21 @@ impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> BitWriter<W, BUFFER_SI
     }
 }
 
-impl<W: Write, const BUFFER_SIZE: usize, Order: BitOrder> Drop
-    for BitWriter<W, BUFFER_SIZE, Order>
-{
+impl<W: Write, O: BitOrder, const N: usize> Drop for BitWriter<W, O, N> {
     fn drop(&mut self) {
         let _ = self.flush_all();
     }
 }
 
 /// `Write` impl for MSB-first ordering
-impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Msb0> {
+impl<W: Write, const N: usize> Write for BitWriter<W, Msb0, N> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let mut written = 0;
         for &byte in buf {
             // determine where to insert next
             let bit_offset = self.cursor & 7;
             let mut byte_idx = self.cursor >> 3;
-            if byte_idx >= BUFFER_SIZE {
+            if byte_idx >= N {
                 self.flush_buffer()?;
                 byte_idx = self.cursor >> 3;
             }
@@ -115,7 +113,7 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Msb
                 let raw = self.buffer.as_raw_mut_slice();
                 raw[byte_idx] |= byte >> bit_offset;
                 byte_idx += 1;
-                if byte_idx >= BUFFER_SIZE {
+                if byte_idx >= N {
                     self.flush_buffer()?;
                     byte_idx = self.cursor >> (3 + 1);
                 }
@@ -135,13 +133,13 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Msb
 }
 
 /// `Write` impl for LSB-first ordering
-impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Lsb0> {
+impl<W: Write, const N: usize> Write for BitWriter<W, Lsb0, N> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let mut written = 0;
         for &byte in buf {
             let bit_offset = self.cursor & 7;
             let mut byte_idx = self.cursor >> 3;
-            if byte_idx >= BUFFER_SIZE {
+            if byte_idx >= N {
                 self.flush_buffer()?;
                 byte_idx = self.cursor >> 3;
             }
@@ -154,7 +152,7 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Lsb
                 let raw = self.buffer.as_raw_mut_slice();
                 raw[byte_idx] |= rev << bit_offset;
                 byte_idx += 1;
-                if byte_idx >= BUFFER_SIZE {
+                if byte_idx >= N {
                     self.flush_buffer()?;
                     byte_idx = self.cursor >> (3 + 1);
                 }
@@ -175,7 +173,7 @@ impl<W: Write, const BUFFER_SIZE: usize> Write for BitWriter<W, BUFFER_SIZE, Lsb
 
 #[test]
 fn test_write_and_read_roundtrip() {
-    let mut writer = BitWriter::<_, 2, Msb0>::new(Vec::new());
+    let mut writer = BitWriter::<_, Msb0, 2>::new(Vec::new());
     writer.write(&[0b1011_0010]).unwrap();
     writer.flush().unwrap();
     let out = writer.into_inner().unwrap();
@@ -184,7 +182,7 @@ fn test_write_and_read_roundtrip() {
 
 #[test]
 fn test_buffer_boundary_flush() {
-    let mut writer = BitWriter::<_, 1, Msb0>::new(Vec::new());
+    let mut writer = BitWriter::<_, Msb0, 1>::new(Vec::new());
     let buf = vec![0xFF; 12];
     writer.write(&buf).unwrap();
     writer.flush().unwrap();
@@ -194,7 +192,7 @@ fn test_buffer_boundary_flush() {
 
 #[test]
 fn test_write_misaligned() {
-    let mut writer = BitWriter::<_, 2, Msb0>::new(Vec::new());
+    let mut writer = BitWriter::<_, Msb0, 2>::new(Vec::new());
     // prefill 4 bits: high nibble '1111'
     for _ in 0..4 {
         writer.write_bit(true).unwrap();
@@ -210,7 +208,7 @@ fn test_write_misaligned() {
 
 #[test]
 fn test_lsb0_writer() {
-    let mut writer = BitWriter::<_, 2, Lsb0>::new(Vec::new());
+    let mut writer = BitWriter::<_, Lsb0, 2>::new(Vec::new());
     writer.write(&[0xAA]).unwrap();
     writer.flush().unwrap();
     let out = writer.into_inner().unwrap();
@@ -219,7 +217,7 @@ fn test_lsb0_writer() {
 
 #[test]
 fn test_write_bits_msb0() {
-    let mut writer = BitWriter::<_, 2, Msb0>::new(Vec::new());
+    let mut writer = BitWriter::<_, Msb0, 2>::new(Vec::new());
     writer.write_bits::<12>(0xABC).unwrap();
     writer.flush().unwrap();
     let out = writer.into_inner().unwrap();
@@ -230,7 +228,7 @@ fn test_write_bits_msb0() {
 
 #[test]
 fn test_write_bits_lsb0() {
-    let mut writer = BitWriter::<_, 2, Lsb0>::new(Vec::new());
+    let mut writer = BitWriter::<_, Lsb0, 2>::new(Vec::new());
     writer.write_bits::<12>(0xABC).unwrap();
     writer.flush().unwrap();
     let out = writer.into_inner().unwrap();
