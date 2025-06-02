@@ -271,3 +271,18 @@ fn test_decode_varint_14387324() {
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 14387324u64));
     assert_eq!(value, 14387324);
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn test_round_trip_u32_all() {
+    use rayon::prelude::*;
+    (0..=u32::MAX).par_bridge().for_each(|i| {
+        let value: u32 = i;
+        let (bytes, bits_written) = value.to_varint_bits().unwrap();
+        let mut writer = BitWriter::new(bytes);
+        assert_eq!(bits_written, value.encode::<_, 64>(&mut writer).unwrap());
+        let bytes = writer.into_inner().unwrap();
+        let decoded_value = u32::from_varint_bytes(&bytes).unwrap();
+        assert_eq!(decoded_value, value);
+    });
+}
