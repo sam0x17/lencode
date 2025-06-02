@@ -6,7 +6,7 @@ extern crate alloc;
 use alloc::format;
 #[cfg(all(test, not(feature = "std")))]
 use alloc::vec;
-#[cfg(all(test, not(feature = "std")))]
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
 pub mod io;

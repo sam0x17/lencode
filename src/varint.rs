@@ -7,6 +7,7 @@ use bitvec::prelude::*;
 pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
     fn encode<W: Write, const N: usize>(self, writer: &mut BitWriter<W, Msb0, N>) -> Result<usize> {
+        let mut bits_written = 0;
         if self == Self::default() {
             // if the value is zero, we write a single 0 bit
             writer.write_bit(false)?;
@@ -15,20 +16,27 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
         // if the value is non-zero, we write a 1 bit, then a run of 1s, a run of 0s, and then
         // the value bits
         writer.write_bit(true)?;
+        bits_written += 1;
         let bitsize = core::mem::size_of::<Self>() * 8;
         // each 1 adds 4 to the bitsize of the value
         for _ in 0..(bitsize / 4) {
             writer.write_bit(true)?;
+            bits_written += 1;
         }
         // sentinel bit for the run of 1s
         writer.write_bit(false)?;
+        bits_written += 1;
         // each 0 adds 1 to the bitsize of the value
         for _ in 0..(bitsize % 4) {
             writer.write_bit(false)?;
+            bits_written += 1;
         }
         writer.write_bit(true)?; // sentinel bit
+        bits_written += 1;
         let bytes = self.le_bytes();
-        writer.write(&bytes)
+        writer.write(&bytes)?;
+        bits_written += bytes.len() * 8;
+        Ok(bits_written)
     }
 
     /// Decodes the value from raw bits using the len4 encoding scheme.
@@ -76,16 +84,16 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
         Ok(val)
     }
 
-    // fn to_varint_bytes(&self) -> Result<Vec<u8>> {
-    //     let mut writer = BitWriter::<_, 32, Msb0>::new(Vec::<u8>::new());
-    //     self.encode(&mut writer)?;
-    //     Ok(writer.into_inner()?)
-    // }
+    fn to_varint_bits(&self) -> Result<(Vec<u8>, usize)> {
+        let mut writer = BitWriter::<_>::new(Vec::<u8>::new());
+        let bits_written = self.encode(&mut writer)?;
+        Ok((writer.into_inner()?, bits_written))
+    }
 
-    // fn from_varint_bytes(bytes: &[u8]) -> Result<Self> {
-    //     let mut reader = BitReader::<&[u8], Msb0, 64>::new(bytes);
-    //     Self::decode(&mut reader)
-    // }
+    fn from_varint_bytes(bytes: &[u8]) -> Result<Self> {
+        let mut reader = BitReader::<_>::new(Cursor::new(bytes));
+        Self::decode(&mut reader)
+    }
 }
 
 impl VarInt for u8 {}
