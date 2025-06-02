@@ -346,3 +346,23 @@ fn test_round_trip_u8_all() {
         assert_eq!(decoded_value, value);
     });
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn test_round_trip_u32_all() {
+    use rayon::prelude::*;
+    let target = u32::MAX / 1000;
+    (0..=target).par_bridge().for_each(|i| {
+        let value: u32 = i;
+        let mut buf = [0u8; 8];
+        let mut writer = BitWriter::<_, Msb0, 8>::new(&mut buf[..]);
+        value.encode(&mut writer).unwrap();
+        drop(writer);
+        let mut reader = BitReader::<_, Msb0, 2>::new(Cursor::new(&buf[..]));
+        let decoded_value = u32::decode(&mut reader).unwrap();
+        assert_eq!(decoded_value, value);
+        // if i % 1000000 == 0 {
+        //     println!("{:.2}%", decoded_value as f64 / target as f64 * 100.0);
+        // }
+    });
+}
