@@ -355,7 +355,7 @@ fn test_round_trip_u32_all() {
     (0..=target).par_bridge().for_each(|i| {
         let value: u32 = i;
         let mut buf = [0u8; 8];
-        let mut writer = BitWriter::<_, Msb0, 8>::new(&mut buf[..]);
+        let mut writer = BitWriter::<_, Msb0, 8>::new(&mut buf[..]); // TODO: make this 2 and it fails!!
         value.encode(&mut writer).unwrap();
         drop(writer);
         let mut reader = BitReader::<_, Msb0, 2>::new(Cursor::new(&buf[..]));
