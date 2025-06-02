@@ -6,8 +6,29 @@ use bitvec::prelude::*;
 
 pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
-    fn encode<W: Write, const N: usize>(self, _writer: &mut BitWriter<W, N>) -> Result<usize> {
-        todo!()
+    fn encode<W: Write, const N: usize>(self, writer: &mut BitWriter<W, N>) -> Result<usize> {
+        if self == Self::default() {
+            // if the value is zero, we write a single 0 bit
+            writer.write_bit(false)?;
+            return Ok(1);
+        }
+        // if the value is non-zero, we write a 1 bit, then a run of 1s, a run of 0s, and then
+        // the value bits
+        writer.write_bit(true)?;
+        let bitsize = core::mem::size_of::<Self>() * 8;
+        // each 1 adds 4 to the bitsize of the value
+        for _ in 0..(bitsize / 4) {
+            writer.write_bit(true)?;
+        }
+        // sentinel bit for the run of 1s
+        writer.write_bit(false)?;
+        // each 0 adds 1 to the bitsize of the value
+        for _ in 0..(bitsize % 4) {
+            writer.write_bit(false)?;
+        }
+        writer.write_bit(true)?; // sentinel bit
+        let bytes = self.le_bytes();
+        writer.write(&bytes)
     }
 
     /// Decodes the value from raw bits using the len4 encoding scheme.
@@ -54,6 +75,17 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
         reverse(buf);
         Ok(val)
     }
+
+    // fn to_varint_bytes(&self) -> Result<Vec<u8>> {
+    //     let mut writer = BitWriter::<_, 32, Msb0>::new(Vec::<u8>::new());
+    //     self.encode(&mut writer)?;
+    //     Ok(writer.into_inner()?)
+    // }
+
+    // fn from_varint_bytes(bytes: &[u8]) -> Result<Self> {
+    //     let mut reader = BitReader::<&[u8], Msb0, 64>::new(bytes);
+    //     Self::decode(&mut reader)
+    // }
 }
 
 impl VarInt for u8 {}
