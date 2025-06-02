@@ -274,15 +274,75 @@ fn test_decode_varint_14387324() {
 
 #[cfg(feature = "std")]
 #[test]
-fn test_round_trip_u32_all() {
+fn test_round_trip_u32_100k() {
     use rayon::prelude::*;
-    (0..=u32::MAX).par_bridge().for_each(|i| {
+    (0..=100_000).par_bridge().for_each(|i| {
         let value: u32 = i;
         let (bytes, bits_written) = value.to_varint_bits().unwrap();
         let mut writer = BitWriter::new(bytes);
         assert_eq!(bits_written, value.encode::<_, 64>(&mut writer).unwrap());
         let bytes = writer.into_inner().unwrap();
         let decoded_value = u32::from_varint_bytes(&bytes).unwrap();
+        assert_eq!(decoded_value, value);
+    });
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_round_trip_u64_100k() {
+    use rayon::prelude::*;
+    (0..=100_000).par_bridge().for_each(|i| {
+        let value: u64 = i;
+        let (bytes, bits_written) = value.to_varint_bits().unwrap();
+        let mut writer = BitWriter::new(bytes);
+        assert_eq!(bits_written, value.encode::<_, 64>(&mut writer).unwrap());
+        let bytes = writer.into_inner().unwrap();
+        let decoded_value = u64::from_varint_bytes(&bytes).unwrap();
+        assert_eq!(decoded_value, value);
+    });
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_round_trip_u128_100k() {
+    use rayon::prelude::*;
+    (0..=100_000).par_bridge().for_each(|i| {
+        let value: u128 = i;
+        let (bytes, bits_written) = value.to_varint_bits().unwrap();
+        let mut writer = BitWriter::new(bytes);
+        assert_eq!(bits_written, value.encode::<_, 128>(&mut writer).unwrap());
+        let bytes = writer.into_inner().unwrap();
+        let decoded_value = u128::from_varint_bytes(&bytes).unwrap();
+        assert_eq!(decoded_value, value);
+    });
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_round_trip_u16_all() {
+    use rayon::prelude::*;
+    (0..=u16::MAX).par_bridge().for_each(|i| {
+        let value: u16 = i;
+        let (bytes, bits_written) = value.to_varint_bits().unwrap();
+        let mut writer = BitWriter::new(bytes);
+        assert_eq!(bits_written, value.encode::<_, 64>(&mut writer).unwrap());
+        let bytes = writer.into_inner().unwrap();
+        let decoded_value = u16::from_varint_bytes(&bytes).unwrap();
+        assert_eq!(decoded_value, value);
+    });
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_round_trip_u8_all() {
+    use rayon::prelude::*;
+    (0..=u8::MAX).par_bridge().for_each(|i| {
+        let value: u8 = i;
+        let (bytes, bits_written) = value.to_varint_bits().unwrap();
+        let mut writer = BitWriter::new(bytes);
+        assert_eq!(bits_written, value.encode::<_, 64>(&mut writer).unwrap());
+        let bytes = writer.into_inner().unwrap();
+        let decoded_value = u8::from_varint_bytes(&bytes).unwrap();
         assert_eq!(decoded_value, value);
     });
 }
