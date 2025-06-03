@@ -366,3 +366,24 @@ fn test_round_trip_u32_all() {
         // }
     });
 }
+
+#[cfg(feature = "std")]
+#[test]
+fn test_round_trip_u32_all_small_buffer() {
+    use rayon::prelude::*;
+    let target = u32::MAX / 1000;
+    //(0..=target).par_bridge().for_each(|i| {
+    (0..=target).for_each(|i| {
+        let value: u32 = i;
+        let mut buf = [0u8; 8];
+        let mut writer = BitWriter::<_, Msb0, 1>::new(&mut buf[..]);
+        value.encode(&mut writer).unwrap();
+        drop(writer);
+        let mut reader = BitReader::<_, Msb0, 1>::new(Cursor::new(&buf[..]));
+        let decoded_value = u32::decode(&mut reader).unwrap();
+        assert_eq!(decoded_value, value);
+        // if i % 1000000 == 0 {
+        //     println!("{:.2}%", decoded_value as f64 / target as f64 * 100.0);
+        // }
+    });
+}

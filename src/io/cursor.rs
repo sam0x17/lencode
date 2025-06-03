@@ -1,14 +1,14 @@
-use super::{Error, Read};
+use super::{Error, Read, Write};
 
-pub struct Cursor<T: AsRef<[u8]>> {
-    reader: T,
+pub struct Cursor<T> {
+    stream: T,
     position: usize,
 }
 
-impl<T: AsRef<[u8]>> Cursor<T> {
-    pub fn new(reader: T) -> Self {
+impl<T> Cursor<T> {
+    pub fn new(stream: T) -> Self {
         Cursor {
-            reader,
+            stream,
             position: 0,
         }
     }
@@ -16,19 +16,11 @@ impl<T: AsRef<[u8]>> Cursor<T> {
     pub fn position(&self) -> usize {
         self.position
     }
-
-    pub fn set_position(&mut self, pos: usize) -> Result<(), Error> {
-        if pos > self.reader.as_ref().len() {
-            return Err(Error::EndOfData);
-        }
-        self.position = pos;
-        Ok(())
-    }
 }
 
 impl<T: AsRef<[u8]>> Read for Cursor<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-        let data = self.reader.as_ref();
+        let data = self.stream.as_ref();
         if self.position >= data.len() {
             return Err(Error::EndOfData);
         }
@@ -39,5 +31,29 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
         self.position += bytes_read;
 
         Ok(bytes_read)
+    }
+}
+
+impl<T: AsMut<[u8]>> Write for Cursor<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
+        let data = self.stream.as_mut();
+        if self.position >= data.len() {
+            return Err(Error::WriteShort);
+        }
+
+        let bytes_to_write = data.len() - self.position;
+        let bytes_written = buf.len().min(bytes_to_write);
+        data[self.position..self.position + bytes_written].copy_from_slice(&buf[..bytes_written]);
+        self.position += bytes_written;
+
+        if bytes_written < buf.len() {
+            return Err(Error::WriteShort);
+        }
+        Ok(bytes_written)
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        // No-op for an in-memory buffer
+        Ok(())
     }
 }
