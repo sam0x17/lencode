@@ -4,7 +4,7 @@ use crate::io::{BitReader, BitWriter, Read, Write};
 use crate::*;
 use bitvec::prelude::*;
 
-pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
+pub trait BitVarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
     fn encode<W: Write, const N: usize>(self, writer: &mut BitWriter<W, Msb0, N>) -> Result<usize> {
         let mut bits_written = 0;
@@ -96,12 +96,12 @@ pub trait VarInt: Endianness + Default + Eq + core::fmt::Debug {
     }
 }
 
-impl VarInt for u8 {}
-impl VarInt for u16 {}
-impl VarInt for u32 {}
-impl VarInt for u64 {}
-impl VarInt for u128 {}
-impl VarInt for usize {}
+impl BitVarInt for u8 {}
+impl BitVarInt for u16 {}
+impl BitVarInt for u32 {}
+impl BitVarInt for u64 {}
+impl BitVarInt for u128 {}
+impl BitVarInt for usize {}
 
 #[inline(always)]
 pub const fn reverse(bytes: &mut [u8]) {
@@ -122,12 +122,12 @@ pub const fn reverse(bytes: &mut [u8]) {
 fn test_decode_varint_0() {
     let data = vec![0b0111_1111]; // pad with 1s to smoke test the zero case
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 0);
 
     let data = vec![0];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 0);
 }
 
@@ -135,7 +135,7 @@ fn test_decode_varint_0() {
 fn test_decode_varint_1() {
     let data = vec![0b10011000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(value, 1);
 }
 
@@ -143,7 +143,7 @@ fn test_decode_varint_1() {
 fn test_decode_varint_2() {
     let data = vec![0b10001100];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 2u64));
     assert_eq!(value, 2);
 }
@@ -152,7 +152,7 @@ fn test_decode_varint_2() {
 fn test_decode_varint_3() {
     let data = vec![0b10001110];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 3u64));
     assert_eq!(value, 3);
 }
@@ -161,7 +161,7 @@ fn test_decode_varint_3() {
 fn test_decode_varint_4() {
     let data = vec![0b10000110, 0b00000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 4u64));
     assert_eq!(value, 4);
 }
@@ -170,7 +170,7 @@ fn test_decode_varint_4() {
 fn test_decode_varint_5() {
     let data = vec![0b10000110, 0b10000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 5u64));
     assert_eq!(value, 5);
 }
@@ -179,7 +179,7 @@ fn test_decode_varint_5() {
 fn test_decode_varint_6() {
     let data = vec![0b10000111, 0b00000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 6u64));
     assert_eq!(value, 6);
 }
@@ -188,7 +188,7 @@ fn test_decode_varint_6() {
 fn test_decode_varint_7() {
     let data = vec![0b10000111, 0b10000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 7u64));
     assert_eq!(value, 7);
 }
@@ -197,7 +197,7 @@ fn test_decode_varint_7() {
 fn test_decode_varint_8() {
     let data = vec![0b11011000, 0b00000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 8u64));
     assert_eq!(value, 8);
 }
@@ -206,7 +206,7 @@ fn test_decode_varint_8() {
 fn test_decode_varint_9() {
     let data = vec![0b11011001, 0b00000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 9u64));
     assert_eq!(value, 9);
 }
@@ -215,7 +215,7 @@ fn test_decode_varint_9() {
 fn test_decode_varint_10() {
     let data = vec![0b11011010, 0b00000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 10u64));
     assert_eq!(value, 10);
 }
@@ -224,7 +224,7 @@ fn test_decode_varint_10() {
 fn test_decode_varint_11() {
     let data = vec![0b11011011, 0b00000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 11u64));
     assert_eq!(value, 11);
 }
@@ -233,7 +233,7 @@ fn test_decode_varint_11() {
 fn test_decode_varint_12() {
     let data = vec![0b11011100, 0b00000000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 12u64));
     assert_eq!(value, 12);
 }
@@ -242,7 +242,7 @@ fn test_decode_varint_12() {
 fn test_decode_varint_114() {
     let data = vec![0b1100_0011, 0b1100_1000];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 114u64));
     assert_eq!(value, 114);
 }
@@ -251,7 +251,7 @@ fn test_decode_varint_114() {
 fn test_decode_varint_507() {
     let data = vec![0b1110_0111, 0b1111_0110];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 507u64));
     assert_eq!(value, 507);
 }
@@ -267,7 +267,7 @@ fn test_decode_varint_14387324() {
         0b0000_0000,
     ];
     let mut reader = BitReader::<_>::new(Cursor::new(data));
-    let value: u64 = VarInt::decode(&mut reader).unwrap();
+    let value: u64 = BitVarInt::decode(&mut reader).unwrap();
     assert_eq!(format!("{:064b}", value), format!("{:064b}", 14387324u64));
     assert_eq!(value, 14387324);
 }

@@ -9,8 +9,8 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
+pub mod bit_varint;
 pub mod io;
-pub mod varint;
 
 pub mod prelude {
     pub use crate::io::*;
