@@ -95,35 +95,13 @@ impl<W: Write, O: BitOrder, const N: usize> Drop for BitWriter<W, O, N> {
 /// `Write` impl for MSB-first ordering
 impl<W: Write, const N: usize> Write for BitWriter<W, Msb0, N> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let mut written = 0;
         for &byte in buf {
-            // determine where to insert next
-            let bit_offset = self.cursor & 7;
-            let mut byte_idx = self.cursor >> 3;
-            if byte_idx >= N {
-                self.flush_buffer()?;
-                byte_idx = self.cursor >> 3;
+            for bit in (0..8).rev() {
+                let bit_value = (byte >> bit) & 1 != 0;
+                self.write_bit(bit_value)?;
             }
-            // aligned vs misaligned split for MSB0
-            if bit_offset == 0 {
-                // aligned
-                self.buffer.as_raw_mut_slice()[byte_idx] = byte;
-            } else {
-                // misaligned: high bits into current, low bits into next
-                let raw = self.buffer.as_raw_mut_slice();
-                raw[byte_idx] |= byte >> bit_offset;
-                byte_idx += 1;
-                if byte_idx >= N {
-                    self.flush_buffer()?;
-                    byte_idx = self.cursor >> (3 + 1);
-                }
-                let raw = self.buffer.as_raw_mut_slice();
-                raw[byte_idx] |= byte << (8 - bit_offset);
-            }
-            self.cursor += 8;
-            written += 1;
         }
-        Ok(written)
+        Ok(buf.len())
     }
 
     #[inline(always)]
@@ -234,4 +212,20 @@ fn test_write_bits_lsb0() {
     let out = writer.into_inner().unwrap();
     // LSB0 storage → raw bytes [0xBC, 0x0A]
     assert_eq!(out, vec![0xBC, 0x0A]);
+}
+
+#[test]
+fn test_write_unaligned_msb0_small_buffer_edge_case() {
+    let mut writer = BitWriter::<_, Msb0, 1>::new(Vec::new());
+    // write 4 bits: 0b1100
+    for bit in [true, true, false, false] {
+        writer.write_bit(bit).unwrap();
+    }
+    writer.write(&[0b10101010, 0b01010101]).unwrap();
+    writer.write_bit(false).unwrap();
+    writer.write_bit(false).unwrap();
+    writer.write_bit(false).unwrap();
+    writer.write_bit(false).unwrap();
+    let out = writer.into_inner().unwrap();
+    assert_eq!(out, vec![0b1100_1010, 0b1010_0101, 0b0101_0000]);
 }
