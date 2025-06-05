@@ -156,51 +156,104 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
     }
 }
 
-impl<R: Read, O: BitOrder, const BUFFER_SIZE: usize> Read for BitReader<R, O, BUFFER_SIZE> {
+impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        // 1) On the very first read, prime the buffer if it's empty
         if self.filled == 0 {
             self.fill_buffer()?;
         }
 
         let mut written = 0;
         while written < buf.len() {
-            // how many bits remain
             let bits_available = self.filled * 8 - self.cursor;
             if bits_available < 8 {
-                // not enough for one full byte → EOF
-                break;
+                if self.cursor >= self.filled * 8 {
+                    match self.fill_buffer() {
+                        Ok(()) => {},
+                        Err(Error::EndOfData) => break,
+                        Err(e) => return Err(e),
+                    }
+                    if self.filled * 8 - self.cursor < 8 {
+                        break;
+                    }
+                } else {
+                    break;
+                }
             }
 
+            let bit_offset = self.cursor & 7;
+            let byte_idx = self.cursor >> 3;
             let raw = self.buffer.as_raw_slice();
-            let bit_offset = self.cursor % 8;
-            let byte_idx = self.cursor / 8;
 
-            let b = if bit_offset == 0 {
-                // aligned
-                raw[byte_idx]
+            if bit_offset == 0 {
+                let available = self.filled - byte_idx;
+                let count = (buf.len() - written).min(available);
+                buf[written..written + count]
+                    .copy_from_slice(&raw[byte_idx..byte_idx + count]);
+                self.cursor += count * 8;
+                written += count;
             } else {
-                // misaligned: stitch hi/lo
                 let hi = raw[byte_idx];
-                let lo = if byte_idx + 1 < self.filled {
-                    raw[byte_idx + 1]
+                let lo = raw[byte_idx + 1];
+                buf[written] = (hi << bit_offset) | (lo >> (8 - bit_offset));
+                self.cursor += 8;
+                written += 1;
+            }
+        }
+
+        if written > 0 { Ok(written) } else { Err(Error::EndOfData) }
+    }
+}
+
+impl<R: Read, const N: usize> Read for BitReader<R, Lsb0, N> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        if self.filled == 0 {
+            self.fill_buffer()?;
+        }
+
+        let mut written = 0;
+        while written < buf.len() {
+            let bits_available = self.filled * 8 - self.cursor;
+            if bits_available < 8 {
+                if self.cursor >= self.filled * 8 {
+                    match self.fill_buffer() {
+                        Ok(()) => {},
+                        Err(Error::EndOfData) => break,
+                        Err(e) => return Err(e),
+                    }
+                    if self.filled * 8 - self.cursor < 8 {
+                        break;
+                    }
                 } else {
-                    0
-                };
-                // MSB0 packing:
-                (hi << bit_offset) | (lo >> (8 - bit_offset))
-            };
+                    break;
+                }
+            }
 
-            buf[written] = b;
-            written += 1;
-            self.cursor += 8;
+            let bit_offset = self.cursor & 7;
+            let byte_idx = self.cursor >> 3;
+            let raw = self.buffer.as_raw_slice();
+
+            if bit_offset == 0 {
+                let available = self.filled - byte_idx;
+                let count = (buf.len() - written).min(available);
+                for (dst, &src) in buf[written..written + count]
+                    .iter_mut()
+                    .zip(&raw[byte_idx..byte_idx + count])
+                {
+                    *dst = src.reverse_bits();
+                }
+                self.cursor += count * 8;
+                written += count;
+            } else {
+                let hi = raw[byte_idx];
+                let lo = raw[byte_idx + 1];
+                let rev = (hi >> bit_offset) | (lo << (8 - bit_offset));
+                buf[written] = rev.reverse_bits();
+                self.cursor += 8;
+                written += 1;
+            }
         }
 
-        if written > 0 {
-            Ok(written)
-        } else {
-            Err(Error::EndOfData)
-        }
+        if written > 0 { Ok(written) } else { Err(Error::EndOfData) }
     }
 }
 
