@@ -66,18 +66,18 @@ pub trait Write {
 #[cfg(feature = "std")]
 impl<R: std::io::Read> Read for R {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.read(buf).map_err(|e| Error::from(e))
+        self.read(buf).map_err(Error::from)
     }
 }
 
 #[cfg(feature = "std")]
 impl<W: std::io::Write> Write for W {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.write(buf).map_err(|e| Error::from(e))
+        self.write(buf).map_err(Error::from)
     }
 
     fn flush(&mut self) -> Result<()> {
-        self.flush().map_err(|e| Error::from(e))
+        self.flush().map_err(Error::from)
     }
 }
 

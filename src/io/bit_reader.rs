@@ -56,9 +56,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         }
 
         // 3) Zero out the tail so new data ORs cleanly
-        for b in &mut raw[bytes_remaining..] {
-            *b = 0;
-        }
+        raw[bytes_remaining..].fill(0);
 
         // 4) Read *straight into* the freed region
         let dest = &mut raw[bytes_remaining..];
@@ -103,30 +101,62 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         Ok(bit)
     }
 
+    #[inline(always)]
     pub fn read_ones(&mut self) -> Result<usize> {
-        let mut count = 0;
-        while let Ok(bit) = self.peek_bit() {
-            if bit {
-                count += 1;
-            } else {
-                break;
+        let mut total = 0;
+        loop {
+            if self.cursor >= self.filled * 8 {
+                match self.fill_buffer() {
+                    Ok(()) => {}
+                    Err(Error::EndOfData) => return Ok(total),
+                    Err(e) => return Err(e),
+                }
+                if self.cursor >= self.filled * 8 {
+                    return Ok(total);
+                }
             }
-            self.read_bit()?;
+
+            let bits = &self.buffer[self.cursor..self.filled * 8];
+            if let Some(zero) = bits.first_zero() {
+                self.cursor += zero;
+                total += zero;
+                break;
+            } else {
+                let len = bits.len();
+                self.cursor += len;
+                total += len;
+            }
         }
-        Ok(count)
+        Ok(total)
     }
 
+    #[inline(always)]
     pub fn read_zeros(&mut self) -> Result<usize> {
-        let mut count = 0;
-        while let Ok(bit) = self.peek_bit() {
-            if !bit {
-                count += 1;
-            } else {
-                break;
+        let mut total = 0;
+        loop {
+            if self.cursor >= self.filled * 8 {
+                match self.fill_buffer() {
+                    Ok(()) => {}
+                    Err(Error::EndOfData) => return Ok(total),
+                    Err(e) => return Err(e),
+                }
+                if self.cursor >= self.filled * 8 {
+                    return Ok(total);
+                }
             }
-            self.read_bit()?;
+
+            let bits = &self.buffer[self.cursor..self.filled * 8];
+            if let Some(one) = bits.first_one() {
+                self.cursor += one;
+                total += one;
+                break;
+            } else {
+                let len = bits.len();
+                self.cursor += len;
+                total += len;
+            }
         }
-        Ok(count)
+        Ok(total)
     }
 
     pub fn read_one(&mut self) -> Result<()> {
@@ -168,7 +198,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
             if bits_available < 8 {
                 if self.cursor >= self.filled * 8 {
                     match self.fill_buffer() {
-                        Ok(()) => {},
+                        Ok(()) => {}
                         Err(Error::EndOfData) => break,
                         Err(e) => return Err(e),
                     }
@@ -187,8 +217,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
             if bit_offset == 0 {
                 let available = self.filled - byte_idx;
                 let count = (buf.len() - written).min(available);
-                buf[written..written + count]
-                    .copy_from_slice(&raw[byte_idx..byte_idx + count]);
+                buf[written..written + count].copy_from_slice(&raw[byte_idx..byte_idx + count]);
                 self.cursor += count * 8;
                 written += count;
             } else {
@@ -200,7 +229,11 @@ impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
             }
         }
 
-        if written > 0 { Ok(written) } else { Err(Error::EndOfData) }
+        if written > 0 {
+            Ok(written)
+        } else {
+            Err(Error::EndOfData)
+        }
     }
 }
 
@@ -216,7 +249,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Lsb0, N> {
             if bits_available < 8 {
                 if self.cursor >= self.filled * 8 {
                     match self.fill_buffer() {
-                        Ok(()) => {},
+                        Ok(()) => {}
                         Err(Error::EndOfData) => break,
                         Err(e) => return Err(e),
                     }
@@ -253,7 +286,11 @@ impl<R: Read, const N: usize> Read for BitReader<R, Lsb0, N> {
             }
         }
 
-        if written > 0 { Ok(written) } else { Err(Error::EndOfData) }
+        if written > 0 {
+            Ok(written)
+        } else {
+            Err(Error::EndOfData)
+        }
     }
 }
 
@@ -521,48 +558,48 @@ fn test_read_ones_and_zeros() {
 fn test_read_bit_basic_lsb0() {
     let data = vec![0b0000_0001];
     let mut reader = BitReader::<_, Lsb0>::new(Cursor::new(data));
-    assert_eq!(reader.read_bit().unwrap(), true);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
+    assert!(reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
 
     let data = vec![0b1000_0000];
     let mut reader = BitReader::<_, Lsb0>::new(Cursor::new(data));
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), true);
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(reader.read_bit().unwrap());
 }
 
 #[test]
 fn test_read_bit_basic_msb0() {
     let data = vec![0b0000_0001];
     let mut reader = BitReader::<_, Msb0>::new(Cursor::new(data));
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), true);
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(reader.read_bit().unwrap());
 
     let data = vec![0b1000_0000];
     let mut reader = BitReader::<_, Msb0>::new(Cursor::new(data));
-    assert_eq!(reader.read_bit().unwrap(), true);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
-    assert_eq!(reader.read_bit().unwrap(), false);
+    assert!(reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
+    assert!(!reader.read_bit().unwrap());
 }

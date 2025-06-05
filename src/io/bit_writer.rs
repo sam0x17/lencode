@@ -89,9 +89,7 @@ impl<W: Write, O: BitOrder, const N: usize> BitWriter<W, O, N> {
         }
         // reset buffer
         self.cursor = 0;
-        for byte in &mut self.buffer.as_raw_mut_slice()[..bytes] {
-            *byte = 0;
-        }
+        self.buffer.as_raw_mut_slice()[..bytes].fill(0);
         Ok(())
     }
 
