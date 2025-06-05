@@ -372,8 +372,7 @@ fn test_round_trip_u32_all() {
 fn test_round_trip_u32_all_small_buffer() {
     use rayon::prelude::*;
     let target = u32::MAX / 1000;
-    //(0..=target).par_bridge().for_each(|i| {
-    (0..=target).for_each(|i| {
+    (0..=target).par_bridge().for_each(|i| {
         let value: u32 = i;
         let mut buf = [0u8; 8];
         let mut writer = BitWriter::<_, Msb0, 1>::new(&mut buf[..]);

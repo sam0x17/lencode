@@ -35,16 +35,38 @@ impl<W: Write, O: BitOrder, const N: usize> BitWriter<W, O, N> {
     }
 
     /// Write up to 64 bits (LSB-first within the provided `u64`).
+    ///
+    /// This implementation mirrors [`Write::write`], avoiding per-bit calls by
+    /// emitting whole bytes whenever possible and falling back to at most seven
+    /// trailing bit writes. This drastically reduces the number of `write_bit`
+    /// invocations when large values are written.
     #[inline(always)]
-    pub fn write_bits<const NUM: u8>(&mut self, mut v: u64) -> Result<()> {
+    pub fn write_bits<const NUM: u8>(&mut self, v: u64) -> Result<()>
+    where
+        Self: Write,
+    {
         const {
-            assert!(N <= 64, "can write at most 64 bits");
+            assert!(NUM <= 64, "can write at most 64 bits");
         }
-        for _ in 0..NUM {
-            let b = (v & 1) != 0;
-            self.write_bit(b)?;
-            v >>= 1;
+
+        // fast path for whole bytes
+        let full_bytes = (NUM / 8) as usize;
+        let rem_bits = (NUM % 8) as usize;
+        let bytes = v.to_le_bytes();
+
+        for i in 0..full_bytes {
+            let b = bytes[i].reverse_bits();
+            <Self as Write>::write(self, &[b])?;
         }
+
+        if rem_bits > 0 {
+            let tail = (v >> (full_bytes * 8)) as u8;
+            for j in 0..rem_bits {
+                let bit = (tail >> j) & 1 != 0;
+                self.write_bit(bit)?;
+            }
+        }
+
         Ok(())
     }
 
