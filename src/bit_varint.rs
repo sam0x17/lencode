@@ -14,28 +14,49 @@ pub trait BitVarInt: Endianness + Default + Eq + core::fmt::Debug {
             return Ok(1);
         }
         // if the value is non-zero, we write a 1 bit, then a run of 1s, a run of 0s, and then
-        // the value bits
+        // the value bits. Use `write_bits` to emit consecutive runs efficiently.
         writer.write_bit(true)?;
         bits_written += 1;
+
         let bitsize = core::mem::size_of::<Self>() * 8;
-        // each 1 adds 4 to the bitsize of the value
-        for _ in 0..(bitsize / 4) {
-            writer.write_bit(true)?;
-            bits_written += 1;
+
+        // Each 1 adds 4 to the bitsize of the value. Match on common sizes so
+        // the compiler can emit a single `write_bits` call.
+        match bitsize / 4 {
+            2 => writer.write_bits::<2>(u64::MAX)?,
+            4 => writer.write_bits::<4>(u64::MAX)?,
+            8 => writer.write_bits::<8>(u64::MAX)?,
+            16 => writer.write_bits::<16>(u64::MAX)?,
+            32 => writer.write_bits::<32>(u64::MAX)?,
+            n => {
+                for _ in 0..n {
+                    writer.write_bit(true)?;
+                }
+            }
         }
-        // sentinel bit for the run of 1s
+        bits_written += bitsize / 4;
+
+        // Sentinel bit for the run of 1s.
         writer.write_bit(false)?;
         bits_written += 1;
-        // each 0 adds 1 to the bitsize of the value
-        for _ in 0..(bitsize % 4) {
-            writer.write_bit(false)?;
-            bits_written += 1;
+
+        // Each 0 adds 1 to the bitsize of the value.
+        match bitsize % 4 {
+            1 => writer.write_bits::<1>(0)?,
+            2 => writer.write_bits::<2>(0)?,
+            3 => writer.write_bits::<3>(0)?,
+            _ => {}
         }
-        writer.write_bit(true)?; // sentinel bit
+        bits_written += bitsize % 4;
+
+        // Sentinel bit for the run of 0s.
+        writer.write_bit(true)?;
         bits_written += 1;
+
         let bytes = self.le_bytes();
         writer.write(&bytes)?;
         bits_written += bytes.len() * 8;
+
         Ok(bits_written)
     }
 
