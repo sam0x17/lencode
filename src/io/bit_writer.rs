@@ -118,9 +118,37 @@ impl<W: Write, O: BitOrder, const N: usize> Drop for BitWriter<W, O, N> {
 impl<W: Write, const N: usize> Write for BitWriter<W, Msb0, N> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         for &byte in buf {
-            for bit in (0..8).rev() {
-                let bit_value = (byte >> bit) & 1 != 0;
-                self.write_bit(bit_value)?;
+            let bit_offset = self.cursor & 7;
+            let mut byte_idx = self.cursor >> 3;
+
+            if bit_offset == 0 {
+                if byte_idx >= N {
+                    self.flush_buffer()?;
+                    byte_idx = 0;
+                }
+                self.buffer.as_raw_mut_slice()[byte_idx] = byte;
+                self.cursor += 8;
+            } else {
+                if byte_idx >= N {
+                    self.flush_buffer()?;
+                    byte_idx = 0;
+                }
+                {
+                    let raw = self.buffer.as_raw_mut_slice();
+                    raw[byte_idx] |= byte >> bit_offset;
+                }
+                byte_idx += 1;
+                if byte_idx >= N {
+                    self.flush_buffer()?;
+                    byte_idx = 0;
+                    let raw = self.buffer.as_raw_mut_slice();
+                    raw[byte_idx] |= byte << (8 - bit_offset);
+                    self.cursor = bit_offset;
+                } else {
+                    let raw = self.buffer.as_raw_mut_slice();
+                    raw[byte_idx] |= byte << (8 - bit_offset);
+                    self.cursor += 8;
+                }
             }
         }
         Ok(buf.len())
@@ -135,34 +163,42 @@ impl<W: Write, const N: usize> Write for BitWriter<W, Msb0, N> {
 /// `Write` impl for LSB-first ordering
 impl<W: Write, const N: usize> Write for BitWriter<W, Lsb0, N> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let mut written = 0;
         for &byte in buf {
             let bit_offset = self.cursor & 7;
             let mut byte_idx = self.cursor >> 3;
-            if byte_idx >= N {
-                self.flush_buffer()?;
-                byte_idx = self.cursor >> 3;
-            }
+
             if bit_offset == 0 {
-                // aligned: store reversed bits so LSB-first
+                if byte_idx >= N {
+                    self.flush_buffer()?;
+                    byte_idx = 0;
+                }
                 self.buffer.as_raw_mut_slice()[byte_idx] = byte.reverse_bits();
+                self.cursor += 8;
             } else {
-                // misaligned: split reversed
+                if byte_idx >= N {
+                    self.flush_buffer()?;
+                    byte_idx = 0;
+                }
                 let rev = byte.reverse_bits();
-                let raw = self.buffer.as_raw_mut_slice();
-                raw[byte_idx] |= rev << bit_offset;
+                {
+                    let raw = self.buffer.as_raw_mut_slice();
+                    raw[byte_idx] |= rev << bit_offset;
+                }
                 byte_idx += 1;
                 if byte_idx >= N {
                     self.flush_buffer()?;
-                    byte_idx = self.cursor >> (3 + 1);
+                    byte_idx = 0;
+                    let raw = self.buffer.as_raw_mut_slice();
+                    raw[byte_idx] |= rev >> (8 - bit_offset);
+                    self.cursor = bit_offset;
+                } else {
+                    let raw = self.buffer.as_raw_mut_slice();
+                    raw[byte_idx] |= rev >> (8 - bit_offset);
+                    self.cursor += 8;
                 }
-                let raw = self.buffer.as_raw_mut_slice();
-                raw[byte_idx] |= rev >> (8 - bit_offset);
             }
-            self.cursor += 8;
-            written += 1;
         }
-        Ok(written)
+        Ok(buf.len())
     }
 
     #[inline(always)]
