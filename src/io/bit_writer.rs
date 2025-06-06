@@ -54,8 +54,8 @@ impl<W: Write, O: BitOrder, const N: usize> BitWriter<W, O, N> {
         let rem_bits = (NUM % 8) as usize;
         let bytes = v.to_le_bytes();
 
-        for i in 0..full_bytes {
-            let b = bytes[i].reverse_bits();
+        for &byte in &bytes[..full_bytes] {
+            let b = byte.reverse_bits();
             <Self as Write>::write(self, &[b])?;
         }
 
