@@ -3,7 +3,7 @@ use bitvec::prelude::*;
 
 use crate::*;
 
-pub struct BitReader<R: Read, O: BitOrder = Msb0, const N: usize = 256> {
+pub struct BitReader<R: Read, O: BitOrder = Msb0, const N: usize = 1024> { // Increased buffer size from 256 to 1024
     reader: R,
     buffer: BitArray<[u8; N], O>,
     filled: usize, // how many bytes of `buffer` are valid
@@ -14,7 +14,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
     pub fn new(reader: R) -> Self {
         BitReader::<R, O, N> {
             reader,
-            buffer: BitArray::new([0u8; N]),
+            buffer: BitArray::new([0u8; N]), // Buffer initialization uses updated buffer size
             filled: 0,
             cursor: 0,
         }
@@ -51,8 +51,12 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
             raw.copy_within(start_byte..self.filled, 0);
         } else {
             // move whole bytes first (we’ll fix the partial byte in a moment)
-            raw.copy_within((start_byte + 1)..self.filled, 1);
-            raw[0] = 0; // will OR in the leftover bits below
+            if bit_offset != 0 { // Correctly handle bit offset from the last unaligned byte
+                raw.copy_within(start_byte..self.filled, 0);
+            } else {
+                raw.copy_within((start_byte + 1)..self.filled, 1);
+                raw[0] = 0; // will OR in the leftover bits below
+            }
         }
 
         // 3) Zero out the tail so new data ORs cleanly
