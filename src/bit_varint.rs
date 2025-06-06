@@ -4,6 +4,7 @@ use crate::io::{BitReader, BitWriter, Read, Write};
 use crate::*;
 use bitvec::prelude::*;
 
+/// Uses the Len4 integer encoding scheme to encode and decode integers at the bit level
 pub trait BitVarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
     fn encode<W: Write, const N: usize>(self, writer: &mut BitWriter<W, Msb0, N>) -> Result<usize> {
