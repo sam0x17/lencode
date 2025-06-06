@@ -73,12 +73,11 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         // 5) If we were mid-byte, rotate each newly-read byte
         if bit_offset != 0 {
             let mut carry = 0u8;
-            for i in 0..bytes_read {
-                let b = dest[i];
+            for b in dest.iter_mut().take(bytes_read) {
                 // high (8 - bit_offset) bits move into low bits of carry
-                let new_carry = b >> (8 - bit_offset);
+                let new_carry = *b >> (8 - bit_offset);
                 // shift this byte up by bit_offset, OR in the previous carry
-                dest[i] = (b << bit_offset) | carry;
+                *b = (*b << bit_offset) | carry;
                 carry = new_carry;
             }
             // tuck the final carry bit into the next raw byte if there is one
@@ -504,7 +503,7 @@ fn test_has_bits() {
 
 #[test]
 fn sanity_test() {
-    let data = vec![0b1011_0111, 0b1111_0111, 0b1101_1111, 0b1000_000];
+    let data = vec![0b1011_0111, 0b1111_0111, 0b1101_1111, 0b1000_0000];
     let mut reader = BitReader::<_, Msb0, 2>::new(Cursor::new(data));
     assert!(reader.peek_bit().unwrap()); // 1st bit
     assert!(reader.has_bits().unwrap());
@@ -533,16 +532,16 @@ fn sanity_test() {
     assert!(reader.read_bit().unwrap()); // 22nd bit
     assert!(reader.read_bit().unwrap()); // 23rd bit
     assert!(reader.read_bit().unwrap()); // 24th bit
-    assert!(!reader.read_bit().unwrap()); // 25th bit
-    assert!(reader.read_bit().unwrap()); // 26th bit
+    assert!(reader.read_bit().unwrap()); // 25th bit
+    assert!(!reader.read_bit().unwrap()); // 26th bit
     assert!(!reader.read_bit().unwrap()); // 27th bit
     assert!(!reader.read_bit().unwrap()); // 28th bit
     assert!(!reader.read_bit().unwrap()); // 29th bit
     assert!(!reader.read_bit().unwrap()); // 30th bit
-    assert!(!reader.read_bit().unwrap()); // 31st bit
-    assert!(reader.has_bits().unwrap()); // 1 bit left
+    assert!(!reader.read_bit().unwrap()); // 31th bit
+    assert!(reader.has_bits().unwrap());
     assert!(!reader.read_bit().unwrap()); // 32nd bit
-    assert!(!reader.has_bits().unwrap()); // no bits left
+    assert!(!reader.has_bits().unwrap());
 
     // Now we should be at EOF
     assert!(matches!(reader.read_bit(), Err(Error::EndOfData)));
