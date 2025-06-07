@@ -11,9 +11,13 @@ use alloc::vec::Vec;
 
 pub mod bit_varint;
 pub mod io;
+pub mod varint;
 
 pub mod prelude {
+    pub use super::*;
+    pub use crate::bit_varint::*;
     pub use crate::io::*;
+    pub use crate::varint::*;
 }
 
 use prelude::*;
