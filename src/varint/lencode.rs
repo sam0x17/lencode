@@ -180,3 +180,37 @@ fn test_lencode_u128_small_values() {
         assert_eq!(buf[0], val as u8);
     }
 }
+
+#[test]
+fn test_lencode_u128_medium_values() {
+    for i in 128..=255 {
+        let val: u128 = i;
+        let mut buf = [0u8; 2];
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        assert_eq!(n, 2);
+        let decoded = Lencode::decode::<u128>(Cursor::new(&buf)).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(buf[0], 0x80 | 1);
+        assert_eq!(buf[1], val as u8);
+    }
+}
+
+#[test]
+fn test_lencode_u128_multi_byte_values() {
+    for i in 256..=1_000_000 {
+        let val: u128 = i;
+        let mut buf = [0u8; 4];
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode::<u128>(Cursor::new(&buf[..n])).unwrap();
+        if decoded != val {
+            panic!(
+                "FAIL: val={} buf={:02x?} decoded={} (size={})",
+                val,
+                &buf[..n],
+                decoded,
+                n
+            );
+        }
+        assert_eq!(decoded, val);
+    }
+}
