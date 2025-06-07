@@ -73,4 +73,39 @@ impl Scheme for Lencode {
 }
 
 #[test]
-fn test_lencode_u32_all() {}
+fn test_lencode_u8_small() {
+    for i in 0..=127 {
+        let val: u8 = i;
+        let mut buf = [0u8; 1];
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        assert_eq!(n, 1);
+        let decoded = Lencode::decode::<u8>(Cursor::new(&buf)).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(buf[0], val);
+    }
+}
+
+#[test]
+fn test_lencode_u8_large() {
+    for i in 128..=255 {
+        let val: u8 = i;
+        let mut buf = [0u8; 2];
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        assert_eq!(n, 2);
+        let decoded = Lencode::decode::<u8>(Cursor::new(&buf)).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(buf[0], 0x80 | 1);
+        assert_eq!(buf[1], val);
+    }
+}
+
+#[test]
+fn test_lencode_u32_all() {
+    for i in 0..=u32::MAX {
+        let val: u32 = i;
+        let mut buf = [0u8; 5];
+        let _ = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode::<u32>(Cursor::new(&buf[..])).unwrap();
+        assert_eq!(decoded, val);
+    }
+}
