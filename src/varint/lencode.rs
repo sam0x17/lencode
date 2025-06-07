@@ -167,3 +167,16 @@ fn test_lencode_u64_all() {
         assert_eq!(decoded, val);
     }
 }
+
+#[test]
+fn test_lencode_u128_small_values() {
+    for i in 0..=127 {
+        let val: u128 = i;
+        let mut buf = [0u8; 1];
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        assert_eq!(n, 1);
+        let decoded = Lencode::decode::<u128>(Cursor::new(&buf)).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(buf[0], val as u8);
+    }
+}
