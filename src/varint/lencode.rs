@@ -102,11 +102,59 @@ fn test_lencode_u8_large() {
 
 #[test]
 fn test_lencode_u32_all() {
-    for i in 0..=u32::MAX {
+    for i in (0..=u32::MAX)
+        .step_by(61)
+        .chain(0..10000)
+        .chain((u32::MAX - 10000)..=u32::MAX)
+    {
         let val: u32 = i;
         let mut buf = [0u8; 5];
         let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
         let decoded = Lencode::decode::<u32>(Cursor::new(&buf[..n])).unwrap();
+        if decoded != val {
+            panic!(
+                "FAIL: val={} buf={:02x?} decoded={} (size={})",
+                val,
+                &buf[..n],
+                decoded,
+                n
+            );
+        }
+        assert_eq!(decoded, val);
+    }
+}
+
+#[test]
+fn test_lencode_u16_all() {
+    for i in 0..=u16::MAX {
+        let val: u16 = i;
+        let mut buf = [0u8; 3];
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode::<u16>(Cursor::new(&buf[..n])).unwrap();
+        if decoded != val {
+            panic!(
+                "FAIL: val={} buf={:02x?} decoded={} (size={})",
+                val,
+                &buf[..n],
+                decoded,
+                n
+            );
+        }
+        assert_eq!(decoded, val);
+    }
+}
+
+#[test]
+fn test_lencode_u64_all() {
+    for i in (0..=u64::MAX)
+        .step_by(91111111117)
+        .chain(0..10000)
+        .chain((u64::MAX - 10000)..=u64::MAX)
+    {
+        let val: u64 = i;
+        let mut buf = [0u8; const { 1 + mem::size_of::<u64>() }];
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode::<u64>(Cursor::new(&buf[..n])).unwrap();
         if decoded != val {
             panic!(
                 "FAIL: val={} buf={:02x?} decoded={} (size={})",
