@@ -20,7 +20,7 @@ use core::ptr;
 pub enum Lencode {}
 
 // Helper: reconstruct integer from big-endian bytes
-fn int_from_be_bytes<I: Integer>(be_bytes: &[u8]) -> I {
+fn int_from_be_bytes<I: UnsignedInteger>(be_bytes: &[u8]) -> I {
     let mut val: I = unsafe { mem::zeroed() };
     let size = mem::size_of::<I>();
     unsafe {
@@ -30,7 +30,7 @@ fn int_from_be_bytes<I: Integer>(be_bytes: &[u8]) -> I {
 }
 
 impl Scheme for Lencode {
-    fn encode<I: Integer>(val: I, mut writer: impl Write) -> Result<usize> {
+    fn encode<I: UnsignedInteger>(val: I, mut writer: impl Write) -> Result<usize> {
         let be_bytes = val.be_bytes();
         let size = be_bytes.len();
         // Strip leading zeros for minimal encoding
@@ -50,7 +50,7 @@ impl Scheme for Lencode {
         Ok(1 + n)
     }
 
-    fn decode<I: Integer>(mut reader: impl Read) -> Result<I> {
+    fn decode<I: UnsignedInteger>(mut reader: impl Read) -> Result<I> {
         let mut first = [0u8; 1];
         reader.read(&mut first)?;
         let first_byte = first[0];
@@ -71,3 +71,6 @@ impl Scheme for Lencode {
         Ok(int_from_be_bytes::<I>(be_bytes))
     }
 }
+
+#[test]
+fn test_lencode_u32_all() {}
