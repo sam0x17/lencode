@@ -3,7 +3,7 @@ use core::ops::*;
 
 use crate::prelude::*;
 
-pub mod leb128;
+pub mod lencode;
 
 pub trait Scheme {
     fn encode<I: Integer>(val: I, writer: impl Write) -> Result<usize>;
