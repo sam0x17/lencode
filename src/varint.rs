@@ -1,6 +1,8 @@
 use core::fmt::{Debug, Display};
 use core::ops::*;
 
+use endian_cast::Endianness;
+
 use crate::prelude::*;
 
 pub mod lencode;
@@ -34,6 +36,7 @@ pub trait Integer:
     + MulAssign
     + Div
     + DivAssign
+    + Endianness
 {
     fn encode_int<S: Scheme>(self, writer: impl Write) -> Result<usize> {
         S::encode(self, writer)
