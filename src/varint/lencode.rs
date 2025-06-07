@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use core::mem;
-use core::ptr;
 
 /// The Lencode integer encoding [`Scheme`] is designed to encode integers in a variable-length
 /// format that is efficient for both small and large values both in terms of space and speed.
@@ -19,23 +18,25 @@ use core::ptr;
 /// used in practice.
 pub enum Lencode {}
 
-// Helper: reconstruct integer from big-endian bytes
-fn int_from_be_bytes<I: UnsignedInteger>(be_bytes: &[u8]) -> I {
-    let mut val: I = unsafe { mem::zeroed() };
-    let size = mem::size_of::<I>();
+// Helper: reconstruct integer from little-endian bytes
+fn int_from_le_bytes<I: UnsignedInteger>(le_bytes: &[u8]) -> I {
+    let mut val: I = unsafe { core::mem::zeroed() };
     unsafe {
-        ptr::copy_nonoverlapping(be_bytes.as_ptr(), &mut val as *mut I as *mut u8, size);
+        core::ptr::copy_nonoverlapping(
+            le_bytes.as_ptr(),
+            &mut val as *mut I as *mut u8,
+            le_bytes.len(),
+        );
     }
     val
 }
 
 impl Scheme for Lencode {
     fn encode<I: UnsignedInteger>(val: I, mut writer: impl Write) -> Result<usize> {
-        let be_bytes = val.be_bytes();
-        let size = be_bytes.len();
-        // Strip leading zeros for minimal encoding
-        let first_nonzero = be_bytes.iter().position(|&b| b != 0).unwrap_or(size - 1);
-        let minimal = &be_bytes[first_nonzero..];
+        let le_bytes = val.le_bytes();
+        // Strip trailing zeros for minimal encoding (little endian)
+        let last_nonzero = le_bytes.iter().rposition(|&b| b != 0).unwrap_or(0);
+        let minimal = &le_bytes[..=last_nonzero];
         if minimal.len() == 1 && minimal[0] <= 127 {
             writer.write(&[minimal[0]])?;
             return Ok(1);
@@ -55,20 +56,20 @@ impl Scheme for Lencode {
         reader.read(&mut first)?;
         let first_byte = first[0];
         let size = mem::size_of::<I>();
-        let mut arr = [0u8; 16];
-        let be_bytes = &mut arr[16 - size..];
+        let mut buf = [0u8; 16];
         if first_byte & 0x80 == 0 {
-            // Small integer
-            be_bytes[size - 1] = first_byte & 0x7F;
+            // Small integer: single byte, left-align in buffer (little endian)
+            buf[0] = first_byte & 0x7F;
+            return Ok(int_from_le_bytes::<I>(&buf[..size]));
         } else {
-            // Large integer
+            // Large integer: read n bytes, left-align in buffer (little endian)
             let n = (first_byte & 0x7F) as usize;
             if n == 0 || n > size {
                 return Err(Error::InvalidData);
             }
-            reader.read(&mut be_bytes[size - n..])?;
+            reader.read(&mut buf[..n])?;
+            Ok(int_from_le_bytes::<I>(&buf[..size]))
         }
-        Ok(int_from_be_bytes::<I>(be_bytes))
     }
 }
 
@@ -104,8 +105,17 @@ fn test_lencode_u32_all() {
     for i in 0..=u32::MAX {
         let val: u32 = i;
         let mut buf = [0u8; 5];
-        let _ = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
-        let decoded = Lencode::decode::<u32>(Cursor::new(&buf[..])).unwrap();
+        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode::<u32>(Cursor::new(&buf[..n])).unwrap();
+        if decoded != val {
+            panic!(
+                "FAIL: val={} buf={:02x?} decoded={} (size={})",
+                val,
+                &buf[..n],
+                decoded,
+                n
+            );
+        }
         assert_eq!(decoded, val);
     }
 }
