@@ -40,23 +40,21 @@ pub trait UnsignedInteger:
     + Debug
     + Display
     + Default
-    + Shl
-    + Shl<u8>
+    + Shl<u8, Output = Self>
     + ShlAssign
-    + Shr
-    + Shr<u8>
+    + Shr<u8, Output = Self>
     + ShrAssign
-    + BitAnd
+    + BitAnd<Output = Self>
     + BitAndAssign
-    + BitOr
+    + BitOr<Output = Self>
     + BitOrAssign
-    + Add
+    + Add<Output = Self>
     + AddAssign
-    + Sub
+    + Sub<Output = Self>
     + SubAssign
-    + Mul
+    + Mul<Output = Self>
     + MulAssign
-    + Div
+    + Div<Output = Self>
     + DivAssign
     + Endianness
     + One
@@ -99,12 +97,13 @@ macro_rules! impl_unsigned_integer {
 
 impl_unsigned_integer!(u8, u16, u32, u64, u128, usize);
 
-pub const fn zigzag_encode<I: SignedInteger>(value: I) -> I {
-    todo!()
+pub fn zigzag_encode<I: SignedInteger>(value: I) -> I {
+    let bits = I::BYTE_LENGTH * 8;
+    (value << 1u8) ^ (value >> ((bits - 1) as u8))
 }
 
-pub const fn zigzag_decode<I: SignedInteger>(value: I) -> I {
-    todo!()
+pub fn zigzag_decode<I: SignedInteger>(value: I) -> I {
+    (value >> 1u8) ^ (I::ZERO - (value & I::ONE))
 }
 
 pub trait SignedInteger:
@@ -115,25 +114,25 @@ pub trait SignedInteger:
     + Debug
     + Display
     + Default
-    + Shl
-    + Shl<u8>
+    + Shl<u8, Output = Self>
     + ShlAssign
-    + Shr
-    + Shr<u8>
+    + Shr<u8, Output = Self>
     + ShrAssign
-    + BitAnd
+    + BitAnd<Output = Self>
     + BitAndAssign
-    + BitOr
+    + BitOr<Output = Self>
     + BitOrAssign
-    + Add
+    + Add<Output = Self>
     + AddAssign
-    + Sub
+    + Sub<Output = Self>
     + SubAssign
-    + Mul
+    + Mul<Output = Self>
     + MulAssign
-    + Div
+    + Div<Output = Self>
     + DivAssign
-    + Neg
+    + Neg<Output = Self>
+    + BitXor<Output = Self>
+    + BitXorAssign
     + Endianness
     + One
     + Zero
