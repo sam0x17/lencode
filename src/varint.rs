@@ -12,6 +12,22 @@ pub trait Scheme {
     fn decode<I: UnsignedInteger>(reader: impl Read) -> Result<I>;
 }
 
+pub trait One {
+    const ONE: Self;
+}
+
+pub trait Zero {
+    const ZERO: Self;
+}
+
+pub trait Max {
+    const MAX_VALUE: Self;
+}
+
+pub trait Min {
+    const MIN_VALUE: Self;
+}
+
 pub trait UnsignedInteger:
     Sized
     + Copy
@@ -37,6 +53,10 @@ pub trait UnsignedInteger:
     + Div
     + DivAssign
     + Endianness
+    + One
+    + Zero
+    + Max
+    + Min
 {
     fn encode_uint<S: Scheme>(self, writer: impl Write) -> Result<usize> {
         S::encode(self, writer)
@@ -46,9 +66,25 @@ pub trait UnsignedInteger:
     }
 }
 
-impl UnsignedInteger for u8 {}
-impl UnsignedInteger for u16 {}
-impl UnsignedInteger for u32 {}
-impl UnsignedInteger for u64 {}
-impl UnsignedInteger for u128 {}
-impl UnsignedInteger for usize {}
+#[macro_export]
+macro_rules! impl_unsigned_integer {
+    ($($t:ty),*) => {
+        $(
+            impl $crate::varint::One for $t {
+                const ONE: Self = 1;
+            }
+            impl $crate::varint::Zero for $t {
+                const ZERO: Self = 0;
+            }
+            impl $crate::varint::Max for $t {
+                const MAX_VALUE: Self = <$t>::MAX;
+            }
+            impl $crate::varint::Min for $t {
+                const MIN_VALUE: Self = <$t>::MIN;
+            }
+            impl $crate::varint::UnsignedInteger for $t {}
+        )*
+    };
+}
+
+impl_unsigned_integer!(u8, u16, u32, u64, u128, usize);
