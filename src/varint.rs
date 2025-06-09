@@ -97,13 +97,53 @@ macro_rules! impl_unsigned_integer {
 
 impl_unsigned_integer!(u8, u16, u32, u64, u128, usize);
 
-pub fn zigzag_encode<I: SignedInteger>(value: I) -> I {
-    let bits = I::BYTE_LENGTH * 8;
-    (value << 1u8) ^ (value >> ((bits - 1) as u8))
+// Trait to map signed types to their unsigned equivalents
+pub trait ToUnsigned {
+    type Unsigned: UnsignedInteger + ToSigned<Signed = Self>;
+    fn to_unsigned(self) -> Self::Unsigned;
 }
 
-pub fn zigzag_decode<I: SignedInteger>(value: I) -> I {
-    (value >> 1u8) ^ (I::ZERO - (value & I::ONE))
+pub trait ToSigned {
+    type Signed: SignedInteger + ToUnsigned<Unsigned = Self>;
+    fn to_signed(self) -> Self::Signed;
+}
+
+macro_rules! impl_to_unsigned_signed {
+    ($(($signed:ty, $unsigned:ty)),*) => {
+        $(
+            impl ToUnsigned for $signed {
+                type Unsigned = $unsigned;
+                fn to_unsigned(self) -> $unsigned { self as $unsigned }
+            }
+            impl ToSigned for $unsigned {
+                type Signed = $signed;
+                fn to_signed(self) -> $signed { self as $signed }
+            }
+        )*
+    };
+}
+
+impl_to_unsigned_signed!(
+    (i8, u8),
+    (i16, u16),
+    (i32, u32),
+    (i64, u64),
+    (i128, u128),
+    (isize, usize)
+);
+
+// ZigZag encode: signed -> unsigned
+pub fn zigzag_encode<I: SignedInteger + ToUnsigned>(value: I) -> <I as ToUnsigned>::Unsigned {
+    let bits = I::BYTE_LENGTH * 8;
+    let shifted = (value << 1) ^ (value >> (bits as u8 - 1));
+    shifted.to_unsigned()
+}
+
+// ZigZag decode: unsigned -> signed
+pub fn zigzag_decode<U: UnsignedInteger + ToSigned>(value: U) -> <U as ToSigned>::Signed {
+    let signed = (value >> 1).to_signed();
+    let mask = -((value & U::ONE).to_signed());
+    signed ^ mask
 }
 
 pub trait SignedInteger:
@@ -175,3 +215,41 @@ macro_rules! impl_signed_integer {
 }
 
 impl_signed_integer!(i8, i16, i32, i64, i128, isize);
+
+#[test]
+fn zigzag_encode_decode_i32_roundtrip() {
+    let values = [0i32, -1, 1, -2, 2, i32::MAX, i32::MIN + 1];
+    for &v in &values {
+        let encoded = zigzag_encode(v);
+        let decoded = zigzag_decode(encoded);
+        assert_eq!(decoded, v, "zigzag roundtrip failed for {}", v);
+    }
+}
+
+#[test]
+fn zigzag_encode_decode_i64_roundtrip() {
+    let values = [0i64, -1, 1, -2, 2, i64::MAX, i64::MIN + 1];
+    for &v in &values {
+        let encoded = zigzag_encode(v);
+        let decoded = zigzag_decode(encoded);
+        assert_eq!(decoded, v, "zigzag roundtrip failed for {}", v);
+    }
+}
+
+#[test]
+fn zigzag_known_values() {
+    // (input, expected zigzag encoding)
+    let cases = [
+        (0i32, 0u32),
+        (-1, 1),
+        (1, 2),
+        (-2, 3),
+        (2, 4),
+        (-3, 5),
+        (3, 6),
+    ];
+    for &(input, expected) in &cases {
+        let encoded = zigzag_encode(input);
+        assert_eq!(encoded, expected, "zigzag_encode({})", input);
+    }
+}
