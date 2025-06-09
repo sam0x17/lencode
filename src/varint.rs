@@ -41,8 +41,10 @@ pub trait UnsignedInteger:
     + Display
     + Default
     + Shl
+    + Shl<u8>
     + ShlAssign
     + Shr
+    + Shr<u8>
     + ShrAssign
     + BitAnd
     + BitAndAssign
@@ -114,8 +116,10 @@ pub trait SignedInteger:
     + Display
     + Default
     + Shl
+    + Shl<u8>
     + ShlAssign
     + Shr
+    + Shr<u8>
     + ShrAssign
     + BitAnd
     + BitAndAssign
