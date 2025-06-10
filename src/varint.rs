@@ -7,12 +7,23 @@ use crate::prelude::*;
 
 pub mod lencode;
 
-/// A trait describing a serialization scheme for unsigned integers.
-pub trait Scheme {
+/// A trait describing a serialization scheme for integer primitives.
+pub trait Scheme: Sized {
     /// Encodes an unsigned integer value using the scheme, writing to the given writer.
     fn encode_varint<I: UnsignedInteger>(val: I, writer: impl Write) -> Result<usize>;
+
     /// Decodes an unsigned integer value using the scheme, reading from the given reader.
     fn decode_varint<I: UnsignedInteger>(reader: impl Read) -> Result<I>;
+
+    /// Encodes a signed integer value using the scheme, writing to the given writer.
+    fn encode_varint_signed<I: SignedInteger>(val: I, writer: impl Write) -> Result<usize> {
+        I::encode_int::<Self>(val, writer)
+    }
+
+    /// Decodes a signed integer value using the scheme, reading from the given reader.
+    fn decode_varint_signed<I: SignedInteger>(reader: impl Read) -> Result<I> {
+        I::decode_int::<Self>(reader)
+    }
 }
 
 /// Trait for types that have a constant representing the value one.
