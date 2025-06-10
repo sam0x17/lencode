@@ -62,6 +62,7 @@ pub trait UnsignedInteger:
     + Max
     + Min
     + ByteLength
+    + ToSigned
 {
     fn encode_uint<S: Scheme>(self, writer: impl Write) -> Result<usize> {
         S::encode(self, writer)
@@ -181,14 +182,16 @@ pub trait SignedInteger:
     + Max
     + Min
     + ByteLength
+    + ToUnsigned
 {
     fn encode_int<S: Scheme>(self, writer: impl Write) -> Result<usize> {
-        todo!()
-        // S::encode(self, writer)
+        zigzag_encode(self).encode_uint::<S>(writer)
     }
+
     fn decode_int<S: Scheme>(reader: impl Read) -> Result<Self> {
-        todo!()
-        // S::decode(reader)
+        Ok(zigzag_decode(
+            <Self as ToUnsigned>::Unsigned::decode_uint::<S>(reader)?,
+        ))
     }
 }
 
