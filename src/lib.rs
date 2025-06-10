@@ -17,6 +17,7 @@ pub mod prelude {
     pub use super::*;
     pub use crate::bit_varint::*;
     pub use crate::io::*;
+    pub use crate::varint::lencode::*;
     pub use crate::varint::*;
 }
 
@@ -24,16 +25,12 @@ use prelude::*;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-pub trait Encode {
-    fn to_bytes(&self, writer: impl Write) -> Result<usize>;
+pub trait Encode<S: Scheme = Lencode> {
+    fn encode(&self, writer: impl Write) -> Result<usize>;
 }
 
-pub trait Decode {
-    fn from_bytes(reader: impl Read, len: usize) -> Result<Self>
+pub trait Decode<S: Scheme = Lencode> {
+    fn decode(reader: impl Read, len: usize) -> Result<Self>
     where
         Self: Sized;
-}
-
-pub fn decode<T: Decode>(_reader: &mut BitReader<impl Read>) -> Result<T> {
-    todo!()
 }
