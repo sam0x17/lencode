@@ -132,14 +132,16 @@ impl_to_unsigned_signed!(
     (isize, usize)
 );
 
-// ZigZag encode: signed -> unsigned
+/// Encodes a [`SignedInteger`] into its [`UnsignedInteger`] representation using ZigZag encoding.
+#[inline(always)]
 pub fn zigzag_encode<I: SignedInteger + ToUnsigned>(value: I) -> <I as ToUnsigned>::Unsigned {
     let bits = I::BYTE_LENGTH * 8;
     let shifted = (value << 1) ^ (value >> (bits as u8 - 1));
     shifted.to_unsigned()
 }
 
-// ZigZag decode: unsigned -> signed
+/// Decodes an [`UnsignedInteger`] back into its [`SignedInteger`] representation using ZigZag encoding.
+#[inline(always)]
 pub fn zigzag_decode<U: UnsignedInteger + ToSigned>(value: U) -> <U as ToSigned>::Signed {
     let signed = (value >> 1).to_signed();
     let mask = -((value & U::ONE).to_signed());
@@ -267,6 +269,28 @@ fn zigzag_roundtrip_i16_all() {
     }
     for i in (i16::MIN + 1)..=0 {
         let val: i16 = i;
+        let encoded = zigzag_encode(val);
+        let decoded = zigzag_decode(encoded);
+        if decoded != val {
+            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+        }
+        assert_eq!(decoded, val);
+    }
+}
+
+#[test]
+fn zigzag_roundtrip_i32_all() {
+    for i in 0..=i32::MAX {
+        let val: i32 = i;
+        let encoded = zigzag_encode(val);
+        let decoded = zigzag_decode(encoded);
+        if decoded != val {
+            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+        }
+        assert_eq!(decoded, val);
+    }
+    for i in (i32::MIN + 1)..=0 {
+        let val: i32 = i;
         let encoded = zigzag_encode(val);
         let decoded = zigzag_decode(encoded);
         if decoded != val {
