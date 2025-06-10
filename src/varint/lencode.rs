@@ -34,7 +34,7 @@ fn int_from_le_bytes<I: UnsignedInteger>(le_bytes: &[u8]) -> I {
 
 impl Scheme for Lencode {
     #[inline(always)]
-    fn encode<I: UnsignedInteger>(val: I, mut writer: impl Write) -> Result<usize> {
+    fn encode_varint<I: UnsignedInteger>(val: I, mut writer: impl Write) -> Result<usize> {
         let le_bytes = val.le_bytes();
         // Strip trailing zeros for minimal encoding (little endian)
         let last_nonzero = le_bytes.iter().rposition(|&b| b != 0).unwrap_or(0);
@@ -54,7 +54,7 @@ impl Scheme for Lencode {
     }
 
     #[inline(always)]
-    fn decode<I: UnsignedInteger>(mut reader: impl Read) -> Result<I> {
+    fn decode_varint<I: UnsignedInteger>(mut reader: impl Read) -> Result<I> {
         let mut first = [0u8; 1];
         reader.read(&mut first)?;
         let first_byte = first[0];
@@ -81,9 +81,9 @@ fn test_lencode_u8_small() {
     for i in 0..=127 {
         let val: u8 = i;
         let mut buf = [0u8; 1];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
         assert_eq!(n, 1);
-        let decoded = Lencode::decode::<u8>(Cursor::new(&buf)).unwrap();
+        let decoded = Lencode::decode_varint::<u8>(Cursor::new(&buf)).unwrap();
         assert_eq!(decoded, val);
         assert_eq!(buf[0], val);
     }
@@ -94,9 +94,9 @@ fn test_lencode_u8_large() {
     for i in 128..=255 {
         let val: u8 = i;
         let mut buf = [0u8; 2];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
         assert_eq!(n, 2);
-        let decoded = Lencode::decode::<u8>(Cursor::new(&buf)).unwrap();
+        let decoded = Lencode::decode_varint::<u8>(Cursor::new(&buf)).unwrap();
         assert_eq!(decoded, val);
         assert_eq!(buf[0], 0x80 | 1);
         assert_eq!(buf[1], val);
@@ -112,8 +112,8 @@ fn test_lencode_u32_all() {
     {
         let val: u32 = i;
         let mut buf = [0u8; 5];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
-        let decoded = Lencode::decode::<u32>(Cursor::new(&buf[..n])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode_varint::<u32>(Cursor::new(&buf[..n])).unwrap();
         if decoded != val {
             panic!(
                 "FAIL: val={} buf={:02x?} decoded={} (size={})",
@@ -132,8 +132,8 @@ fn test_lencode_u16_all() {
     for i in 0..=u16::MAX {
         let val: u16 = i;
         let mut buf = [0u8; 3];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
-        let decoded = Lencode::decode::<u16>(Cursor::new(&buf[..n])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode_varint::<u16>(Cursor::new(&buf[..n])).unwrap();
         if decoded != val {
             panic!(
                 "FAIL: val={} buf={:02x?} decoded={} (size={})",
@@ -156,8 +156,8 @@ fn test_lencode_u64_all() {
     {
         let val: u64 = i;
         let mut buf = [0u8; const { 1 + mem::size_of::<u64>() }];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
-        let decoded = Lencode::decode::<u64>(Cursor::new(&buf[..n])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode_varint::<u64>(Cursor::new(&buf[..n])).unwrap();
         if decoded != val {
             panic!(
                 "FAIL: val={} buf={:02x?} decoded={} (size={})",
@@ -176,9 +176,9 @@ fn test_lencode_u128_small_values() {
     for i in 0..=127 {
         let val: u128 = i;
         let mut buf = [0u8; 1];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
         assert_eq!(n, 1);
-        let decoded = Lencode::decode::<u128>(Cursor::new(&buf)).unwrap();
+        let decoded = Lencode::decode_varint::<u128>(Cursor::new(&buf)).unwrap();
         assert_eq!(decoded, val);
         assert_eq!(buf[0], val as u8);
     }
@@ -189,9 +189,9 @@ fn test_lencode_u128_medium_values() {
     for i in 128..=255 {
         let val: u128 = i;
         let mut buf = [0u8; 2];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
         assert_eq!(n, 2);
-        let decoded = Lencode::decode::<u128>(Cursor::new(&buf)).unwrap();
+        let decoded = Lencode::decode_varint::<u128>(Cursor::new(&buf)).unwrap();
         assert_eq!(decoded, val);
         assert_eq!(buf[0], 0x80 | 1);
         assert_eq!(buf[1], val as u8);
@@ -203,8 +203,8 @@ fn test_lencode_u128_multi_byte_values() {
     for i in 256..=1_000_000 {
         let val: u128 = i;
         let mut buf = [0u8; 4];
-        let n = Lencode::encode(val, Cursor::new(&mut buf[..])).unwrap();
-        let decoded = Lencode::decode::<u128>(Cursor::new(&buf[..n])).unwrap();
+        let n = Lencode::encode_varint(val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = Lencode::decode_varint::<u128>(Cursor::new(&buf[..n])).unwrap();
         if decoded != val {
             panic!(
                 "FAIL: val={} buf={:02x?} decoded={} (size={})",

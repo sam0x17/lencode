@@ -10,9 +10,9 @@ pub mod lencode;
 /// A trait describing a serialization scheme for unsigned integers.
 pub trait Scheme {
     /// Encodes an unsigned integer value using the scheme, writing to the given writer.
-    fn encode<I: UnsignedInteger>(val: I, writer: impl Write) -> Result<usize>;
+    fn encode_varint<I: UnsignedInteger>(val: I, writer: impl Write) -> Result<usize>;
     /// Decodes an unsigned integer value using the scheme, reading from the given reader.
-    fn decode<I: UnsignedInteger>(reader: impl Read) -> Result<I>;
+    fn decode_varint<I: UnsignedInteger>(reader: impl Read) -> Result<I>;
 }
 
 /// Trait for types that have a constant representing the value one.
@@ -78,10 +78,10 @@ pub trait UnsignedInteger:
     + ToSigned
 {
     fn encode_uint<S: Scheme>(self, writer: impl Write) -> Result<usize> {
-        S::encode(self, writer)
+        S::encode_varint(self, writer)
     }
     fn decode_uint<S: Scheme>(reader: impl Read) -> Result<Self> {
-        S::decode(reader)
+        S::decode_varint(reader)
     }
 }
 
