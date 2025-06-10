@@ -7,6 +7,7 @@ use bitvec::prelude::*;
 /// Uses the Len4 integer encoding scheme to encode and decode integers at the bit level
 pub trait BitVarInt: Endianness + Default + Eq + core::fmt::Debug {
     /// Encodes the value into raw bits using the len4 encoding scheme.
+    #[inline(always)]
     fn encode<W: Write, const N: usize>(self, writer: &mut BitWriter<W, Msb0, N>) -> Result<usize> {
         let mut bits_written = 0;
         if self == Self::default() {
@@ -62,6 +63,7 @@ pub trait BitVarInt: Endianness + Default + Eq + core::fmt::Debug {
     }
 
     /// Decodes the value from raw bits using the len4 encoding scheme.
+    #[inline(always)]
     fn decode<R: Read, const N: usize>(reader: &mut BitReader<R, Msb0, N>) -> Result<Self> {
         let first_bit = reader.read_bit()?;
         let mut val = Self::default();
@@ -106,12 +108,16 @@ pub trait BitVarInt: Endianness + Default + Eq + core::fmt::Debug {
         Ok(val)
     }
 
+    /// Encodes the value into a vector of bytes and returns the number of bits written.
+    #[inline(always)]
     fn to_varint_bits(&self) -> Result<(Vec<u8>, usize)> {
         let mut writer = BitWriter::<_>::new(Vec::<u8>::new());
         let bits_written = self.encode(&mut writer)?;
         Ok((writer.into_inner()?, bits_written))
     }
 
+    /// Decodes the value from a slice of bytes that contains the varint encoding.
+    #[inline(always)]
     fn from_varint_bytes(bytes: &[u8]) -> Result<Self> {
         let mut reader = BitReader::<_>::new(Cursor::new(bytes));
         Self::decode(&mut reader)

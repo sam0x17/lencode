@@ -6,6 +6,8 @@ pub struct Cursor<T> {
 }
 
 impl<T> Cursor<T> {
+    /// Creates a new [`Cursor`] with the given stream.
+    #[inline(always)]
     pub fn new(stream: T) -> Self {
         Cursor {
             stream,
@@ -13,12 +15,15 @@ impl<T> Cursor<T> {
         }
     }
 
+    /// Returns the position of the cursor within the underlying stream.
+    #[inline(always)]
     pub fn position(&self) -> usize {
         self.position
     }
 }
 
 impl<T: AsRef<[u8]>> Read for Cursor<T> {
+    #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         let data = self.stream.as_ref();
         if self.position >= data.len() {
@@ -35,6 +40,7 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
 }
 
 impl<T: AsMut<[u8]>> Write for Cursor<T> {
+    #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         let data = self.stream.as_mut();
         if self.position >= data.len() {
@@ -52,6 +58,7 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
         Ok(bytes_written)
     }
 
+    #[inline(always)]
     fn flush(&mut self) -> Result<(), Error> {
         // No-op for an in-memory buffer
         Ok(())

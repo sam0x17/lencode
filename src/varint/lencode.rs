@@ -19,6 +19,7 @@ use core::mem;
 pub enum Lencode {}
 
 // Helper: reconstruct integer from little-endian bytes
+#[inline(always)]
 fn int_from_le_bytes<I: UnsignedInteger>(le_bytes: &[u8]) -> I {
     let mut val: I = unsafe { core::mem::zeroed() };
     unsafe {
@@ -32,6 +33,7 @@ fn int_from_le_bytes<I: UnsignedInteger>(le_bytes: &[u8]) -> I {
 }
 
 impl Scheme for Lencode {
+    #[inline(always)]
     fn encode<I: UnsignedInteger>(val: I, mut writer: impl Write) -> Result<usize> {
         let le_bytes = val.le_bytes();
         // Strip trailing zeros for minimal encoding (little endian)
@@ -51,6 +53,7 @@ impl Scheme for Lencode {
         Ok(1 + n)
     }
 
+    #[inline(always)]
     fn decode<I: UnsignedInteger>(mut reader: impl Read) -> Result<I> {
         let mut first = [0u8; 1];
         reader.read(&mut first)?;

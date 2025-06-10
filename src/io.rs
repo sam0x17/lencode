@@ -29,6 +29,7 @@ pub enum StdIoShim {}
 
 #[cfg(feature = "std")]
 impl From<std::io::Error> for Error {
+    #[inline(always)]
     fn from(err: std::io::Error) -> Self {
         Error::StdIo(err)
     }
@@ -65,6 +66,7 @@ pub trait Write {
 
 #[cfg(feature = "std")]
 impl<R: std::io::Read> Read for R {
+    #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.read(buf).map_err(Error::from)
     }
@@ -72,10 +74,12 @@ impl<R: std::io::Read> Read for R {
 
 #[cfg(feature = "std")]
 impl<W: std::io::Write> Write for W {
+    #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.write(buf).map_err(Error::from)
     }
 
+    #[inline(always)]
     fn flush(&mut self) -> Result<()> {
         self.flush().map_err(Error::from)
     }
@@ -88,11 +92,13 @@ use alloc::vec::Vec;
 
 #[cfg(not(feature = "std"))]
 impl Write for Vec<u8> {
+    #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.extend_from_slice(buf);
         Ok(buf.len())
     }
 
+    #[inline(always)]
     fn flush(&mut self) -> Result<()> {
         // No-op for Vec, as it doesn't have an underlying buffer to flush
         Ok(())
@@ -101,6 +107,7 @@ impl Write for Vec<u8> {
 
 #[cfg(not(feature = "std"))]
 impl<T: BitStore, O: BitOrder> Write for BitVec<T, O> {
+    #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let bits = buf
             .iter()
@@ -109,6 +116,7 @@ impl<T: BitStore, O: BitOrder> Write for BitVec<T, O> {
         Ok(buf.len())
     }
 
+    #[inline(always)]
     fn flush(&mut self) -> Result<()> {
         // No-op for BitVec, as it doesn't have an underlying buffer to flush
         Ok(())
@@ -117,6 +125,7 @@ impl<T: BitStore, O: BitOrder> Write for BitVec<T, O> {
 
 #[cfg(not(feature = "std"))]
 impl<T: BitStore, O: BitOrder> Read for BitVec<T, O> {
+    #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         if self.is_empty() {
             return Err(Error::EndOfData);

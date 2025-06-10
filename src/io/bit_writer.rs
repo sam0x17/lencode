@@ -107,6 +107,7 @@ impl<W: Write, O: BitOrder, const N: usize> BitWriter<W, O, N> {
 }
 
 impl<W: Write, O: BitOrder, const N: usize> Drop for BitWriter<W, O, N> {
+    #[inline(always)]
     fn drop(&mut self) {
         let _ = self.flush_all();
     }
@@ -114,6 +115,7 @@ impl<W: Write, O: BitOrder, const N: usize> Drop for BitWriter<W, O, N> {
 
 /// `Write` impl for MSB-first ordering
 impl<W: Write, const N: usize> Write for BitWriter<W, Msb0, N> {
+    #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         for &byte in buf {
             let bit_offset = self.cursor & 7;
@@ -160,6 +162,7 @@ impl<W: Write, const N: usize> Write for BitWriter<W, Msb0, N> {
 
 /// `Write` impl for LSB-first ordering
 impl<W: Write, const N: usize> Write for BitWriter<W, Lsb0, N> {
+    #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         for &byte in buf {
             let bit_offset = self.cursor & 7;

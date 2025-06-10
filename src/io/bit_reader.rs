@@ -11,6 +11,7 @@ pub struct BitReader<R: Read, O: BitOrder = Msb0, const N: usize = 1024> {
 }
 
 impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
+    #[inline(always)]
     pub fn new(reader: R) -> Self {
         BitReader::<R, O, N> {
             reader,
@@ -22,6 +23,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
 
     /// Returns `Ok(true)` if there are *any* unread bits remaining in the stream,
     /// `Ok(false)` at real EOF, or an `Err` on I/O error.
+    #[inline(always)]
     pub fn has_bits(&mut self) -> Result<bool> {
         // If we’re completely drained, try to fill once:
         if self.cursor >= self.filled * 8 {
@@ -35,6 +37,8 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         Ok(self.cursor < self.filled * 8)
     }
 
+    /// Fills the internal buffer with new data from the reader.
+    #[inline(always)]
     fn fill_buffer(&mut self) -> Result<()> {
         // 1) How many bits are still unread?
         let total_bits = self.filled * 8;
@@ -93,6 +97,8 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         Ok(())
     }
 
+    /// Reads a single bit from the stream, advancing the cursor.
+    #[inline(always)]
     pub fn read_bit(&mut self) -> Result<bool> {
         if self.cursor >= self.filled * 8 {
             self.fill_buffer()?;
@@ -163,6 +169,9 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         Ok(total)
     }
 
+    /// Reads a single one bit from the stream, advancing the cursor, or returning an error if
+    /// there is no next bit or the next bit is not one.
+    #[inline(always)]
     pub fn read_one(&mut self) -> Result<()> {
         if self.read_bit()? {
             Ok(())
@@ -171,6 +180,9 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         }
     }
 
+    /// Reads a single zero bit from the stream, advancing the cursor, or returning an error if
+    /// there is no next bit or the next bit is not zero.
+    #[inline(always)]
     pub fn read_zero(&mut self) -> Result<()> {
         if !self.read_bit()? {
             Ok(())
@@ -179,6 +191,8 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         }
     }
 
+    /// Peeks the next bit without advancing the cursor.
+    #[inline(always)]
     pub fn peek_bit(&mut self) -> Result<bool> {
         if self.cursor >= self.filled * 8 {
             self.fill_buffer()?;
@@ -191,6 +205,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
 }
 
 impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
+    #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         if self.filled == 0 {
             self.fill_buffer()?;
@@ -242,6 +257,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
 }
 
 impl<R: Read, const N: usize> Read for BitReader<R, Lsb0, N> {
+    #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         if self.filled == 0 {
             self.fill_buffer()?;
