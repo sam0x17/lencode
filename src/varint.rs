@@ -195,7 +195,6 @@ pub trait SignedInteger:
     }
 }
 
-#[macro_export]
 macro_rules! impl_signed_integer {
     ($($t:ty),*) => {
         $(
