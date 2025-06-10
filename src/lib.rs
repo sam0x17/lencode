@@ -25,12 +25,12 @@ use prelude::*;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-pub trait Encode<S: Scheme = Lencode> {
-    fn encode(&self, writer: impl Write) -> Result<usize>;
+pub trait Encode {
+    fn encode<S: Scheme>(&self, writer: impl Write) -> Result<usize>;
 }
 
-pub trait Decode<S: Scheme = Lencode> {
-    fn decode(reader: impl Read) -> Result<Self>
+pub trait Decode {
+    fn decode<S: Scheme>(reader: impl Read) -> Result<Self>
     where
         Self: Sized;
 }
@@ -38,16 +38,16 @@ pub trait Decode<S: Scheme = Lencode> {
 macro_rules! impl_encode_decode_unsigned_primitive {
     ($($t:ty),*) => {
         $(
-            impl<S: Scheme> Encode<S> for $t {
+            impl Encode for $t {
                 #[inline(always)]
-                fn encode(&self, writer: impl Write) -> Result<usize> {
+                fn encode<S: Scheme>(&self, writer: impl Write) -> Result<usize> {
                     S::encode_varint(*self, writer)
                 }
             }
 
-            impl<S: Scheme> Decode<S> for $t {
+            impl Decode for $t {
                 #[inline(always)]
-                fn decode(reader: impl Read) -> Result<Self> {
+                fn decode<S: Scheme>(reader: impl Read) -> Result<Self> {
                     S::decode_varint(reader)
                 }
             }
@@ -60,16 +60,16 @@ impl_encode_decode_unsigned_primitive!(u16, u32, u64, u128, usize);
 macro_rules! impl_encode_decode_signed_primitive {
     ($($t:ty),*) => {
         $(
-            impl<S: Scheme> Encode<S> for $t {
+            impl Encode for $t {
                 #[inline(always)]
-                fn encode(&self, writer: impl Write) -> Result<usize> {
+                fn encode<S: Scheme>(&self, writer: impl Write) -> Result<usize> {
                     S::encode_varint_signed(*self, writer)
                 }
             }
 
-            impl<S: Scheme> Decode<S> for $t {
+            impl Decode for $t {
                 #[inline(always)]
-                fn decode(reader: impl Read) -> Result<Self> {
+                fn decode<S: Scheme>(reader: impl Read) -> Result<Self> {
                     S::decode_varint_signed(reader)
                 }
             }
@@ -81,11 +81,11 @@ impl_encode_decode_signed_primitive!(i16, i32, i64, i128, isize);
 
 #[test]
 fn test_encode_decode_i16_all() {
-    for i in -32768..=32767 {
+    for i in i16::MIN..=i16::MAX {
         let val: i16 = i;
-        let mut buf = [0u8; 2];
-        let n = i16::encode(&val, Cursor::new(&mut buf[..])).unwrap();
-        let decoded = i16::decode(Cursor::new(&buf[..n])).unwrap();
+        let mut buf = [0u8; 3];
+        let n = i16::encode::<Lencode>(&val, Cursor::new(&mut buf[..])).unwrap();
+        let decoded = i16::decode::<Lencode>(Cursor::new(&buf[..n])).unwrap();
         assert_eq!(decoded, val);
     }
 }
