@@ -7,28 +7,41 @@ use crate::prelude::*;
 
 pub mod lencode;
 
+/// A trait describing a serialization scheme for unsigned integers.
 pub trait Scheme {
+    /// Encodes an unsigned integer value using the scheme, writing to the given writer.
     fn encode<I: UnsignedInteger>(val: I, writer: impl Write) -> Result<usize>;
+    /// Decodes an unsigned integer value using the scheme, reading from the given reader.
     fn decode<I: UnsignedInteger>(reader: impl Read) -> Result<I>;
 }
 
+/// Trait for types that have a constant representing the value one.
 pub trait One {
+    /// The value one for this type.
     const ONE: Self;
 }
 
+/// Trait for types that have a constant representing the value zero.
 pub trait Zero {
+    /// The value zero for this type.
     const ZERO: Self;
 }
 
+/// Trait for types that have a constant representing the maximum value.
 pub trait Max {
+    /// The maximum value for this type.
     const MAX_VALUE: Self;
 }
 
+/// Trait for types that have a constant representing the minimum value.
 pub trait Min {
+    /// The minimum value for this type.
     const MIN_VALUE: Self;
 }
 
+/// Trait for types that have a constant representing their byte length.
 pub trait ByteLength {
+    /// The number of bytes in this type.
     const BYTE_LENGTH: usize;
 }
 
@@ -98,14 +111,19 @@ macro_rules! impl_unsigned_integer {
 
 impl_unsigned_integer!(u8, u16, u32, u64, u128, usize);
 
-// Trait to map signed types to their unsigned equivalents
+/// Trait for converting a signed integer to its unsigned equivalent.
 pub trait ToUnsigned {
+    /// The corresponding unsigned type for this signed type.
     type Unsigned: UnsignedInteger + ToSigned<Signed = Self>;
+    /// Converts this value to its unsigned representation.
     fn to_unsigned(self) -> Self::Unsigned;
 }
 
+/// Trait for converting an unsigned integer to its signed equivalent.
 pub trait ToSigned {
+    /// The corresponding signed type for this unsigned type.
     type Signed: SignedInteger + ToUnsigned<Unsigned = Self>;
+    /// Converts this value to its signed representation.
     fn to_signed(self) -> Self::Signed;
 }
 
@@ -149,6 +167,9 @@ pub fn zigzag_decode<U: UnsignedInteger + ToSigned>(value: U) -> <U as ToSigned>
     signed ^ mask
 }
 
+/// Trait for all signed integer types supported by this crate.
+///
+/// This trait is automatically implemented for all primitive signed integer types.
 pub trait SignedInteger:
     Sized
     + Copy
@@ -184,10 +205,12 @@ pub trait SignedInteger:
     + ByteLength
     + ToUnsigned
 {
+    /// Encodes this signed integer using the given [`Scheme`] and ZigZag encoding.
     fn encode_int<S: Scheme>(self, writer: impl Write) -> Result<usize> {
         zigzag_encode(self).encode_uint::<S>(writer)
     }
 
+    /// Decodes a signed integer using the given [`Scheme`] and ZigZag decoding.
     fn decode_int<S: Scheme>(reader: impl Read) -> Result<Self> {
         Ok(zigzag_decode(
             <Self as ToUnsigned>::Unsigned::decode_uint::<S>(reader)?,
