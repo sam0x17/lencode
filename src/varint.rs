@@ -253,3 +253,25 @@ fn zigzag_known_values() {
         assert_eq!(encoded, expected, "zigzag_encode({})", input);
     }
 }
+
+#[test]
+fn zigzag_roundtrip_i16_all() {
+    for i in 0..=i16::MAX {
+        let val: i16 = i;
+        let encoded = zigzag_encode(val);
+        let decoded = zigzag_decode(encoded);
+        if decoded != val {
+            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+        }
+        assert_eq!(decoded, val);
+    }
+    for i in (i16::MIN + 1)..=0 {
+        let val: i16 = i;
+        let encoded = zigzag_encode(val);
+        let decoded = zigzag_decode(encoded);
+        if decoded != val {
+            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+        }
+        assert_eq!(decoded, val);
+    }
+}
