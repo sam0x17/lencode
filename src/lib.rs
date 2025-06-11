@@ -289,6 +289,29 @@ impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
     }
 }
 
+impl<V: Encode> Encode for collections::BTreeSet<V> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        for value in self {
+            total_written += value.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+
+impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut set = collections::BTreeSet::new();
+        for _ in 0..len {
+            let value = V::decode::<S>(reader)?;
+            set.insert(value);
+        }
+        Ok(set)
+    }
+}
+
 #[cfg(feature = "std")]
 impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
@@ -478,6 +501,24 @@ fn test_hash_set_encode_decode() {
     assert_eq!(n, 4);
 
     let decoded: std::collections::HashSet<i32> =
+        Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, set);
+}
+
+#[test]
+fn test_btree_set_encode_decode() {
+    let mut set = collections::BTreeSet::new();
+    set.insert(1);
+    set.insert(2);
+    set.insert(3);
+
+    let mut buf = vec![0u8; 4];
+    let n = set
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 4);
+
+    let decoded: collections::BTreeSet<i32> =
         Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, set);
 }
