@@ -289,6 +289,33 @@ impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
     }
 }
 
+#[cfg(feature = "std")]
+impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        for (key, value) in self {
+            total_written += key.encode::<S>(writer)?;
+            total_written += value.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::HashMap<K, V> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut map = std::collections::HashMap::with_capacity(len);
+        for _ in 0..len {
+            let key = K::decode::<S>(reader)?;
+            let value = V::decode::<S>(reader)?;
+            map.insert(key, value);
+        }
+        Ok(map)
+    }
+}
+
 #[test]
 fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
@@ -388,6 +415,25 @@ fn test_tree_map_encode_decode() {
     assert_eq!(n, 7);
 
     let decoded: collections::BTreeMap<i32, i32> =
+        Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, map);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_hash_map_encode_decode() {
+    let mut map = std::collections::HashMap::new();
+    map.insert(1, 4);
+    map.insert(2, 5);
+    map.insert(3, 6);
+
+    let mut buf = vec![0u8; 7];
+    let n = map
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 7);
+
+    let decoded: std::collections::HashMap<i32, i32> =
         Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, map);
 }
