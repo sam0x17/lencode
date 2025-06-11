@@ -335,6 +335,29 @@ impl<V: Decode> Decode for collections::VecDeque<V> {
     }
 }
 
+impl<V: Encode> Encode for collections::LinkedList<V> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        for value in self {
+            total_written += value.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+
+impl<V: Decode> Decode for collections::LinkedList<V> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut list = collections::LinkedList::new();
+        for _ in 0..len {
+            let value = V::decode::<S>(reader)?;
+            list.push_back(value);
+        }
+        Ok(list)
+    }
+}
+
 #[cfg(feature = "std")]
 impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
@@ -562,4 +585,22 @@ fn test_vec_deque_encode_decode() {
     let decoded: collections::VecDeque<i32> =
         Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, deque);
+}
+
+#[test]
+fn test_linked_list_encode_decode() {
+    let mut list = collections::LinkedList::new();
+    list.push_back(1);
+    list.push_back(2);
+    list.push_back(3);
+
+    let mut buf = vec![0u8; 4];
+    let n = list
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 4);
+
+    let decoded: collections::LinkedList<i32> =
+        Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, list);
 }
