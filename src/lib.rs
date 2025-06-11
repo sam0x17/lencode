@@ -212,6 +212,30 @@ impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
     }
 }
 
+impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        for item in self {
+            total_written += item.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+
+impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let mut arr = [T::default(); N];
+        for item in &mut arr {
+            *item = T::decode::<S>(reader)?;
+        }
+        Ok(arr)
+    }
+
+    fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 impl<T: Decode> Decode for Vec<T> {
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
