@@ -312,6 +312,29 @@ impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
     }
 }
 
+impl<V: Encode> Encode for collections::VecDeque<V> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        for value in self {
+            total_written += value.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+
+impl<V: Decode> Decode for collections::VecDeque<V> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut deque = collections::VecDeque::with_capacity(len);
+        for _ in 0..len {
+            let value = V::decode::<S>(reader)?;
+            deque.push_back(value);
+        }
+        Ok(deque)
+    }
+}
+
 #[cfg(feature = "std")]
 impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
@@ -521,4 +544,22 @@ fn test_btree_set_encode_decode() {
     let decoded: collections::BTreeSet<i32> =
         Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, set);
+}
+
+#[test]
+fn test_vec_deque_encode_decode() {
+    let mut deque = collections::VecDeque::new();
+    deque.push_back(1);
+    deque.push_back(2);
+    deque.push_back(3);
+
+    let mut buf = vec![0u8; 4];
+    let n = deque
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 4);
+
+    let decoded: collections::VecDeque<i32> =
+        Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, deque);
 }
