@@ -76,6 +76,24 @@ impl Scheme for Lencode {
             Ok(uint_from_le_bytes::<I>(&mut buf[..size]))
         }
     }
+
+    #[inline(always)]
+    fn encode_bool(val: bool, writer: &mut impl Write) -> Result<usize> {
+        writer.write(&[if val { 1u8 } else { 0u8 }])
+    }
+
+    #[inline(always)]
+    fn decode_bool(reader: &mut impl Read) -> Result<bool> {
+        let mut buf = [0u8; 1];
+        reader.read(&mut buf)?;
+        if buf[0] == 0 {
+            Ok(false)
+        } else if buf[0] == 1 {
+            Ok(true)
+        } else {
+            Err(Error::InvalidData)
+        }
+    }
 }
 
 #[test]

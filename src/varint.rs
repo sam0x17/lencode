@@ -24,6 +24,12 @@ pub trait Scheme: Sized {
     fn decode_varint_signed<I: SignedInteger>(reader: &mut impl Read) -> Result<I> {
         I::decode_int::<Self>(reader)
     }
+
+    /// Encodes a boolean value using the scheme, writing to the given writer.
+    fn encode_bool(val: bool, writer: &mut impl Write) -> Result<usize>;
+
+    /// Decodes a boolean value using the scheme, reading from the given reader.
+    fn decode_bool(reader: &mut impl Read) -> Result<bool>;
 }
 
 /// Trait for types that have a constant representing the value one.

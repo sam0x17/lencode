@@ -135,6 +135,22 @@ impl Decode for isize {
     }
 }
 
+impl Encode for bool {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        S::encode_bool(*self, writer)
+    }
+}
+
+impl Decode for bool {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        S::decode_bool(reader)
+    }
+
+    fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 impl<T: Decode> Decode for Vec<T> {
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
@@ -203,5 +219,17 @@ fn test_encode_decode_vec_of_tiny_u128s() {
         .unwrap();
     assert_eq!(n, values.len() + 1);
     let decoded = Vec::<u128>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
+    assert_eq!(decoded, values);
+}
+
+#[test]
+fn test_encode_decode_bools() {
+    let values = vec![true, false, true, false, true];
+    let mut buf = vec![0u8; values.len() + 1];
+    let n = values
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, values.len() + 1);
+    let decoded = Vec::<bool>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
