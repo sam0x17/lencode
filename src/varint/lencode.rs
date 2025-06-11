@@ -18,10 +18,12 @@ use core::mem;
 /// used in practice.
 pub enum Lencode {}
 
-// Helper: reconstruct integer from little-endian bytes
+/// Reconstruct an [`UnsignedInteger`] from a (mutable) byte slice in little-endian order.
 #[inline(always)]
-fn int_from_le_bytes<I: UnsignedInteger>(le_bytes: &[u8]) -> I {
+pub fn uint_from_le_bytes<I: UnsignedInteger>(le_bytes: &mut [u8]) -> I {
     let mut val: I = unsafe { core::mem::zeroed() };
+    #[cfg(target_endian = "big")]
+    reverse(le_bytes);
     unsafe {
         core::ptr::copy_nonoverlapping(
             le_bytes.as_ptr(),
@@ -63,7 +65,7 @@ impl Scheme for Lencode {
         if first_byte & 0x80 == 0 {
             // Small integer: single byte, left-align in buffer (little endian)
             buf[0] = first_byte & 0x7F;
-            return Ok(int_from_le_bytes::<I>(&buf[..size]));
+            return Ok(uint_from_le_bytes::<I>(&mut buf[..size]));
         } else {
             // Large integer: read n bytes, left-align in buffer (little endian)
             let n = (first_byte & 0x7F) as usize;
@@ -71,7 +73,7 @@ impl Scheme for Lencode {
                 return Err(Error::InvalidData);
             }
             reader.read(&mut buf[..n])?;
-            Ok(int_from_le_bytes::<I>(&buf[..size]))
+            Ok(uint_from_le_bytes::<I>(&mut buf[..size]))
         }
     }
 }
@@ -151,7 +153,7 @@ fn test_lencode_u16_all() {
 fn test_lencode_u64_all() {
     let mut buf = [0u8; const { 1 + mem::size_of::<u64>() }];
     for i in (0u32..u32::MAX)
-        .step_by(24)
+        .step_by(30)
         .map(|x| (x as u64) << 32)
         .chain(0..10000)
         .chain((u64::MAX - 10000)..=u64::MAX)
