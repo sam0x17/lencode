@@ -104,6 +104,17 @@ impl<T: Decode> Decode for Vec<T> {
     }
 }
 
+impl<T: Encode> Encode for Vec<T> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += S::encode_varint(self.len(), writer)?;
+        for item in self {
+            total_written += item.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+
 #[test]
 fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
@@ -113,4 +124,30 @@ fn test_encode_decode_i16_all() {
         let decoded = i16::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
         assert_eq!(decoded, val);
     }
+}
+
+#[test]
+fn test_encode_decode_vec_of_i16_all() {
+    let values: Vec<i16> = (i16::MIN..=i16::MAX).collect();
+    let mut buf = vec![0u8; 3 * values.len()];
+    let n = values
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert!(n < values.len() * 3);
+    let decoded = Vec::<i16>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
+    assert_eq!(decoded, values);
+}
+
+#[test]
+fn test_encode_decode_vec_of_many_small_u128() {
+    let values: Vec<u128> = (0..(u16::MAX / 2) as u128)
+        .chain(0..(u16::MAX / 2) as u128)
+        .collect();
+    let mut buf = vec![0u8; 3 * values.len()];
+    let n = values
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert!(n < values.len() * 3);
+    let decoded = Vec::<u128>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
+    assert_eq!(decoded, values);
 }
