@@ -151,6 +151,34 @@ impl Decode for bool {
     }
 }
 
+impl<T: Encode> Encode for Option<T> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        match self {
+            Some(value) => {
+                let mut total_written = 0;
+                total_written += S::encode_bool(true, writer)?;
+                total_written += value.encode::<S>(writer)?;
+                Ok(total_written)
+            }
+            None => S::encode_bool(false, writer),
+        }
+    }
+}
+
+impl<T: Decode> Decode for Option<T> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        if S::decode_bool(reader)? {
+            Ok(Some(T::decode::<S>(reader)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 impl<T: Decode> Decode for Vec<T> {
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
@@ -231,5 +259,17 @@ fn test_encode_decode_bools() {
         .unwrap();
     assert_eq!(n, values.len() + 1);
     let decoded = Vec::<bool>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
+    assert_eq!(decoded, values);
+}
+
+#[test]
+fn test_encode_decode_option() {
+    let values = vec![Some(42), None, Some(100), None, Some(200)];
+    let mut buf = vec![0u8; 12];
+    let n = values
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, buf.len());
+    let decoded = Vec::<Option<i32>>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
