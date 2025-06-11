@@ -179,6 +179,39 @@ impl<T: Decode> Decode for Option<T> {
     }
 }
 
+impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        match self {
+            Ok(value) => {
+                let mut total_written = 0;
+                total_written += S::encode_bool(true, writer)?;
+                total_written += value.encode::<S>(writer)?;
+                Ok(total_written)
+            }
+            Err(err) => {
+                let mut total_written = 0;
+                total_written += S::encode_bool(false, writer)?;
+                total_written += err.encode::<S>(writer)?;
+                Ok(total_written)
+            }
+        }
+    }
+}
+
+impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        if S::decode_bool(reader)? {
+            Ok(Ok(T::decode::<S>(reader)?))
+        } else {
+            Ok(Err(E::decode::<S>(reader)?))
+        }
+    }
+
+    fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 impl<T: Decode> Decode for Vec<T> {
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
