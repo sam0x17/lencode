@@ -193,3 +193,15 @@ fn test_encode_decode_vec_of_many_small_u128() {
     let decoded = Vec::<u128>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
+
+#[test]
+fn test_encode_decode_vec_of_tiny_u128s() {
+    let values: Vec<u128> = (0..127).collect();
+    let mut buf = vec![0u8; values.len() + 1];
+    let n = values
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, values.len() + 1);
+    let decoded = Vec::<u128>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
+    assert_eq!(decoded, values);
+}
