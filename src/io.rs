@@ -15,17 +15,51 @@ use bitvec::prelude::*;
 pub enum Error {
     InvalidData,
     IncorrectLength,
-    WriteShort,
-    EndOfData,
+    WriterOutOfSpace,
+    ReaderOutOfData,
     #[cfg(feature = "std")]
     StdIo(std::io::Error),
     #[cfg(not(feature = "std"))]
     StdIo(StdIoShim),
+    #[cfg(feature = "serde")]
+    Serde(String),
+    #[cfg(not(feature = "serde"))]
+    Serde(String),
 }
 
 #[cfg(not(feature = "std"))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum StdIoShim {}
+
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Error::InvalidData => write!(
+                f,
+                "Invalid data was encountered (corrupted or incorrect bits/bytes in data stream)"
+            ),
+            Error::IncorrectLength => write!(f, "Incorrect length"),
+            Error::WriterOutOfSpace => write!(f, "Tried to write past the capacity of the writer"),
+            Error::ReaderOutOfData => write!(
+                f,
+                "Tried to read past the end of the reader's available data"
+            ),
+            #[cfg(feature = "std")]
+            Error::StdIo(e) => write!(f, "IO error: {}", e),
+            #[cfg(not(feature = "std"))]
+            Error::StdIo(_) => write!(f, "IO error (shimmed)"),
+            #[cfg(feature = "serde")]
+            Error::Serde(e) => write!(f, "Serde error: {}", e),
+            #[cfg(not(feature = "serde"))]
+            Error::Serde(_) => {
+                write!(f, "Serde error (shimmed)")
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
 
 #[cfg(feature = "std")]
 impl From<std::io::Error> for Error {
@@ -39,7 +73,9 @@ impl From<std::io::Error> for Error {
 impl From<Error> for std::io::Error {
     fn from(err: Error) -> Self {
         match err {
-            Error::WriteShort => std::io::Error::new(std::io::ErrorKind::WriteZero, "Write short"),
+            Error::WriterOutOfSpace => {
+                std::io::Error::new(std::io::ErrorKind::WriteZero, "Write short")
+            }
             Error::InvalidData => {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid data")
             }
@@ -48,8 +84,11 @@ impl From<Error> for std::io::Error {
             }
             #[cfg(feature = "std")]
             Error::StdIo(e) => e,
-            Error::EndOfData => {
+            Error::ReaderOutOfData => {
                 std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "End of data")
+            }
+            Error::Serde(e) => {
+                std::io::Error::new(std::io::ErrorKind::Other, format!("Serde error: {}", e))
             }
         }
     }
@@ -128,7 +167,7 @@ impl<T: BitStore, O: BitOrder> Read for BitVec<T, O> {
     #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         if self.is_empty() {
-            return Err(Error::EndOfData);
+            return Err(Error::ReaderOutOfData);
         }
 
         let mut bytes_read = 0;

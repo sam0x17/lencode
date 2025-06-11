@@ -2,20 +2,23 @@
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::collections;
 #[cfg(all(test, not(feature = "std")))]
 use alloc::format;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
 #[cfg(all(test, not(feature = "std")))]
 use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-
-#[cfg(not(feature = "std"))]
-use alloc::collections;
 #[cfg(feature = "std")]
 use std::collections;
 
 pub mod bit_varint;
 pub mod io;
+#[cfg(feature = "serde")]
+pub mod serde;
 pub mod tuples;
 pub mod varint;
 

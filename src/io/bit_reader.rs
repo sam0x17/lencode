@@ -28,7 +28,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         // If we’re completely drained, try to fill once:
         if self.cursor >= self.filled * 8 {
             match self.fill_buffer() {
-                Err(Error::EndOfData) => return Ok(false),
+                Err(Error::ReaderOutOfData) => return Ok(false),
                 Err(e) => return Err(e),
                 Ok(()) => {}
             }
@@ -71,7 +71,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
         let dest = &mut raw[bytes_remaining..];
         let bytes_read = self.reader.read(dest)?;
         if bytes_read == 0 {
-            return Err(Error::EndOfData);
+            return Err(Error::ReaderOutOfData);
         }
 
         // 5) If we were mid-byte, rotate each newly-read byte
@@ -104,7 +104,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
             self.fill_buffer()?;
         }
         if self.cursor >= self.filled * 8 {
-            return Err(Error::EndOfData);
+            return Err(Error::ReaderOutOfData);
         }
         let bit = self.buffer[self.cursor];
         self.cursor += 1;
@@ -118,7 +118,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
             if self.cursor >= self.filled * 8 {
                 match self.fill_buffer() {
                     Ok(()) => {}
-                    Err(Error::EndOfData) => return Ok(total),
+                    Err(Error::ReaderOutOfData) => return Ok(total),
                     Err(e) => return Err(e),
                 }
                 if self.cursor >= self.filled * 8 {
@@ -147,7 +147,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
             if self.cursor >= self.filled * 8 {
                 match self.fill_buffer() {
                     Ok(()) => {}
-                    Err(Error::EndOfData) => return Ok(total),
+                    Err(Error::ReaderOutOfData) => return Ok(total),
                     Err(e) => return Err(e),
                 }
                 if self.cursor >= self.filled * 8 {
@@ -198,7 +198,7 @@ impl<R: Read, O: BitOrder, const N: usize> BitReader<R, O, N> {
             self.fill_buffer()?;
         }
         if self.cursor >= self.filled * 8 {
-            return Err(Error::EndOfData);
+            return Err(Error::ReaderOutOfData);
         }
         Ok(self.buffer[self.cursor])
     }
@@ -218,7 +218,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
                 if self.cursor >= self.filled * 8 {
                     match self.fill_buffer() {
                         Ok(()) => {}
-                        Err(Error::EndOfData) => break,
+                        Err(Error::ReaderOutOfData) => break,
                         Err(e) => return Err(e),
                     }
                     if self.filled * 8 - self.cursor < 8 {
@@ -251,7 +251,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Msb0, N> {
         if written > 0 {
             Ok(written)
         } else {
-            Err(Error::EndOfData)
+            Err(Error::ReaderOutOfData)
         }
     }
 }
@@ -270,7 +270,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Lsb0, N> {
                 if self.cursor >= self.filled * 8 {
                     match self.fill_buffer() {
                         Ok(()) => {}
-                        Err(Error::EndOfData) => break,
+                        Err(Error::ReaderOutOfData) => break,
                         Err(e) => return Err(e),
                     }
                     if self.filled * 8 - self.cursor < 8 {
@@ -309,7 +309,7 @@ impl<R: Read, const N: usize> Read for BitReader<R, Lsb0, N> {
         if written > 0 {
             Ok(written)
         } else {
-            Err(Error::EndOfData)
+            Err(Error::ReaderOutOfData)
         }
     }
 }
@@ -336,7 +336,7 @@ fn test_read_bit_msb0_single_byte() {
     }
 
     // now we should be at EOF
-    assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
+    assert!(matches!(br.read_bit(), Err(Error::ReaderOutOfData)));
 }
 
 #[test]
@@ -360,7 +360,7 @@ fn test_peek_bit_does_not_advance() {
     assert!(!br.read_bit().unwrap());
 
     // now we should be at EOF
-    assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
+    assert!(matches!(br.read_bit(), Err(Error::ReaderOutOfData)));
 }
 
 #[test]
@@ -400,7 +400,7 @@ fn test_read_bytes_after_bits() {
     assert_eq!(buf[0], 0xBC);
 
     // No more whole bytes left → EOF
-    assert!(matches!(br.read(&mut buf), Err(Error::EndOfData)));
+    assert!(matches!(br.read(&mut buf), Err(Error::ReaderOutOfData)));
 
     // Now consume the remaining 4 bits (low nibble of 0xCD = 0xD → 1101)
     let mut tail = Vec::new();
@@ -416,12 +416,12 @@ fn test_empty_input_errors() {
     let mut br = BitReader::<_>::new(Cursor::new(data));
 
     // reading any bit immediately errors
-    assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
-    assert!(matches!(br.peek_bit(), Err(Error::EndOfData)));
+    assert!(matches!(br.read_bit(), Err(Error::ReaderOutOfData)));
+    assert!(matches!(br.peek_bit(), Err(Error::ReaderOutOfData)));
 
     // reading bytes also errors (because fill_buffer finds zero bytes)
     let mut buf = [0u8; 4];
-    assert!(matches!(br.read(&mut buf), Err(Error::EndOfData)));
+    assert!(matches!(br.read(&mut buf), Err(Error::ReaderOutOfData)));
 }
 
 #[test]
@@ -560,7 +560,7 @@ fn sanity_test() {
     assert!(!reader.has_bits().unwrap());
 
     // Now we should be at EOF
-    assert!(matches!(reader.read_bit(), Err(Error::EndOfData)));
+    assert!(matches!(reader.read_bit(), Err(Error::ReaderOutOfData)));
 }
 
 #[test]
@@ -571,7 +571,7 @@ fn test_read_ones_and_zeros() {
     assert_eq!(br.read_ones().unwrap(), 4);
     assert_eq!(br.read_zeros().unwrap(), 8);
     assert_eq!(br.read_ones().unwrap(), 4);
-    assert!(matches!(br.read_bit(), Err(Error::EndOfData)));
+    assert!(matches!(br.read_bit(), Err(Error::ReaderOutOfData)));
 }
 
 #[test]

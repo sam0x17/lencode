@@ -85,7 +85,7 @@ impl<W: Write, O: BitOrder, const N: usize> BitWriter<W, O, N> {
         let w = self.writer.as_mut().expect("writer missing");
         let written = w.write(&raw[..bytes])?;
         if written != bytes {
-            return Err(Error::WriteShort);
+            return Err(Error::WriterOutOfSpace);
         }
         // reset buffer
         self.cursor = 0;

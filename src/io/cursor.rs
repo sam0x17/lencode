@@ -27,7 +27,7 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         let data = self.stream.as_ref();
         if self.position >= data.len() {
-            return Err(Error::EndOfData);
+            return Err(Error::ReaderOutOfData);
         }
 
         let bytes_to_read = data.len() - self.position;
@@ -44,7 +44,7 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         let data = self.stream.as_mut();
         if self.position >= data.len() {
-            return Err(Error::WriteShort);
+            return Err(Error::WriterOutOfSpace);
         }
 
         let bytes_to_write = data.len() - self.position;
@@ -53,7 +53,7 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
         self.position += bytes_written;
 
         if bytes_written < buf.len() {
-            return Err(Error::WriteShort);
+            return Err(Error::WriterOutOfSpace);
         }
         Ok(bytes_written)
     }
