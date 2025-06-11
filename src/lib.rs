@@ -330,3 +330,15 @@ fn test_encode_decode_option() {
     let decoded = Vec::<Option<i32>>::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
+
+#[test]
+fn test_encode_decode_arrays() {
+    let values: [u128; 5] = [1, 2, 3, 4, 5];
+    let mut buf = vec![0u8; 5];
+    let n = values
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 5);
+    let decoded: [u128; 5] = Decode::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
+    assert_eq!(decoded, values);
+}
