@@ -316,6 +316,31 @@ impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::H
     }
 }
 
+#[cfg(feature = "std")]
+impl<V: Encode> Encode for std::collections::HashSet<V> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        for value in self {
+            total_written += value.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<V: Decode + Eq + std::hash::Hash> Decode for std::collections::HashSet<V> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut set = std::collections::HashSet::with_capacity(len);
+        for _ in 0..len {
+            let value = V::decode::<S>(reader)?;
+            set.insert(value);
+        }
+        Ok(set)
+    }
+}
+
 #[test]
 fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
@@ -436,4 +461,23 @@ fn test_hash_map_encode_decode() {
     let decoded: std::collections::HashMap<i32, i32> =
         Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, map);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_hash_set_encode_decode() {
+    let mut set = std::collections::HashSet::new();
+    set.insert(1);
+    set.insert(2);
+    set.insert(3);
+
+    let mut buf = vec![0u8; 4];
+    let n = set
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 4);
+
+    let decoded: std::collections::HashSet<i32> =
+        Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, set);
 }
