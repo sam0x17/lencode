@@ -358,6 +358,28 @@ impl<V: Decode> Decode for collections::LinkedList<V> {
     }
 }
 
+impl<T: Encode> Encode for collections::BinaryHeap<T> {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        for value in self {
+            total_written += value.encode::<S>(writer)?;
+        }
+        Ok(total_written)
+    }
+}
+impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut heap = collections::BinaryHeap::with_capacity(len);
+        for _ in 0..len {
+            let value = T::decode::<S>(reader)?;
+            heap.push(value);
+        }
+        Ok(heap)
+    }
+}
+
 #[cfg(feature = "std")]
 impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
@@ -603,4 +625,25 @@ fn test_linked_list_encode_decode() {
     let decoded: collections::LinkedList<i32> =
         Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, list);
+}
+
+#[test]
+fn test_binary_heap_encode_decode() {
+    let mut heap = collections::BinaryHeap::new();
+    heap.push(1);
+    heap.push(2);
+    heap.push(3);
+
+    let mut buf = vec![0u8; 4];
+    let n = heap
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 4);
+
+    let decoded: collections::BinaryHeap<i32> =
+        Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(
+        decoded.clone().into_sorted_vec(),
+        heap.clone().into_sorted_vec()
+    );
 }
