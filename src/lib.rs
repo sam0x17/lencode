@@ -27,6 +27,10 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 pub trait Encode {
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize>;
+
+    fn encode_len<S: Scheme>(len: usize, writer: &mut impl Write) -> Result<usize> {
+        S::encode_varint(len as u64, writer)
+    }
 }
 
 pub trait Decode {
@@ -35,7 +39,7 @@ pub trait Decode {
         Self: Sized;
 
     fn decode_len<S: Scheme>(reader: &mut impl Read) -> Result<usize> {
-        S::decode_varint(reader)
+        S::decode_varint::<u64>(reader).map(|v| v as usize)
     }
 }
 
@@ -57,14 +61,33 @@ macro_rules! impl_encode_decode_unsigned_primitive {
 
                 #[inline(always)]
                 fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
-                    Ok(core::mem::size_of::<Self>())
+                    unimplemented!()
                 }
             }
         )*
     };
 }
 
-impl_encode_decode_unsigned_primitive!(u16, u32, u64, u128, usize);
+impl_encode_decode_unsigned_primitive!(u16, u32, u64, u128);
+
+impl Encode for usize {
+    #[inline(always)]
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        S::encode_varint(*self as u64, writer)
+    }
+}
+
+impl Decode for usize {
+    #[inline(always)]
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        S::decode_varint(reader).map(|v: u64| v as usize)
+    }
+
+    #[inline(always)]
+    fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
 
 macro_rules! impl_encode_decode_signed_primitive {
     ($($t:ty),*) => {
@@ -84,14 +107,33 @@ macro_rules! impl_encode_decode_signed_primitive {
 
                 #[inline(always)]
                 fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
-                    Ok(core::mem::size_of::<Self>())
+                    unimplemented!()
                 }
             }
         )*
     };
 }
 
-impl_encode_decode_signed_primitive!(i16, i32, i64, i128, isize);
+impl_encode_decode_signed_primitive!(i16, i32, i64, i128);
+
+impl Encode for isize {
+    #[inline(always)]
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        S::encode_varint_signed(*self as i64, writer)
+    }
+}
+
+impl Decode for isize {
+    #[inline(always)]
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        S::decode_varint_signed(reader).map(|v: i64| v as isize)
+    }
+
+    #[inline(always)]
+    fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
 
 impl<T: Decode> Decode for Vec<T> {
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
@@ -107,7 +149,7 @@ impl<T: Decode> Decode for Vec<T> {
 impl<T: Encode> Encode for Vec<T> {
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
-        total_written += S::encode_varint(self.len(), writer)?;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
         for item in self {
             total_written += item.encode::<S>(writer)?;
         }
