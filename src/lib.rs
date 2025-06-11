@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 
 pub mod bit_varint;
 pub mod io;
+pub mod tuples;
 pub mod varint;
 
 pub mod prelude {
@@ -339,6 +340,6 @@ fn test_encode_decode_arrays() {
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
     assert_eq!(n, 5);
-    let decoded: [u128; 5] = Decode::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
+    let decoded: [u128; 5] = Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, values);
 }
