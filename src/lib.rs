@@ -33,6 +33,10 @@ pub trait Decode {
     fn decode<S: Scheme>(reader: impl Read) -> Result<Self>
     where
         Self: Sized;
+
+    fn decode_len<S: Scheme>(reader: impl Read) -> Result<Option<usize>> {
+        Ok(Some(S::decode_varint(reader)?))
+    }
 }
 
 macro_rules! impl_encode_decode_unsigned_primitive {
@@ -49,6 +53,11 @@ macro_rules! impl_encode_decode_unsigned_primitive {
                 #[inline(always)]
                 fn decode<S: Scheme>(reader: impl Read) -> Result<Self> {
                     S::decode_varint(reader)
+                }
+
+                #[inline(always)]
+                fn decode_len<S: Scheme>(_reader: impl Read) -> Result<Option<usize>> {
+                    Ok(None)
                 }
             }
         )*
@@ -71,6 +80,11 @@ macro_rules! impl_encode_decode_signed_primitive {
                 #[inline(always)]
                 fn decode<S: Scheme>(reader: impl Read) -> Result<Self> {
                     S::decode_varint_signed(reader)
+                }
+
+                #[inline(always)]
+                fn decode_len<S: Scheme>(_reader: impl Read) -> Result<Option<usize>> {
+                    Ok(None)
                 }
             }
         )*
