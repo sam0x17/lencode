@@ -26,16 +26,16 @@ use prelude::*;
 pub type Result<T> = core::result::Result<T, Error>;
 
 pub trait Encode {
-    fn encode<S: Scheme>(&self, writer: impl Write) -> Result<usize>;
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize>;
 }
 
 pub trait Decode {
-    fn decode<S: Scheme>(reader: impl Read) -> Result<Self>
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self>
     where
         Self: Sized;
 
-    fn decode_len<S: Scheme>(reader: impl Read) -> Result<Option<usize>> {
-        Ok(Some(S::decode_varint(reader)?))
+    fn decode_len<S: Scheme>(reader: &mut impl Read) -> Result<usize> {
+        S::decode_varint(reader)
     }
 }
 
@@ -44,20 +44,20 @@ macro_rules! impl_encode_decode_unsigned_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode<S: Scheme>(&self, writer: impl Write) -> Result<usize> {
+                fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
                     S::encode_varint(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode<S: Scheme>(reader: impl Read) -> Result<Self> {
+                fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
                     S::decode_varint(reader)
                 }
 
                 #[inline(always)]
-                fn decode_len<S: Scheme>(_reader: impl Read) -> Result<Option<usize>> {
-                    Ok(None)
+                fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+                    Ok(core::mem::size_of::<Self>())
                 }
             }
         )*
@@ -71,20 +71,20 @@ macro_rules! impl_encode_decode_signed_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode<S: Scheme>(&self, writer: impl Write) -> Result<usize> {
+                fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
                     S::encode_varint_signed(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode<S: Scheme>(reader: impl Read) -> Result<Self> {
+                fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
                     S::decode_varint_signed(reader)
                 }
 
                 #[inline(always)]
-                fn decode_len<S: Scheme>(_reader: impl Read) -> Result<Option<usize>> {
-                    Ok(None)
+                fn decode_len<S: Scheme>(_reader: &mut impl Read) -> Result<usize> {
+                    Ok(core::mem::size_of::<Self>())
                 }
             }
         )*
@@ -93,13 +93,24 @@ macro_rules! impl_encode_decode_signed_primitive {
 
 impl_encode_decode_signed_primitive!(i16, i32, i64, i128, isize);
 
+impl<T: Decode> Decode for Vec<T> {
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut vec = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(T::decode::<S>(reader)?);
+        }
+        Ok(vec)
+    }
+}
+
 #[test]
 fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
         let val: i16 = i;
         let mut buf = [0u8; 3];
-        let n = i16::encode::<Lencode>(&val, Cursor::new(&mut buf[..])).unwrap();
-        let decoded = i16::decode::<Lencode>(Cursor::new(&buf[..n])).unwrap();
+        let n = i16::encode::<Lencode>(&val, &mut Cursor::new(&mut buf[..])).unwrap();
+        let decoded = i16::decode::<Lencode>(&mut Cursor::new(&buf[..n])).unwrap();
         assert_eq!(decoded, val);
     }
 }

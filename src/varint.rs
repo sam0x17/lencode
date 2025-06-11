@@ -10,18 +10,18 @@ pub mod lencode;
 /// A trait describing a serialization scheme for integer primitives.
 pub trait Scheme: Sized {
     /// Encodes an unsigned integer value using the scheme, writing to the given writer.
-    fn encode_varint<I: UnsignedInteger>(val: I, writer: impl Write) -> Result<usize>;
+    fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize>;
 
     /// Decodes an unsigned integer value using the scheme, reading from the given reader.
-    fn decode_varint<I: UnsignedInteger>(reader: impl Read) -> Result<I>;
+    fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I>;
 
     /// Encodes a signed integer value using the scheme, writing to the given writer.
-    fn encode_varint_signed<I: SignedInteger>(val: I, writer: impl Write) -> Result<usize> {
+    fn encode_varint_signed<I: SignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
         I::encode_int::<Self>(val, writer)
     }
 
     /// Decodes a signed integer value using the scheme, reading from the given reader.
-    fn decode_varint_signed<I: SignedInteger>(reader: impl Read) -> Result<I> {
+    fn decode_varint_signed<I: SignedInteger>(reader: &mut impl Read) -> Result<I> {
         I::decode_int::<Self>(reader)
     }
 }
@@ -88,10 +88,10 @@ pub trait UnsignedInteger:
     + ByteLength
     + ToSigned
 {
-    fn encode_uint<S: Scheme>(self, writer: impl Write) -> Result<usize> {
+    fn encode_uint<S: Scheme>(self, writer: &mut impl Write) -> Result<usize> {
         S::encode_varint(self, writer)
     }
-    fn decode_uint<S: Scheme>(reader: impl Read) -> Result<Self> {
+    fn decode_uint<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         S::decode_varint(reader)
     }
 }
@@ -217,12 +217,12 @@ pub trait SignedInteger:
     + ToUnsigned
 {
     /// Encodes this signed integer using the given [`Scheme`] and ZigZag encoding.
-    fn encode_int<S: Scheme>(self, writer: impl Write) -> Result<usize> {
+    fn encode_int<S: Scheme>(self, writer: &mut impl Write) -> Result<usize> {
         zigzag_encode(self).encode_uint::<S>(writer)
     }
 
     /// Decodes a signed integer using the given [`Scheme`] and ZigZag decoding.
-    fn decode_int<S: Scheme>(reader: impl Read) -> Result<Self> {
+    fn decode_int<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok(zigzag_decode(
             <Self as ToUnsigned>::Unsigned::decode_uint::<S>(reader)?,
         ))
