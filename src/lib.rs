@@ -160,6 +160,24 @@ impl Decode for bool {
     }
 }
 
+impl Encode for &[u8] {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        total_written += writer.write(self)?;
+        Ok(total_written)
+    }
+}
+
+impl Encode for &str {
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        total_written += writer.write(self.as_bytes())?;
+        Ok(total_written)
+    }
+}
+
 impl<T: Encode> Encode for Option<T> {
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         match self {

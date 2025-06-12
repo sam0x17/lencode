@@ -7,7 +7,7 @@ use crate::prelude::*;
 
 pub mod lencode;
 
-/// A trait describing a serialization scheme for integer primitives.
+/// A trait describing an encoding scheme
 pub trait Scheme: Sized {
     /// Encodes an unsigned integer value using the scheme, writing to the given writer.
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize>;
