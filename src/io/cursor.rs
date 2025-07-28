@@ -8,7 +8,7 @@ pub struct Cursor<T> {
 impl<T> Cursor<T> {
     /// Creates a new [`Cursor`] with the given stream.
     #[inline(always)]
-    pub fn new(stream: T) -> Self {
+    pub const fn new(stream: T) -> Self {
         Cursor {
             stream,
             position: 0,
@@ -17,7 +17,7 @@ impl<T> Cursor<T> {
 
     /// Returns the position of the cursor within the underlying stream.
     #[inline(always)]
-    pub fn position(&self) -> usize {
+    pub const fn position(&self) -> usize {
         self.position
     }
 }

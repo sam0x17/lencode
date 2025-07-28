@@ -20,7 +20,7 @@ pub enum Lencode {}
 
 /// Reconstruct an [`UnsignedInteger`] from a (mutable) byte slice in little-endian order.
 #[inline(always)]
-pub fn uint_from_le_bytes<I: UnsignedInteger>(le_bytes: &mut [u8]) -> I {
+pub const fn uint_from_le_bytes<I: UnsignedInteger>(le_bytes: &mut [u8]) -> I {
     let mut val: I = unsafe { core::mem::zeroed() };
     #[cfg(target_endian = "big")]
     reverse(le_bytes);
