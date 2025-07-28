@@ -266,7 +266,7 @@ fn zigzag_encode_decode_i32_roundtrip() {
     for &v in &values {
         let encoded = zigzag_encode(v);
         let decoded = zigzag_decode(encoded);
-        assert_eq!(decoded, v, "zigzag roundtrip failed for {}", v);
+        assert_eq!(decoded, v, "zigzag roundtrip failed for {v}");
     }
 }
 
@@ -276,7 +276,7 @@ fn zigzag_encode_decode_i64_roundtrip() {
     for &v in &values {
         let encoded = zigzag_encode(v);
         let decoded = zigzag_decode(encoded);
-        assert_eq!(decoded, v, "zigzag roundtrip failed for {}", v);
+        assert_eq!(decoded, v, "zigzag roundtrip failed for {v}");
     }
 }
 
@@ -294,7 +294,7 @@ fn zigzag_known_values() {
     ];
     for &(input, expected) in &cases {
         let encoded = zigzag_encode(input);
-        assert_eq!(encoded, expected, "zigzag_encode({})", input);
+        assert_eq!(encoded, expected, "zigzag_encode({input})");
     }
 }
 
@@ -305,7 +305,7 @@ fn zigzag_roundtrip_i16_all() {
         let encoded = zigzag_encode(val);
         let decoded = zigzag_decode(encoded);
         if decoded != val {
-            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+            panic!("FAIL: val={val} encoded={encoded} decoded={decoded}");
         }
         assert_eq!(decoded, val);
     }
@@ -314,7 +314,7 @@ fn zigzag_roundtrip_i16_all() {
         let encoded = zigzag_encode(val);
         let decoded = zigzag_decode(encoded);
         if decoded != val {
-            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+            panic!("FAIL: val={val} encoded={encoded} decoded={decoded}");
         }
         assert_eq!(decoded, val);
     }
@@ -327,7 +327,7 @@ fn zigzag_roundtrip_i32_all() {
         let encoded = zigzag_encode(val);
         let decoded = zigzag_decode(encoded);
         if decoded != val {
-            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+            panic!("FAIL: val={val} encoded={encoded} decoded={decoded}");
         }
         assert_eq!(decoded, val);
     }
@@ -336,7 +336,7 @@ fn zigzag_roundtrip_i32_all() {
         let encoded = zigzag_encode(val);
         let decoded = zigzag_decode(encoded);
         if decoded != val {
-            panic!("FAIL: val={} encoded={} decoded={}", val, encoded, decoded);
+            panic!("FAIL: val={val} encoded={encoded} decoded={decoded}");
         }
         assert_eq!(decoded, val);
     }

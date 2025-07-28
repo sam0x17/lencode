@@ -65,7 +65,7 @@ impl Scheme for Lencode {
         if first_byte & 0x80 == 0 {
             // Small integer: single byte, left-align in buffer (little endian)
             buf[0] = first_byte & 0x7F;
-            return Ok(uint_from_le_bytes::<I>(&mut buf[..size]));
+            Ok(uint_from_le_bytes::<I>(&mut buf[..size]))
         } else {
             // Large integer: read n bytes, left-align in buffer (little endian)
             let n = (first_byte & 0x7F) as usize;

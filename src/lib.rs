@@ -515,7 +515,7 @@ fn test_encode_decode_bools() {
 #[test]
 fn test_encode_decode_option() {
     let values = vec![Some(42), None, Some(100), None, Some(200)];
-    let mut buf = vec![0u8; 12];
+    let mut buf = [0u8; 12];
     let n = values
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -527,7 +527,7 @@ fn test_encode_decode_option() {
 #[test]
 fn test_encode_decode_arrays() {
     let values: [u128; 5] = [1, 2, 3, 4, 5];
-    let mut buf = vec![0u8; 5];
+    let mut buf = [0u8; 5];
     let n = values
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -543,7 +543,7 @@ fn test_tree_map_encode_decode() {
     map.insert(2, 5);
     map.insert(3, 6);
 
-    let mut buf = vec![0u8; 7];
+    let mut buf = [0u8; 7];
     let n = map
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -562,7 +562,7 @@ fn test_hash_map_encode_decode() {
     map.insert(2, 5);
     map.insert(3, 6);
 
-    let mut buf = vec![0u8; 7];
+    let mut buf = [0u8; 7];
     let n = map
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -581,7 +581,7 @@ fn test_hash_set_encode_decode() {
     set.insert(2);
     set.insert(3);
 
-    let mut buf = vec![0u8; 4];
+    let mut buf = [0u8; 4];
     let n = set
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -599,7 +599,7 @@ fn test_btree_set_encode_decode() {
     set.insert(2);
     set.insert(3);
 
-    let mut buf = vec![0u8; 4];
+    let mut buf = [0u8; 4];
     let n = set
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -617,7 +617,7 @@ fn test_vec_deque_encode_decode() {
     deque.push_back(2);
     deque.push_back(3);
 
-    let mut buf = vec![0u8; 4];
+    let mut buf = [0u8; 4];
     let n = deque
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -635,7 +635,7 @@ fn test_linked_list_encode_decode() {
     list.push_back(2);
     list.push_back(3);
 
-    let mut buf = vec![0u8; 4];
+    let mut buf = [0u8; 4];
     let n = list
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();
@@ -653,7 +653,7 @@ fn test_binary_heap_encode_decode() {
     heap.push(2);
     heap.push(3);
 
-    let mut buf = vec![0u8; 4];
+    let mut buf = [0u8; 4];
     let n = heap
         .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
         .unwrap();

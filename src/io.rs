@@ -41,7 +41,7 @@ impl core::fmt::Display for Error {
                 "Tried to read past the end of the reader's available data"
             ),
             #[cfg(feature = "std")]
-            Error::StdIo(e) => write!(f, "IO error: {}", e),
+            Error::StdIo(e) => write!(f, "IO error: {e}"),
             #[cfg(not(feature = "std"))]
             Error::StdIo(_) => write!(f, "IO error (shimmed)"),
         }
