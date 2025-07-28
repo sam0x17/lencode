@@ -17,8 +17,6 @@ use std::collections;
 
 pub mod bit_varint;
 pub mod io;
-#[cfg(feature = "serde")]
-pub mod serde;
 pub mod tuples;
 pub mod varint;
 

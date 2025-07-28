@@ -20,9 +20,8 @@ generic-array = "1"
 rayon = "1"
 
 [features]
-default = ["std", "serde"]
+default = ["std"]
 std = ["serde/std"]
-serde = ["dep:serde"]
 
 [profile.test]
 opt-level = 3
