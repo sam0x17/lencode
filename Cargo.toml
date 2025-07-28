@@ -34,5 +34,8 @@ lto = true
 opt-level = 3
 lto = true
 
+[lints.clippy]
+missing_const_for_fn = "warn"
+
 [workspace.lints.clippy]
 missing_const_for_fn = "warn"
