@@ -33,3 +33,6 @@ lto = true
 [profile.release]
 opt-level = 3
 lto = true
+
+[workspace.lints.clippy]
+missing_const_for_fn = "warn"
