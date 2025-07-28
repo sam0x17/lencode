@@ -21,10 +21,6 @@ pub enum Error {
     StdIo(std::io::Error),
     #[cfg(not(feature = "std"))]
     StdIo(StdIoShim),
-    #[cfg(feature = "serde")]
-    Serde(String),
-    #[cfg(not(feature = "serde"))]
-    Serde(String),
 }
 
 #[cfg(not(feature = "std"))]
@@ -48,12 +44,6 @@ impl core::fmt::Display for Error {
             Error::StdIo(e) => write!(f, "IO error: {}", e),
             #[cfg(not(feature = "std"))]
             Error::StdIo(_) => write!(f, "IO error (shimmed)"),
-            #[cfg(feature = "serde")]
-            Error::Serde(e) => write!(f, "Serde error: {}", e),
-            #[cfg(not(feature = "serde"))]
-            Error::Serde(_) => {
-                write!(f, "Serde error (shimmed)")
-            }
         }
     }
 }
@@ -86,9 +76,6 @@ impl From<Error> for std::io::Error {
             Error::StdIo(e) => e,
             Error::ReaderOutOfData => {
                 std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "End of data")
-            }
-            Error::Serde(e) => {
-                std::io::Error::new(std::io::ErrorKind::Other, format!("Serde error: {}", e))
             }
         }
     }

@@ -12,7 +12,6 @@ documentation = "https://docs.rs/lencode/latest/lencode/"
 [dependencies]
 bitvec = "1"
 endian-cast = "2"
-serde = { version = "1", optional = true, default-features = false, features = ["derive"] }
 typenum = "1"
 generic-array = "1"
 
@@ -21,7 +20,7 @@ rayon = "1"
 
 [features]
 default = ["std"]
-std = ["serde/std"]
+std = []
 
 [profile.test]
 opt-level = 3
