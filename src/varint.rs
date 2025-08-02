@@ -93,6 +93,7 @@ pub trait UnsignedInteger:
     + Min
     + ByteLength
     + ToSigned
+    + From<u8>
 {
     fn encode_uint<S: Scheme>(self, writer: &mut impl Write) -> Result<usize> {
         S::encode_varint(self, writer)
