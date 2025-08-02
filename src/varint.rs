@@ -95,9 +95,12 @@ pub trait UnsignedInteger:
     + ToSigned
     + From<u8>
 {
+    #[inline(always)]
     fn encode_uint<S: Scheme>(self, writer: &mut impl Write) -> Result<usize> {
         S::encode_varint(self, writer)
     }
+
+    #[inline(always)]
     fn decode_uint<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         S::decode_varint(reader)
     }
@@ -224,11 +227,13 @@ pub trait SignedInteger:
     + ToUnsigned
 {
     /// Encodes this signed integer using the given [`Scheme`] and ZigZag encoding.
+    #[inline(always)]
     fn encode_int<S: Scheme>(self, writer: &mut impl Write) -> Result<usize> {
         zigzag_encode(self).encode_uint::<S>(writer)
     }
 
     /// Decodes a signed integer using the given [`Scheme`] and ZigZag decoding.
+    #[inline(always)]
     fn decode_int<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok(zigzag_decode(
             <Self as ToUnsigned>::Unsigned::decode_uint::<S>(reader)?,
