@@ -3,13 +3,19 @@ use lencode::io::Cursor;
 use lencode::varint::{Scheme, lencode::Lencode};
 
 fn bench_encode(c: &mut Criterion) {
-    let mut buf = [0u8; 16];
     c.bench_function("lencode_encode_u64", |b| {
-        b.iter(|| {
-            let mut cursor = Cursor::new(&mut buf[..]);
-            let value: u64 = rand::random();
-            black_box(Lencode::encode_varint(value, &mut cursor).unwrap());
-        })
+        b.iter_batched(
+            || {
+                let buf = [0u8; 16];
+                let value: u64 = rand::random();
+                (buf, value)
+            },
+            |(mut buf, value)| {
+                let mut cursor = Cursor::new(&mut buf[..]);
+                black_box(Lencode::encode_varint(value, &mut cursor).unwrap());
+            },
+            criterion::BatchSize::SmallInput,
+        )
     });
 }
 
