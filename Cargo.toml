@@ -17,6 +17,7 @@ generic-array = "1"
 
 [dev-dependencies]
 rayon = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
 default = ["std"]
@@ -39,3 +40,7 @@ missing_const_for_fn = "warn"
 
 [workspace.lints.clippy]
 missing_const_for_fn = "warn"
+
+[[bench]]
+name = "encode_decode"
+harness = false
