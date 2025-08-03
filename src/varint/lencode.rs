@@ -41,11 +41,11 @@ impl Scheme for Lencode {
         // Strip trailing zeros for minimal encoding (little endian)
         let last_nonzero = le_bytes.iter().rposition(|&b| b != 0).unwrap_or(0);
         let minimal = &le_bytes[..=last_nonzero];
-        if minimal.len() == 1 && minimal[0] <= 127 {
+        let n = minimal.len();
+        if n == 1 && minimal[0] <= 127 {
             writer.write(&[minimal[0]])?;
             return Ok(1);
         }
-        let n = minimal.len();
         if n > 127 {
             return Err(Error::InvalidData);
         }
