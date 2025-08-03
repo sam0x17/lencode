@@ -39,7 +39,13 @@ impl Scheme for Lencode {
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
         let le_bytes = val.le_bytes();
         // Strip trailing zeros for minimal encoding (little endian)
-        let last_nonzero = le_bytes.iter().rposition(|&b| b != 0).unwrap_or(0);
+        let mut last_nonzero = 0;
+        for i in (0..le_bytes.len()).rev() {
+            if le_bytes[i] != 0 {
+                last_nonzero = i;
+                break;
+            }
+        }
         let minimal = &le_bytes[..=last_nonzero];
         let n = minimal.len();
         if n == 1 && minimal[0] <= 127 {
