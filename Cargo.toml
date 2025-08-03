@@ -17,6 +17,7 @@ generic-array = "1"
 
 [dev-dependencies]
 rayon = "1"
+rand = "0"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
