@@ -37,28 +37,18 @@ pub const fn uint_from_le_bytes<I: UnsignedInteger>(le_bytes: &mut [u8]) -> I {
 impl Scheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
-        // Fast path for zero and values <= 127 (common case)
-        if val == I::ZERO {
-            writer.write(&[0])?;
-            return Ok(1);
-        }
-
         let le_bytes = val.le_bytes();
-        // Fast path for small values (1 byte, <= 127)
-        if le_bytes[1..].iter().all(|&b| b == 0) && le_bytes[0] <= 127 {
-            writer.write(&[le_bytes[0]])?;
-            return Ok(1);
-        }
-
         // Strip trailing zeros for minimal encoding (little endian)
         let last_nonzero = le_bytes.iter().rposition(|&b| b != 0).unwrap_or(0);
         let minimal = &le_bytes[..=last_nonzero];
-
+        if minimal.len() == 1 && minimal[0] <= 127 {
+            writer.write(&[minimal[0]])?;
+            return Ok(1);
+        }
         let n = minimal.len();
         if n > 127 {
             return Err(Error::InvalidData);
         }
-
         let first_byte = 0x80 | (n as u8 & 0x7F);
         writer.write(&[first_byte])?;
         writer.write(minimal)?;
