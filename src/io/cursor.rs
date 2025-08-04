@@ -26,15 +26,27 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
     #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         let data = self.stream.as_ref();
-        if self.position >= data.len() {
+        let pos = self.position;
+        let len = data.len();
+
+        if pos >= len {
             return Err(Error::ReaderOutOfData);
         }
 
-        let bytes_to_read = data.len() - self.position;
+        let bytes_to_read = len - pos;
         let bytes_read = buf.len().min(bytes_to_read);
-        buf[..bytes_read].copy_from_slice(&data[self.position..self.position + bytes_read]);
-        self.position += bytes_read;
 
+        // SAFETY: `pos + bytes_read` is guaranteed to be within `data`
+        // and `buf` has at least `bytes_read` bytes.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data.as_ptr().add(pos),
+                buf.as_mut_ptr(),
+                bytes_read,
+            );
+        }
+
+        self.position = pos + bytes_read;
         Ok(bytes_read)
     }
 }
@@ -43,14 +55,27 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize, Error> {
         let data = self.stream.as_mut();
-        if self.position >= data.len() {
+        let pos = self.position;
+        let len = data.len();
+
+        if pos >= len {
             return Err(Error::WriterOutOfSpace);
         }
 
-        let bytes_to_write = data.len() - self.position;
+        let bytes_to_write = len - pos;
         let bytes_written = buf.len().min(bytes_to_write);
-        data[self.position..self.position + bytes_written].copy_from_slice(&buf[..bytes_written]);
-        self.position += bytes_written;
+
+        // SAFETY: `pos + bytes_written` is guaranteed to be within `data`
+        // and `buf` has at least `bytes_written` bytes.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                buf.as_ptr(),
+                data.as_mut_ptr().add(pos),
+                bytes_written,
+            );
+        }
+
+        self.position = pos + bytes_written;
 
         if bytes_written < buf.len() {
             return Err(Error::WriterOutOfSpace);
