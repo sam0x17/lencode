@@ -7,6 +7,7 @@ impl<T: Encode> Encode for (T,) {
 }
 
 impl<T: Decode> Decode for (T,) {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((T::decode::<S>(reader)?,))
     }
@@ -17,6 +18,7 @@ impl<T: Decode> Decode for (T,) {
 }
 
 impl<A: Encode, B: Encode> Encode for (A, B) {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -26,6 +28,7 @@ impl<A: Encode, B: Encode> Encode for (A, B) {
 }
 
 impl<A: Decode, B: Decode> Decode for (A, B) {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((A::decode::<S>(reader)?, B::decode::<S>(reader)?))
     }
@@ -36,6 +39,7 @@ impl<A: Decode, B: Decode> Decode for (A, B) {
 }
 
 impl<A: Encode, B: Encode, C: Encode> Encode for (A, B, C) {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -46,6 +50,7 @@ impl<A: Encode, B: Encode, C: Encode> Encode for (A, B, C) {
 }
 
 impl<A: Decode, B: Decode, C: Decode> Decode for (A, B, C) {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -60,6 +65,7 @@ impl<A: Decode, B: Decode, C: Decode> Decode for (A, B, C) {
 }
 
 impl<A: Encode, B: Encode, C: Encode, D: Encode> Encode for (A, B, C, D) {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -71,6 +77,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode> Encode for (A, B, C, D) {
 }
 
 impl<A: Decode, B: Decode, C: Decode, D: Decode> Decode for (A, B, C, D) {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -86,6 +93,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode> Decode for (A, B, C, D) {
 }
 
 impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode> Encode for (A, B, C, D, E) {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -98,6 +106,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode> Encode for (A, B, C,
 }
 
 impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode> Decode for (A, B, C, D, E) {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -116,6 +125,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode> Decode for (A, B, C,
 impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode> Encode
     for (A, B, C, D, E, F)
 {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -131,6 +141,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode> Encode
 impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode> Decode
     for (A, B, C, D, E, F)
 {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -150,6 +161,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode> Decode
 impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode> Encode
     for (A, B, C, D, E, F, G)
 {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -166,6 +178,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode
 impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode> Decode
     for (A, B, C, D, E, F, G)
 {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -186,6 +199,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode
 impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode, H: Encode> Encode
     for (A, B, C, D, E, F, G, H)
 {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -203,6 +217,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode
 impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode, H: Decode> Decode
     for (A, B, C, D, E, F, G, H)
 {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -233,6 +248,7 @@ impl<
     I: Encode,
 > Encode for (A, B, C, D, E, F, G, H, I)
 {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -260,6 +276,7 @@ impl<
     I: Decode,
 > Decode for (A, B, C, D, E, F, G, H, I)
 {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -292,6 +309,7 @@ impl<
     J: Encode,
 > Encode for (A, B, C, D, E, F, G, H, I, J)
 {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -321,6 +339,7 @@ impl<
     J: Decode,
 > Decode for (A, B, C, D, E, F, G, H, I, J)
 {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
@@ -355,6 +374,7 @@ impl<
     K: Encode,
 > Encode for (A, B, C, D, E, F, G, H, I, J, K)
 {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode::<S>(writer)?;
@@ -386,6 +406,7 @@ impl<
     K: Decode,
 > Decode for (A, B, C, D, E, F, G, H, I, J, K)
 {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         Ok((
             A::decode::<S>(reader)?,
