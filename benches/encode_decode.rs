@@ -6,12 +6,11 @@ fn bench_encode(c: &mut Criterion) {
     c.bench_function("lencode_encode_u64", |b| {
         b.iter_batched(
             || {
-                let buf = [0u8; 16];
+                let cursor = Cursor::new([0u8; 16]);
                 let value: u64 = rand::random();
-                (buf, value)
+                (cursor, value)
             },
-            |(mut buf, value)| {
-                let mut cursor = Cursor::new(&mut buf[..]);
+            |(mut cursor, value)| {
                 black_box(Lencode::encode_varint(value, &mut cursor).unwrap());
             },
             criterion::BatchSize::SmallInput,
@@ -25,14 +24,13 @@ fn bench_decode(c: &mut Criterion) {
             || {
                 let mut buf = [0u8; 16];
                 let value: u64 = rand::random();
-                let n = {
+                {
                     let mut cursor = Cursor::new(&mut buf[..]);
-                    Lencode::encode_varint(value, &mut cursor).unwrap()
-                };
-                (buf, n)
+                    Lencode::encode_varint(value, &mut cursor).unwrap();
+                }
+                Cursor::new(buf)
             },
-            |(buf, n)| {
-                let mut cursor = Cursor::new(&buf[..n]);
+            |mut cursor| {
                 black_box(Lencode::decode_varint::<u64>(&mut cursor).unwrap());
             },
             criterion::BatchSize::SmallInput,
