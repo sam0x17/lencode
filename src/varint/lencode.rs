@@ -63,23 +63,27 @@ impl Scheme for Lencode {
 
     #[inline(always)]
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I> {
-        let mut first = [0u8; 1];
-        reader.read(&mut first)?;
-        let first_byte = first[0];
-        let size = mem::size_of::<I>();
-        let mut buf = [0u8; 16];
+        let mut val: I = unsafe { core::mem::zeroed() };
+        let val_bytes = unsafe {
+            core::slice::from_raw_parts_mut(&mut val as *mut I as *mut u8, mem::size_of::<I>())
+        };
+        reader.read(&mut val_bytes[..1])?;
+        let first_byte = val_bytes[0];
+
         if first_byte & 0x80 == 0 {
             // Small integer: single byte, left-align in buffer (little endian)
-            buf[0] = first_byte & 0x7F;
-            Ok(uint_from_le_bytes::<I>(&mut buf[..size]))
+            val_bytes[0] = first_byte & 0x7F;
+            Ok(val)
         } else {
             // Large integer: read n bytes, left-align in buffer (little endian)
             let n = (first_byte & 0x7F) as usize;
-            if n == 0 || n > size {
+            if n == 0 || n > mem::size_of::<I>() {
                 return Err(Error::InvalidData);
             }
-            reader.read(&mut buf[..n])?;
-            Ok(uint_from_le_bytes::<I>(&mut buf[..size]))
+            reader.read(&mut val_bytes[..n])?;
+            #[cfg(target_endian = "big")]
+            reverse(val_bytes);
+            Ok(val)
         }
     }
 
