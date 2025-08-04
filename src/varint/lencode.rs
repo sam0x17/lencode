@@ -40,7 +40,9 @@ impl Scheme for Lencode {
         let le_bytes = val.le_bytes();
         // Strip trailing zeros for minimal encoding (little endian)
         let mut last_nonzero = 0;
-        for i in (0..le_bytes.len()).rev() {
+        let mut i = le_bytes.len();
+        while i > 0 {
+            i -= 1;
             if le_bytes[i] != 0 {
                 last_nonzero = i;
                 break;
