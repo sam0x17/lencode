@@ -33,21 +33,22 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
             return Err(Error::ReaderOutOfData);
         }
 
-        let bytes_to_read = len - pos;
-        let bytes_read = buf.len().min(bytes_to_read);
+        let buf_len = buf.len();
+        let available = len - pos;
+        let to_copy = if buf_len <= available { buf_len } else { available };
 
-        // SAFETY: `pos + bytes_read` is guaranteed to be within `data`
-        // and `buf` has at least `bytes_read` bytes.
+        // SAFETY: `pos + to_copy` is guaranteed to be within `data`
+        // and `buf` has at least `to_copy` bytes.
         unsafe {
             std::ptr::copy_nonoverlapping(
                 data.as_ptr().add(pos),
                 buf.as_mut_ptr(),
-                bytes_read,
+                to_copy,
             );
         }
 
-        self.position = pos + bytes_read;
-        Ok(bytes_read)
+        self.position = pos + to_copy;
+        Ok(to_copy)
     }
 }
 
@@ -62,25 +63,32 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
             return Err(Error::WriterOutOfSpace);
         }
 
-        let bytes_to_write = len - pos;
-        let bytes_written = buf.len().min(bytes_to_write);
+        let buf_len = buf.len();
+        let available = len - pos;
 
-        // SAFETY: `pos + bytes_written` is guaranteed to be within `data`
-        // and `buf` has at least `bytes_written` bytes.
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                buf.as_ptr(),
-                data.as_mut_ptr().add(pos),
-                bytes_written,
-            );
+        if buf_len <= available {
+            // SAFETY: `pos + buf_len` is within `data` and `buf` has `buf_len` bytes.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    buf.as_ptr(),
+                    data.as_mut_ptr().add(pos),
+                    buf_len,
+                );
+            }
+            self.position = pos + buf_len;
+            Ok(buf_len)
+        } else {
+            // SAFETY: `pos + available` is within `data` and `buf` has `available` bytes.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    buf.as_ptr(),
+                    data.as_mut_ptr().add(pos),
+                    available,
+                );
+            }
+            self.position = len;
+            Err(Error::WriterOutOfSpace)
         }
-
-        self.position = pos + bytes_written;
-
-        if bytes_written < buf.len() {
-            return Err(Error::WriterOutOfSpace);
-        }
-        Ok(bytes_written)
     }
 
     #[inline(always)]
