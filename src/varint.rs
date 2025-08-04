@@ -153,10 +153,12 @@ macro_rules! impl_to_unsigned_signed {
         $(
             impl ToUnsigned for $signed {
                 type Unsigned = $unsigned;
+                #[inline(always)]
                 fn to_unsigned(self) -> $unsigned { self as $unsigned }
             }
             impl ToSigned for $unsigned {
                 type Signed = $signed;
+                #[inline(always)]
                 fn to_signed(self) -> $signed { self as $signed }
             }
         )*
