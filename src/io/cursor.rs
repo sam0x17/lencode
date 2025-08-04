@@ -33,18 +33,27 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
             return Err(Error::ReaderOutOfData);
         }
 
-        let buf_len = buf.len();
         let available = len - pos;
-        let to_copy = if buf_len <= available { buf_len } else { available };
+        let buf_len = buf.len();
 
-        // SAFETY: `pos + to_copy` is guaranteed to be within `data`
-        // and `buf` has at least `to_copy` bytes.
+        if buf_len == 1 {
+            // SAFETY: `pos < len` so `data[pos]` is valid, and `buf` has length 1.
+            unsafe {
+                *buf.get_unchecked_mut(0) = *data.get_unchecked(pos);
+            }
+            self.position = pos + 1;
+            return Ok(1);
+        }
+
+        let to_copy = if buf_len <= available {
+            buf_len
+        } else {
+            available
+        };
+
+        // SAFETY: `pos + to_copy` is within `data` and `buf` has at least `to_copy` bytes.
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr().add(pos),
-                buf.as_mut_ptr(),
-                to_copy,
-            );
+            std::ptr::copy_nonoverlapping(data.as_ptr().add(pos), buf.as_mut_ptr(), to_copy);
         }
 
         self.position = pos + to_copy;
@@ -69,22 +78,14 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
         if buf_len <= available {
             // SAFETY: `pos + buf_len` is within `data` and `buf` has `buf_len` bytes.
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    buf.as_ptr(),
-                    data.as_mut_ptr().add(pos),
-                    buf_len,
-                );
+                std::ptr::copy_nonoverlapping(buf.as_ptr(), data.as_mut_ptr().add(pos), buf_len);
             }
             self.position = pos + buf_len;
             Ok(buf_len)
         } else {
             // SAFETY: `pos + available` is within `data` and `buf` has `available` bytes.
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    buf.as_ptr(),
-                    data.as_mut_ptr().add(pos),
-                    available,
-                );
+                std::ptr::copy_nonoverlapping(buf.as_ptr(), data.as_mut_ptr().add(pos), available);
             }
             self.position = len;
             Err(Error::WriterOutOfSpace)
