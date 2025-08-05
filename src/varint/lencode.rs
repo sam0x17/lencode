@@ -108,6 +108,40 @@ impl Scheme for Lencode {
     }
 }
 
+// when using lencode with u8 we bypass the integer encoding scheme so we don't waste bytes
+impl Encode for u8 {
+    #[inline(always)]
+    fn encode<Lencode>(&self, writer: &mut impl Write) -> Result<usize> {
+        writer.write(&[*self])
+    }
+}
+
+impl Decode for u8 {
+    #[inline(always)]
+    fn decode<Lencode>(reader: &mut impl Read) -> Result<Self> {
+        let mut buf = [0u8; 1];
+        reader.read(&mut buf)?;
+        Ok(buf[0])
+    }
+}
+
+// when using lencode with i8 we bypass the integer encoding scheme so we don't waste bytes
+impl Encode for i8 {
+    #[inline(always)]
+    fn encode<Lencode>(&self, writer: &mut impl Write) -> Result<usize> {
+        writer.write(&[*self as u8])
+    }
+}
+
+impl Decode for i8 {
+    #[inline(always)]
+    fn decode<Lencode>(reader: &mut impl Read) -> Result<Self> {
+        let mut buf = [0u8; 1];
+        reader.read(&mut buf)?;
+        Ok(buf[0] as i8)
+    }
+}
+
 #[test]
 fn test_lencode_u8_small() {
     let mut buf = [0u8; 1];
@@ -248,40 +282,6 @@ fn test_lencode_u128_multi_byte_values() {
             );
         }
         assert_eq!(decoded, val);
-    }
-}
-
-// when using lencode with u8 we bypass the integer encoding scheme so we don't waste bytes
-impl Encode for u8 {
-    #[inline(always)]
-    fn encode<Lencode>(&self, writer: &mut impl Write) -> Result<usize> {
-        writer.write(&[*self])
-    }
-}
-
-impl Decode for u8 {
-    #[inline(always)]
-    fn decode<Lencode>(reader: &mut impl Read) -> Result<Self> {
-        let mut buf = [0u8; 1];
-        reader.read(&mut buf)?;
-        Ok(buf[0])
-    }
-}
-
-// when using lencode with i8 we bypass the integer encoding scheme so we don't waste bytes
-impl Encode for i8 {
-    #[inline(always)]
-    fn encode<Lencode>(&self, writer: &mut impl Write) -> Result<usize> {
-        writer.write(&[*self as u8])
-    }
-}
-
-impl Decode for i8 {
-    #[inline(always)]
-    fn decode<Lencode>(reader: &mut impl Read) -> Result<Self> {
-        let mut buf = [0u8; 1];
-        reader.read(&mut buf)?;
-        Ok(buf[0] as i8)
     }
 }
 
