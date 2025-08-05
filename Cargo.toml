@@ -17,8 +17,9 @@ generic-array = "1"
 
 [dev-dependencies]
 rayon = "1"
-rand = "0"
+rand = "0.9"
 criterion = { version = "0.5", features = ["html_reports"] }
+borsh = "1.5"
 
 [features]
 default = ["std"]
