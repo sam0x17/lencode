@@ -180,6 +180,28 @@ impl Encode for &str {
     }
 }
 
+#[cfg(feature = "std")]
+impl Encode for String {
+    #[inline(always)]
+    fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
+        let mut total_written = 0;
+        total_written += Self::encode_len::<S>(self.len(), writer)?;
+        total_written += writer.write(self.as_bytes())?;
+        Ok(total_written)
+    }
+}
+
+#[cfg(feature = "std")]
+impl Decode for String {
+    #[inline(always)]
+    fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
+        let len = Self::decode_len::<S>(reader)?;
+        let mut buf = vec![0u8; len];
+        reader.read(&mut buf)?;
+        String::from_utf8(buf).map_err(|_| Error::InvalidData)
+    }
+}
+
 impl<T: Encode> Encode for Option<T> {
     #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
@@ -691,4 +713,26 @@ fn test_binary_heap_encode_decode() {
         decoded.clone().into_sorted_vec(),
         heap.clone().into_sorted_vec()
     );
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn test_string_encode_decode() {
+    let value = "Hello, world!";
+    let mut buf = [0u8; 14];
+    let n = value
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 14);
+    let decoded: String = Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, value);
+
+    let mut buf = [0u8; 14];
+    let value = "";
+    let n = value
+        .encode::<Lencode>(&mut Cursor::new(&mut buf[..]))
+        .unwrap();
+    assert_eq!(n, 1);
+    let decoded: String = Decode::decode::<Lencode>(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, value);
 }
