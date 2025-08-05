@@ -43,5 +43,5 @@ missing_const_for_fn = "warn"
 missing_const_for_fn = "warn"
 
 [[bench]]
-name = "encode_decode"
+name = "varint_encode_decode"
 harness = false
