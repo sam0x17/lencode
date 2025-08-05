@@ -143,12 +143,14 @@ impl Decode for isize {
 }
 
 impl Encode for bool {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         S::encode_bool(*self, writer)
     }
 }
 
 impl Decode for bool {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         S::decode_bool(reader)
     }
@@ -159,6 +161,7 @@ impl Decode for bool {
 }
 
 impl Encode for &[u8] {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -168,6 +171,7 @@ impl Encode for &[u8] {
 }
 
 impl Encode for &str {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -177,6 +181,7 @@ impl Encode for &str {
 }
 
 impl<T: Encode> Encode for Option<T> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         match self {
             Some(value) => {
@@ -191,6 +196,7 @@ impl<T: Encode> Encode for Option<T> {
 }
 
 impl<T: Decode> Decode for Option<T> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         if S::decode_bool(reader)? {
             Ok(Some(T::decode::<S>(reader)?))
@@ -205,6 +211,7 @@ impl<T: Decode> Decode for Option<T> {
 }
 
 impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         match self {
             Ok(value) => {
@@ -224,6 +231,7 @@ impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
 }
 
 impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         if S::decode_bool(reader)? {
             Ok(Ok(T::decode::<S>(reader)?))
@@ -238,6 +246,7 @@ impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
 }
 
 impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         for item in self {
@@ -248,6 +257,7 @@ impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
 }
 
 impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let mut arr = [T::default(); N];
         for item in &mut arr {
@@ -262,6 +272,7 @@ impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
 }
 
 impl<T: Decode> Decode for Vec<T> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut vec = Vec::with_capacity(len);
@@ -273,6 +284,7 @@ impl<T: Decode> Decode for Vec<T> {
 }
 
 impl<T: Encode> Encode for Vec<T> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -284,6 +296,7 @@ impl<T: Encode> Encode for Vec<T> {
 }
 
 impl<K: Encode, V: Encode> Encode for collections::BTreeMap<K, V> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -296,6 +309,7 @@ impl<K: Encode, V: Encode> Encode for collections::BTreeMap<K, V> {
 }
 
 impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut map = collections::BTreeMap::new();
@@ -309,6 +323,7 @@ impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
 }
 
 impl<V: Encode> Encode for collections::BTreeSet<V> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -320,6 +335,7 @@ impl<V: Encode> Encode for collections::BTreeSet<V> {
 }
 
 impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut set = collections::BTreeSet::new();
@@ -332,6 +348,7 @@ impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
 }
 
 impl<V: Encode> Encode for collections::VecDeque<V> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -343,6 +360,7 @@ impl<V: Encode> Encode for collections::VecDeque<V> {
 }
 
 impl<V: Decode> Decode for collections::VecDeque<V> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut deque = collections::VecDeque::with_capacity(len);
@@ -355,6 +373,7 @@ impl<V: Decode> Decode for collections::VecDeque<V> {
 }
 
 impl<V: Encode> Encode for collections::LinkedList<V> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -366,6 +385,7 @@ impl<V: Encode> Encode for collections::LinkedList<V> {
 }
 
 impl<V: Decode> Decode for collections::LinkedList<V> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut list = collections::LinkedList::new();
@@ -378,6 +398,7 @@ impl<V: Decode> Decode for collections::LinkedList<V> {
 }
 
 impl<T: Encode> Encode for collections::BinaryHeap<T> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -388,6 +409,7 @@ impl<T: Encode> Encode for collections::BinaryHeap<T> {
     }
 }
 impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut heap = collections::BinaryHeap::with_capacity(len);
@@ -401,6 +423,7 @@ impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
 
 #[cfg(feature = "std")]
 impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -414,6 +437,7 @@ impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
 
 #[cfg(feature = "std")]
 impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::HashMap<K, V> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut map = std::collections::HashMap::with_capacity(len);
@@ -428,6 +452,7 @@ impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::H
 
 #[cfg(feature = "std")]
 impl<V: Encode> Encode for std::collections::HashSet<V> {
+    #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len::<S>(self.len(), writer)?;
@@ -440,6 +465,7 @@ impl<V: Encode> Encode for std::collections::HashSet<V> {
 
 #[cfg(feature = "std")]
 impl<V: Decode + Eq + std::hash::Hash> Decode for std::collections::HashSet<V> {
+    #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
         let len = Self::decode_len::<S>(reader)?;
         let mut set = std::collections::HashSet::with_capacity(len);
