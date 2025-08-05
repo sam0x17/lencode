@@ -1,5 +1,5 @@
 use borsh::BorshSerialize;
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use lencode::io::Cursor;
 use lencode::io::Write;
 use rand::{Rng, rng};
@@ -14,7 +14,7 @@ fn benchmark_encoding(c: &mut Criterion) {
         .collect();
 
     // Benchmark Borsh encoding
-    group.bench_function("borsh", |b| {
+    group.bench_with_input(BenchmarkId::new("borsh", "vec"), &values, |b, values| {
         b.iter(|| {
             let mut buf = Vec::new();
             black_box(values.serialize(&mut buf).unwrap());
@@ -22,11 +22,11 @@ fn benchmark_encoding(c: &mut Criterion) {
     });
 
     // Benchmark Lencode encoding
-    group.bench_function("lencode", |b| {
+    group.bench_with_input(BenchmarkId::new("lencode", "vec"), &values, |b, values| {
         b.iter(|| {
             let mut buf = vec![0u8; 16 * values.len()];
             let mut cursor = Cursor::new(&mut buf);
-            for val in &values {
+            for val in values {
                 let bytes = val.to_le_bytes();
                 black_box(cursor.write(&bytes).unwrap());
             }
