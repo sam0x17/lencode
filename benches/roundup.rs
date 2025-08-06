@@ -16,23 +16,26 @@ fn benchmark_roundup(c: &mut Criterion) {
 
     // Benchmark Borsh encoding
     group.bench_with_input(BenchmarkId::new("borsh", "vec"), &values, |b, values| {
+        let mut buf = vec![0u8; 10000];
         b.iter(|| {
-            let mut buf = Vec::new();
             black_box(values.serialize(&mut buf).unwrap());
         });
     });
 
     // Benchmark Bincode encoding
     group.bench_with_input(BenchmarkId::new("bincode", "vec"), &values, |b, values| {
+        let mut buf = vec![0u8; 10000];
         b.iter(|| {
-            black_box(bincode::encode_to_vec(values, bincode::config::standard()).unwrap());
+            black_box(
+                bincode::encode_into_slice(values, &mut buf, bincode::config::standard()).unwrap(),
+            );
         });
     });
 
     // Benchmark Lencode encoding
     group.bench_with_input(BenchmarkId::new("lencode", "vec"), &values, |b, values| {
+        let mut buf = vec![0u8; 10000];
         b.iter(|| {
-            let mut buf = vec![0u8; 510];
             let mut cursor = Cursor::new(&mut buf);
             black_box(values.encode::<Lencode>(&mut cursor).unwrap());
         });
