@@ -1,42 +1,44 @@
-use borsh::BorshSerialize;
+#![cfg(feature = "std")]
+
+use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use lencode::Decode;
 use lencode::varint::lencode::Lencode;
-use lencode::{Encode, io::Cursor};
+use lencode::{Decode, Encode};
 use rand::{Rng, rng};
+use std::io::Cursor;
 
 fn benchmark_roundup(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding_vec");
 
     // Generate random u128 values from random u32 values
     let mut rng = rng();
-    let values: Vec<u128> = (0..10)
-        .map(|_| rng.random_range(0..u16::MAX) as u128)
+    let values: Vec<u128> = (0..10000)
+        .map(|_| rng.random_range(0..u32::MAX) as u128)
         .collect();
 
     // Benchmark Borsh encoding
     group.bench_with_input(BenchmarkId::new("borsh", "vec"), &values, |b, values| {
-        let mut buf = vec![0u8; 1000];
+        let mut cursor = Cursor::new(vec![0u8; values.len() * 32]);
         b.iter(|| {
-            black_box(values.serialize(&mut buf).unwrap());
+            black_box(values.serialize(&mut cursor).unwrap());
         });
     });
 
     // Benchmark Bincode encoding
     group.bench_with_input(BenchmarkId::new("bincode", "vec"), &values, |b, values| {
-        let mut buf = vec![0u8; 1000];
+        let mut cursor = Cursor::new(vec![0u8; values.len() * 32]);
         b.iter(|| {
             black_box(
-                bincode::encode_into_slice(values, &mut buf, bincode::config::standard()).unwrap(),
+                bincode::encode_into_std_write(values, &mut cursor, bincode::config::standard())
+                    .unwrap(),
             );
         });
     });
 
     // Benchmark Lencode encoding
     group.bench_with_input(BenchmarkId::new("lencode", "vec"), &values, |b, values| {
-        let mut buf = vec![0u8; 1000];
+        let mut cursor = Cursor::new(vec![0u8; values.len() * 32]);
         b.iter(|| {
-            let mut cursor = Cursor::new(&mut buf);
             black_box(values.encode::<Lencode>(&mut cursor).unwrap());
         });
     });
@@ -45,19 +47,17 @@ fn benchmark_roundup(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("decoding_vec");
 
-    // Benchmark Borsh encoding
+    // Benchmark Borsh decoding
     group.bench_with_input(BenchmarkId::new("borsh", "vec"), &values, |b, values| {
         b.iter_batched(
             || {
-                let mut buf = Vec::new();
-                values.serialize(&mut buf).unwrap();
-                buf
+                let mut cursor = Cursor::new(Vec::new());
+                values.serialize(&mut cursor).unwrap();
+                cursor.into_inner()
             },
             |buf| {
-                black_box(
-                    <Vec<u128> as borsh::BorshDeserialize>::deserialize(&mut buf.as_slice())
-                        .unwrap(),
-                );
+                let mut cursor = Cursor::new(buf);
+                black_box(Vec::<u128>::deserialize_reader(&mut cursor).unwrap());
             },
             criterion::BatchSize::SmallInput,
         );
@@ -66,15 +66,20 @@ fn benchmark_roundup(c: &mut Criterion) {
     // Benchmark Bincode decoding
     group.bench_with_input(BenchmarkId::new("bincode", "vec"), &values, |b, values| {
         b.iter_batched(
-            || bincode::encode_to_vec(values, bincode::config::standard()).unwrap(),
+            || {
+                let mut cursor = Cursor::new(Vec::new());
+                bincode::encode_into_std_write(values, &mut cursor, bincode::config::standard())
+                    .unwrap();
+                cursor.into_inner()
+            },
             |buf| {
+                let mut cursor = Cursor::new(buf);
                 black_box(
-                    bincode::decode_from_slice::<Vec<u128>, bincode::config::Configuration>(
-                        &buf,
+                    bincode::decode_from_std_read::<Vec<u128>, _, _>(
+                        &mut cursor,
                         bincode::config::standard(),
                     )
-                    .unwrap()
-                    .0,
+                    .unwrap(),
                 );
             },
             criterion::BatchSize::SmallInput,
@@ -85,13 +90,12 @@ fn benchmark_roundup(c: &mut Criterion) {
     group.bench_with_input(BenchmarkId::new("lencode", "vec"), &values, |b, values| {
         b.iter_batched(
             || {
-                let mut buf = vec![0u8; 510];
-                let mut cursor = Cursor::new(&mut buf);
+                let mut cursor = Cursor::new(Vec::new());
                 values.encode::<Lencode>(&mut cursor).unwrap();
-                buf
+                cursor.into_inner()
             },
             |buf| {
-                let mut cursor = Cursor::new(&buf);
+                let mut cursor = Cursor::new(buf);
                 black_box(Vec::<u128>::decode::<Lencode>(&mut cursor).unwrap());
             },
             criterion::BatchSize::SmallInput,
