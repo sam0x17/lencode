@@ -13,7 +13,7 @@ fn benchmark_roundup(c: &mut Criterion) {
     // Generate random u128 values from random u32 values
     let mut rng = rng();
     let values: Vec<u128> = (0..10000)
-        .map(|_| rng.random_range(0..u32::MAX) as u128)
+        .map(|_| rng.random_range(0..u8::MAX) as u128)
         .collect();
 
     // Benchmark Borsh encoding
