@@ -20,6 +20,7 @@ rayon = "1"
 rand = "0.9"
 criterion = { version = "0.5", features = ["html_reports"] }
 borsh = "1.5"
+bincode = { version = "2", features = ["serde"] }
 
 [features]
 default = ["std"]

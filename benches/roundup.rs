@@ -21,6 +21,13 @@ fn benchmark_encoding(c: &mut Criterion) {
         });
     });
 
+    // Benchmark Bincode encoding
+    group.bench_with_input(BenchmarkId::new("bincode", "vec"), &values, |b, values| {
+        b.iter(|| {
+            black_box(bincode::encode_to_vec(values, bincode::config::standard()).unwrap());
+        });
+    });
+
     // Benchmark Lencode encoding
     group.bench_with_input(BenchmarkId::new("lencode", "vec"), &values, |b, values| {
         b.iter(|| {
