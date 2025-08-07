@@ -65,7 +65,7 @@ impl Scheme for Lencode {
 
     #[inline(always)]
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I> {
-        let mut val: I = unsafe { core::mem::zeroed() };
+        let mut val: I = I::ZERO;
         let val_bytes = unsafe {
             core::slice::from_raw_parts_mut(&mut val as *mut I as *mut u8, mem::size_of::<I>())
         };
