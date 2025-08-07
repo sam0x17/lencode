@@ -96,14 +96,12 @@ impl Scheme for Lencode {
 
     #[inline(always)]
     fn decode_bool(reader: &mut impl Read) -> Result<bool> {
-        let mut buf = [0u8; 1];
-        reader.read(&mut buf)?;
-        if buf[0] == 0 {
-            Ok(false)
-        } else if buf[0] == 1 {
-            Ok(true)
-        } else {
-            Err(Error::InvalidData)
+        let mut byte = 0u8;
+        reader.read(core::slice::from_mut(&mut byte))?;
+        match byte {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(Error::InvalidData),
         }
     }
 }
