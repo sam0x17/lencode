@@ -54,9 +54,9 @@ impl Scheme for Lencode {
             writer.write(&[minimal[0]])?;
             return Ok(1);
         }
-        if n > 127 {
-            return Err(Error::InvalidData);
-        }
+        // if n > 127 {
+        //     return Err(Error::InvalidData);
+        // }
         let first_byte = 0x80 | (n as u8 & 0x7F);
         writer.write(&[first_byte])?;
         writer.write(minimal)?;
@@ -79,9 +79,9 @@ impl Scheme for Lencode {
         } else {
             // Large integer: read n bytes, left-align in buffer (little endian)
             let n = (first_byte & 0x7F) as usize;
-            if n == 0 || n > mem::size_of::<I>() {
-                return Err(Error::InvalidData);
-            }
+            // if n == 0 || n > mem::size_of::<I>() {
+            //     return Err(Error::InvalidData);
+            // }
             reader.read(&mut val_bytes[..n])?;
             #[cfg(target_endian = "big")]
             reverse(val_bytes);
