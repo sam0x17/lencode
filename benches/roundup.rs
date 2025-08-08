@@ -4,15 +4,27 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use lencode::varint::lencode::Lencode;
 use lencode::{Decode, Encode};
+use rand::seq::SliceRandom;
 use rand::{Rng, rng};
 use std::io::Cursor;
 
 fn benchmark_roundup(c: &mut Criterion) {
     let mut group = c.benchmark_group("encoding_vec");
 
-    // Generate random u128 values from random u32 values
-    let mut rng = rng();
-    let values: Vec<u128> = (0..10000).map(|_| rng.random()).collect();
+    // generate a fair dataset of random u128 values
+    let mut rng1 = rng();
+    let mut rng2 = rng();
+    let mut rng3 = rng();
+    let mut rng4 = rng();
+    let mut values: Vec<u128> = (0..1000)
+        .map(|_| rng1.random_range(0..u8::MAX) as u128)
+        .chain((0..1000).map(|_| rng2.random_range(0..u32::MAX) as u128))
+        .chain((0..1000).map(|_| rng3.random_range(0..u64::MAX) as u128))
+        .chain((0..1000).map(|_| rng4.random_range(0..u128::MAX)))
+        .chain(0..1000)
+        .map(|_| 0 as u128)
+        .collect();
+    values.shuffle(&mut rand::rng());
 
     // Benchmark Borsh encoding
     group.bench_with_input(BenchmarkId::new("borsh", "vec"), &values, |b, values| {
