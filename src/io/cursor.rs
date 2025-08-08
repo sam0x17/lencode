@@ -53,7 +53,7 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
 
         // SAFETY: `pos + to_copy` is within `data` and `buf` has at least `to_copy` bytes.
         unsafe {
-            std::ptr::copy_nonoverlapping(data.as_ptr().add(pos), buf.as_mut_ptr(), to_copy);
+            core::ptr::copy_nonoverlapping(data.as_ptr().add(pos), buf.as_mut_ptr(), to_copy);
         }
 
         self.position = pos + to_copy;
@@ -78,14 +78,14 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
         if buf_len <= available {
             // SAFETY: `pos + buf_len` is within `data` and `buf` has `buf_len` bytes.
             unsafe {
-                std::ptr::copy_nonoverlapping(buf.as_ptr(), data.as_mut_ptr().add(pos), buf_len);
+                core::ptr::copy_nonoverlapping(buf.as_ptr(), data.as_mut_ptr().add(pos), buf_len);
             }
             self.position = pos + buf_len;
             Ok(buf_len)
         } else {
             // SAFETY: `pos + available` is within `data` and `buf` has `available` bytes.
             unsafe {
-                std::ptr::copy_nonoverlapping(buf.as_ptr(), data.as_mut_ptr().add(pos), available);
+                core::ptr::copy_nonoverlapping(buf.as_ptr(), data.as_mut_ptr().add(pos), available);
             }
             self.position = len;
             Err(Error::WriterOutOfSpace)

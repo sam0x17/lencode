@@ -23,7 +23,7 @@ borsh = "1.5"
 bincode = { version = "2", features = ["serde"] }
 
 [features]
-default = ["std"]
+default = []
 std = []
 
 [profile.test]
@@ -50,4 +50,5 @@ harness = false
 
 [[bench]]
 name = "roundup"
+required-features = ["std"]
 harness = false

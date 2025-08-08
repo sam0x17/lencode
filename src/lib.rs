@@ -8,7 +8,7 @@ use alloc::collections;
 use alloc::format;
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
-#[cfg(all(test, not(feature = "std")))]
+#[cfg(not(feature = "std"))]
 use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
@@ -180,7 +180,6 @@ impl Encode for &str {
     }
 }
 
-#[cfg(feature = "std")]
 impl Encode for String {
     #[inline(always)]
     fn encode<S: Scheme>(&self, writer: &mut impl Write) -> Result<usize> {
@@ -191,7 +190,6 @@ impl Encode for String {
     }
 }
 
-#[cfg(feature = "std")]
 impl Decode for String {
     #[inline(always)]
     fn decode<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
