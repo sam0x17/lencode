@@ -23,7 +23,7 @@ borsh = "1.5"
 bincode = { version = "2", features = ["serde"] }
 
 [features]
-default = []
+default = ["std"]
 std = []
 
 [profile.test]
