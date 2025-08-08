@@ -37,7 +37,7 @@ pub const fn uint_from_le_bytes<I: UnsignedInteger>(le_bytes: &mut [u8]) -> I {
 impl Scheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
-        let mask = I::MAX_VALUE - I::from(127);
+        let mask = I::MAX_VALUE - I::ONE_HUNDRED_TWENTY_SEVEN;
         if (val & mask) == I::ZERO {
             let byte = val.le_bytes()[0];
             writer.write(&[byte])?;

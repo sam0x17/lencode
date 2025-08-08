@@ -44,6 +44,11 @@ pub trait Zero {
     const ZERO: Self;
 }
 
+pub trait OneHundredTwentySeven {
+    /// The value 127 for this type.
+    const ONE_HUNDRED_TWENTY_SEVEN: Self;
+}
+
 /// Trait for types that have a constant representing the maximum value.
 pub trait Max {
     /// The maximum value for this type.
@@ -89,6 +94,7 @@ pub trait UnsignedInteger:
     + Endianness
     + One
     + Zero
+    + OneHundredTwentySeven
     + Max
     + Min
     + ByteLength
@@ -115,6 +121,9 @@ macro_rules! impl_unsigned_integer {
             }
             impl $crate::varint::Zero for $t {
                 const ZERO: Self = 0;
+            }
+            impl $crate::varint::OneHundredTwentySeven for $t {
+                const ONE_HUNDRED_TWENTY_SEVEN: Self = 127;
             }
             impl $crate::varint::Max for $t {
                 const MAX_VALUE: Self = <$t>::MAX;
