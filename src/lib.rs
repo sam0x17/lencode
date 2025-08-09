@@ -20,6 +20,9 @@ pub mod io;
 pub mod tuples;
 pub mod varint;
 
+#[cfg(feature = "solana")]
+pub mod solana;
+
 pub mod prelude {
     pub use super::*;
     pub use crate::bit_varint::*;

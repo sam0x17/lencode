@@ -14,6 +14,7 @@ bitvec = "1"
 endian-cast = "2"
 typenum = "1"
 generic-array = "1"
+solana-sdk = { version = "2", optional = true }
 
 [dev-dependencies]
 rayon = "1"
@@ -23,8 +24,9 @@ borsh = "1.5"
 bincode = { version = "2", features = ["serde"] }
 
 [features]
-default = ["std"]
+default = []
 std = []
+solana = ["std", "dep:solana-sdk"]
 
 [profile.test]
 opt-level = 3
