@@ -102,7 +102,6 @@ pub trait UnsignedInteger:
     + Max
     + Min
     + ByteLength
-    + ToSigned
 {
     #[inline(always)]
     fn encode_uint(self, writer: &mut impl Write) -> Result<usize> {
