@@ -17,12 +17,12 @@ pub trait Scheme: Sized {
 
     /// Encodes a signed integer value using the scheme, writing to the given writer.
     fn encode_varint_signed<I: SignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
-        I::encode_int::<Self>(val, writer)
+        I::encode_int(val, writer)
     }
 
     /// Decodes a signed integer value using the scheme, reading from the given reader.
     fn decode_varint_signed<I: SignedInteger>(reader: &mut impl Read) -> Result<I> {
-        I::decode_int::<Self>(reader)
+        I::decode_int(reader)
     }
 
     /// Encodes a boolean value using the scheme, writing to the given writer.
@@ -102,13 +102,13 @@ pub trait UnsignedInteger:
     + From<u8>
 {
     #[inline(always)]
-    fn encode_uint<S: Scheme>(self, writer: &mut impl Write) -> Result<usize> {
-        S::encode_varint(self, writer)
+    fn encode_uint(self, writer: &mut impl Write) -> Result<usize> {
+        Lencode::encode_varint(self, writer)
     }
 
     #[inline(always)]
-    fn decode_uint<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
-        S::decode_varint(reader)
+    fn decode_uint(reader: &mut impl Read) -> Result<Self> {
+        Lencode::decode_varint(reader)
     }
 }
 
@@ -239,16 +239,16 @@ pub trait SignedInteger:
 {
     /// Encodes this signed integer using the given [`Scheme`] and ZigZag encoding.
     #[inline(always)]
-    fn encode_int<S: Scheme>(self, writer: &mut impl Write) -> Result<usize> {
-        zigzag_encode(self).encode_uint::<S>(writer)
+    fn encode_int(self, writer: &mut impl Write) -> Result<usize> {
+        zigzag_encode(self).encode_uint(writer)
     }
 
     /// Decodes a signed integer using the given [`Scheme`] and ZigZag decoding.
     #[inline(always)]
-    fn decode_int<S: Scheme>(reader: &mut impl Read) -> Result<Self> {
-        Ok(zigzag_decode(
-            <Self as ToUnsigned>::Unsigned::decode_uint::<S>(reader)?,
-        ))
+    fn decode_int(reader: &mut impl Read) -> Result<Self> {
+        Ok(zigzag_decode(<Self as ToUnsigned>::Unsigned::decode_uint(
+            reader,
+        )?))
     }
 }
 

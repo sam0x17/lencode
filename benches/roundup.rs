@@ -2,7 +2,6 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use lencode::varint::lencode::Lencode;
 use lencode::{Decode, Encode};
 use rand::seq::SliceRandom;
 use rand::{Rng, rng};
@@ -49,7 +48,7 @@ fn benchmark_roundup(c: &mut Criterion) {
     group.bench_with_input(BenchmarkId::new("lencode", "vec"), &values, |b, values| {
         let mut cursor = Cursor::new(vec![0u8; values.len() * 32]);
         b.iter(|| {
-            black_box(values.encode::<Lencode>(&mut cursor).unwrap());
+            black_box(values.encode(&mut cursor).unwrap());
         });
     });
 
@@ -101,12 +100,12 @@ fn benchmark_roundup(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut cursor = Cursor::new(Vec::new());
-                values.encode::<Lencode>(&mut cursor).unwrap();
+                values.encode(&mut cursor).unwrap();
                 cursor.into_inner()
             },
             |buf| {
                 let mut cursor = Cursor::new(buf);
-                black_box(Vec::<u128>::decode::<Lencode>(&mut cursor).unwrap());
+                black_box(Vec::<u128>::decode(&mut cursor).unwrap());
             },
             criterion::BatchSize::SmallInput,
         );
