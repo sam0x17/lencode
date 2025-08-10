@@ -18,6 +18,16 @@ use core::mem;
 /// used in practice.
 pub enum Lencode {}
 
+#[inline(always)]
+pub fn encode<T: Encode>(value: &T, writer: &mut impl Write) -> Result<usize> {
+    value.encode::<Lencode>(writer)
+}
+
+#[inline(always)]
+pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
+    T::decode::<Lencode>(reader)
+}
+
 impl Scheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
@@ -277,9 +287,9 @@ fn test_encode_decode_lencode_i8_all() {
     for i in -128..=127 {
         let val: i8 = i;
         let mut buf = [0u8; 1];
-        let n = i8::encode::<Lencode>(&val, &mut Cursor::new(&mut buf[..])).unwrap();
+        let n = encode(&val, &mut Cursor::new(&mut buf[..])).unwrap();
         assert_eq!(n, 1);
-        let decoded = i8::decode::<Lencode>(&mut Cursor::new(&buf)).unwrap();
+        let decoded: i8 = decode(&mut Cursor::new(&buf)).unwrap();
         assert_eq!(decoded, val);
     }
 }
