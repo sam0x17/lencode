@@ -8,6 +8,9 @@ use crate::prelude::*;
 mod lencode;
 pub use lencode::*;
 
+use newt_hype::*;
+base_newtype!(CustomPrimitiveBase);
+
 /// A trait describing an encoding scheme
 pub trait Scheme: Sized {
     /// Encodes an unsigned integer value using the scheme, writing to the given writer.
@@ -100,7 +103,6 @@ pub trait UnsignedInteger:
     + Min
     + ByteLength
     + ToSigned
-    + From<u8>
 {
     #[inline(always)]
     fn encode_uint(self, writer: &mut impl Write) -> Result<usize> {
@@ -158,6 +160,7 @@ pub trait ToSigned {
     fn to_signed(self) -> Self::Signed;
 }
 
+#[macro_export]
 macro_rules! impl_to_unsigned_signed {
     ($(($signed:ty, $unsigned:ty)),*) => {
         $(

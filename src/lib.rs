@@ -15,6 +15,7 @@ use std::collections;
 
 pub mod io;
 pub mod tuples;
+pub mod u256;
 pub mod varint;
 
 #[cfg(feature = "solana")]
@@ -23,6 +24,7 @@ pub mod solana;
 pub mod prelude {
     pub use super::*;
     pub use crate::io::*;
+    pub use crate::u256::*;
     pub use crate::varint::*;
 }
 
