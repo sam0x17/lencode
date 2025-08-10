@@ -18,22 +18,6 @@ use core::mem;
 /// used in practice.
 pub enum Lencode {}
 
-/// Reconstruct an [`UnsignedInteger`] from a (mutable) byte slice in little-endian order.
-#[inline(always)]
-pub const fn uint_from_le_bytes<I: UnsignedInteger>(le_bytes: &mut [u8]) -> I {
-    let mut val: I = unsafe { core::mem::zeroed() };
-    #[cfg(target_endian = "big")]
-    reverse(le_bytes);
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            le_bytes.as_ptr(),
-            &mut val as *mut I as *mut u8,
-            le_bytes.len(),
-        );
-    }
-    val
-}
-
 impl Scheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
