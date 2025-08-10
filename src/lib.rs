@@ -15,7 +15,6 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::collections;
 
-pub mod bit_varint;
 pub mod io;
 pub mod tuples;
 pub mod varint;
@@ -25,7 +24,6 @@ pub mod solana;
 
 pub mod prelude {
     pub use super::*;
-    pub use crate::bit_varint::*;
     pub use crate::io::*;
     pub use crate::varint::lencode::*;
     pub use crate::varint::*;
