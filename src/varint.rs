@@ -5,7 +5,8 @@ use endian_cast::Endianness;
 
 use crate::prelude::*;
 
-pub mod lencode;
+mod lencode;
+pub use lencode::*;
 
 /// A trait describing an encoding scheme
 pub trait Scheme: Sized {

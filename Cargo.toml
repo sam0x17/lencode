@@ -54,3 +54,8 @@ harness = false
 name = "roundup"
 required-features = ["std"]
 harness = false
+
+[[bench]]
+name = "solana_bench"
+required-features = ["solana"]
+harness = false

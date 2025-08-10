@@ -1,6 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use lencode::io::Cursor;
-use lencode::varint::{Scheme, lencode::Lencode};
+use lencode::prelude::*;
 
 fn bench_encode(c: &mut Criterion) {
     c.bench_function("lencode_encode_u64", |b| {

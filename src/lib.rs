@@ -23,7 +23,6 @@ pub mod solana;
 pub mod prelude {
     pub use super::*;
     pub use crate::io::*;
-    pub use crate::varint::lencode::*;
     pub use crate::varint::*;
 }
 
