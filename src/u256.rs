@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-use core::ops::*;
+use core::ops::{Shl, ShlAssign, Shr, ShrAssign};
 use endian_cast::Endianness;
 use ruint::aliases::U256 as U256Base;
 use ruint::uint;
@@ -32,6 +32,42 @@ impl ByteLength for U256 {
 
 impl Endianness for U256 {
     type N = generic_array::typenum::U32;
+}
+
+// The generated newtype does not provide implementations for shifting by
+// primitive integers.  Our [`UnsignedInteger`] trait requires support for
+// shifting by `u8`, so we manually forward these operations to the underlying
+// `ruint` type.
+impl Shl<u8> for U256 {
+    type Output = Self;
+
+    #[inline(always)]
+    fn shl(self, rhs: u8) -> Self::Output {
+        Self::new(self.0 << rhs)
+    }
+}
+
+impl ShlAssign<u8> for U256 {
+    #[inline(always)]
+    fn shl_assign(&mut self, rhs: u8) {
+        self.0 <<= rhs;
+    }
+}
+
+impl Shr<u8> for U256 {
+    type Output = Self;
+
+    #[inline(always)]
+    fn shr(self, rhs: u8) -> Self::Output {
+        Self::new(self.0 >> rhs)
+    }
+}
+
+impl ShrAssign<u8> for U256 {
+    #[inline(always)]
+    fn shr_assign(&mut self, rhs: u8) {
+        self.0 >>= rhs;
+    }
 }
 
 impl UnsignedInteger for U256 {}

@@ -30,7 +30,11 @@ pub mod prelude {
 
 use prelude::*;
 
-pub type Result<T> = core::result::Result<T, Error>;
+// Provide a Result alias that defaults to this crate's [`Error`] type while
+// still allowing callers (and macros) to specify a different error type when
+// needed. This avoids clashing with macros that expect the standard `Result`
+// alias to accept two generic parameters.
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 pub trait Encode {
     fn encode(&self, writer: &mut impl Write) -> Result<usize>;
