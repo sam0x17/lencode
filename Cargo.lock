@@ -1355,9 +1355,9 @@ dependencies = [
 
 [[package]]
 name = "newt-hype"
-version = "0.1.4"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37329a7df757a0072bb50a6fac3ae2d07e72928f5a08fed381a650dc240c5b6f"
+checksum = "5c8b7b69b0eafaa88ec8dc9fe7c3860af0a147517e5207cfbd0ecd21cd7cde18"
 
 [[package]]
 name = "num-bigint"

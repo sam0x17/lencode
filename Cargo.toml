@@ -16,7 +16,7 @@ typenum = "1"
 generic-array = "1"
 solana-sdk = { version = "2", optional = true }
 ruint = { version = "1" }
-newt-hype = { version = "0.1", default-features = false }
+newt-hype = { version = "0.2", default-features = false }
 
 [dev-dependencies]
 rayon = "1"
