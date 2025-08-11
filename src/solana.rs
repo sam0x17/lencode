@@ -1,6 +1,7 @@
 use solana_sdk::{
     hash::{HASH_BYTES, Hash},
     pubkey::Pubkey,
+    signature::{SIGNATURE_BYTES, Signature},
     transaction::SanitizedTransaction,
 };
 
@@ -32,6 +33,19 @@ impl Decode for Hash {
     fn decode(reader: &mut impl Read) -> Result<Self> {
         let bytes = <[u8; HASH_BYTES]>::decode(reader)?;
         Ok(Hash::new_from_array(bytes))
+    }
+}
+
+impl Encode for Signature {
+    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+        self.as_array().encode(writer)
+    }
+}
+
+impl Decode for Signature {
+    fn decode(reader: &mut impl Read) -> Result<Self> {
+        let sig: [u8; SIGNATURE_BYTES] = decode(reader)?;
+        Ok(Signature::from(sig))
     }
 }
 
