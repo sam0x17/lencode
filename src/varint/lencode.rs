@@ -293,3 +293,20 @@ fn test_encode_decode_lencode_i8_all() {
         assert_eq!(decoded, val);
     }
 }
+
+#[test]
+fn test_encode_decode_u256() {
+    use crate::u256::U256;
+    let mut buf = [0u8; 33];
+    for i in 0..=1000u128 {
+        let val: U256 = U256::from(i * i * i * i * i * i * i * i * i * i * i * i);
+        let mut cursor = Cursor::new(&mut buf);
+        let n = Lencode::encode_varint(val, &mut cursor).unwrap();
+        assert!(
+            n <= 16,
+            "Encoded size should not exceed 16 bytes based on this range"
+        );
+        let decoded = Lencode::decode_varint::<U256>(&mut Cursor::new(&buf[..n])).unwrap();
+        assert_eq!(decoded, val, "Failed for iteration {}", i);
+    }
+}

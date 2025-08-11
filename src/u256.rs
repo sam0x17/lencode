@@ -34,10 +34,6 @@ impl Endianness for U256 {
     type N = generic_array::typenum::U32;
 }
 
-// The generated newtype does not provide implementations for shifting by
-// primitive integers.  Our [`UnsignedInteger`] trait requires support for
-// shifting by `u8`, so we manually forward these operations to the underlying
-// `ruint` type.
 impl Shl<u8> for U256 {
     type Output = Self;
 
@@ -71,6 +67,41 @@ impl ShrAssign<u8> for U256 {
 }
 
 impl UnsignedInteger for U256 {}
+
+impl From<u8> for U256 {
+    #[inline(always)]
+    fn from(value: u8) -> Self {
+        Self::new(U256Base::from(value))
+    }
+}
+
+impl From<u16> for U256 {
+    #[inline(always)]
+    fn from(value: u16) -> Self {
+        Self::new(U256Base::from(value))
+    }
+}
+
+impl From<u32> for U256 {
+    #[inline(always)]
+    fn from(value: u32) -> Self {
+        Self::new(U256Base::from(value))
+    }
+}
+
+impl From<u64> for U256 {
+    #[inline(always)]
+    fn from(value: u64) -> Self {
+        Self::new(U256Base::from(value))
+    }
+}
+
+impl From<u128> for U256 {
+    #[inline(always)]
+    fn from(value: u128) -> Self {
+        Self::new(U256Base::from(value))
+    }
+}
 
 #[test]
 fn test_u256() {
