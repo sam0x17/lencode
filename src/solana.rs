@@ -1,4 +1,8 @@
-use solana_sdk::pubkey::Pubkey;
+use solana_sdk::{
+    hash::{HASH_BYTES, Hash},
+    pubkey::Pubkey,
+    transaction::SanitizedTransaction,
+};
 
 use crate::prelude::*;
 
@@ -15,6 +19,26 @@ impl Decode for Pubkey {
     #[inline(always)]
     fn decode(reader: &mut impl Read) -> Result<Self> {
         Ok(Pubkey::new_from_array(decode(reader)?))
+    }
+}
+
+impl Encode for Hash {
+    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+        self.to_bytes().encode(writer)
+    }
+}
+
+impl Decode for Hash {
+    fn decode(reader: &mut impl Read) -> Result<Self> {
+        let bytes = <[u8; HASH_BYTES]>::decode(reader)?;
+        Ok(Hash::new_from_array(bytes))
+    }
+}
+
+impl Encode for SanitizedTransaction {
+    #[inline(always)]
+    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+        todo!()
     }
 }
 
