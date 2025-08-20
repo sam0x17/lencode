@@ -28,7 +28,7 @@ pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
     T::decode(reader)
 }
 
-impl Scheme for Lencode {
+impl VarintEncodingScheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
         let mask = I::MAX_VALUE - I::ONE_HUNDRED_TWENTY_SEVEN;

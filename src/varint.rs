@@ -12,7 +12,7 @@ use newt_hype::*;
 base_newtype!(CustomPrimitiveBase);
 
 /// A trait describing an encoding scheme
-pub trait Scheme: Sized {
+pub trait VarintEncodingScheme: Sized {
     /// Encodes an unsigned integer value using the scheme, writing to the given writer.
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize>;
 
