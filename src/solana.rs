@@ -76,7 +76,7 @@ impl Decode for MessageHeader {
 
 impl Encode for SanitizedTransaction {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(&self, _writer: &mut impl Write) -> Result<usize> {
         todo!()
     }
 }
