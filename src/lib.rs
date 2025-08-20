@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::collections;
 
+pub mod dedupe;
 pub mod io;
 pub mod tuples;
 pub mod u256;
