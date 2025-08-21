@@ -8,6 +8,8 @@ pub struct DedupeEncoder {
     table: HashTable<usize>,
 }
 
+const FIRST_OCCURRENCE_ID: usize = 0;
+
 impl DedupeEncoder {
     #[inline(always)]
     pub const fn new() -> Self {
@@ -23,15 +25,15 @@ impl DedupeEncoder {
         writer: &mut impl Write,
     ) -> Result<usize> {
         let hashcode = DefaultHashBuilder::default().hash_one(&val);
-        let table_len = self.table.len();
-        match self.table.entry(
-            hashcode,
-            |&stored_index| stored_index == table_len,
-            |&_| hashcode,
-        ) {
+        let id = self.table.len() + 1; // 0 is reserved for the first occurrence of new values
+        match self
+            .table
+            .entry(hashcode, |&stored_index| stored_index == id, |&_| hashcode)
+        {
             Entry::Occupied(entry) => Lencode::encode_varint(*entry.get(), writer),
             Entry::Vacant(entry) => {
-                entry.insert(table_len);
+                entry.insert(id);
+                Lencode::encode_varint(FIRST_OCCURRENCE_ID, writer)?;
                 val.encode(writer)
             }
         }
