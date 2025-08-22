@@ -40,6 +40,7 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 pub trait Encode {
     fn encode(&self, writer: &mut impl Write) -> Result<usize>;
 
+    #[inline(always)]
     fn encode_len(len: usize, writer: &mut impl Write) -> Result<usize> {
         Lencode::encode_varint(len as u64, writer)
     }
@@ -50,6 +51,7 @@ pub trait Decode {
     where
         Self: Sized;
 
+    #[inline(always)]
     fn decode_len(reader: &mut impl Read) -> Result<usize> {
         Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
     }
