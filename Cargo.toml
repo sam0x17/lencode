@@ -18,6 +18,7 @@ solana-sdk = { version = "2", optional = true }
 ruint = { version = "1" }
 newt-hype = { version = "0.2", default-features = false }
 hashbrown = "0.15.5"
+critical-section = "1"
 
 [dev-dependencies]
 rayon = "1"

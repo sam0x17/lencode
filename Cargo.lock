@@ -685,6 +685,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "critical-section"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
+
+[[package]]
 name = "crossbeam-deque"
 version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1260,6 +1266,7 @@ dependencies = [
  "bitvec",
  "borsh 1.5.7",
  "criterion",
+ "critical-section",
  "endian-cast",
  "generic-array 1.2.0",
  "hashbrown 0.15.5",
