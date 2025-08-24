@@ -15,6 +15,7 @@ use std::collections;
 
 pub mod dedupe;
 pub mod io;
+pub mod pack;
 pub mod tuples;
 pub mod u256;
 pub mod varint;
@@ -25,6 +26,7 @@ pub mod solana;
 pub mod prelude {
     pub use super::*;
     pub use crate::io::*;
+    pub use crate::pack::*;
     pub use crate::u256::*;
     pub use crate::varint::*;
 }

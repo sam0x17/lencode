@@ -1,8 +1,13 @@
 use core::hash::{BuildHasher, Hash};
 
-use hashbrown::{DefaultHashBuilder, HashTable, hash_table::Entry};
+use hashbrown::{DefaultHashBuilder, HashMap, HashTable, hash_table::Entry};
 
 use crate::prelude::*;
+
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct EncodeCtx {
+    table: HashMap<Vec<u8>, usize>,
+}
 
 const FIRST_OCCURRENCE_ID: usize = 0;
 
