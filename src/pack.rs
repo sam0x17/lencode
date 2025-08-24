@@ -1,6 +1,8 @@
 use crate::prelude::*;
 
 /// Implemented on types that can be packed into a platform-independent byte-stream.
+///
+/// This is a requirement for types that implement the dedupe encoding/decoding strategy.
 pub trait Pack: Sized {
     fn pack(&self, writer: &mut impl Write) -> Result<usize>;
     fn unpack(reader: &mut impl Read) -> Result<Self>;
