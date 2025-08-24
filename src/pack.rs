@@ -1,7 +1,4 @@
-use core::mem::MaybeUninit;
-
 use crate::prelude::*;
-use endian_cast::Endianness;
 
 /// Implemented on types that can be packed into a platform-independent byte-stream.
 pub trait Pack: Sized {
@@ -9,25 +6,78 @@ pub trait Pack: Sized {
     fn unpack(reader: &mut impl Read) -> Result<Self>;
 }
 
-impl<T: Endianness + Sized> Pack for T {
-    #[inline(always)]
-    fn pack(&self, writer: &mut impl Write) -> Result<usize> {
-        writer.write(&self.le_bytes())
-    }
+/// Macro to implement the Pack trait for types that implement Endianness.
+/// This avoids orphan rule issues by allowing explicit implementations per type.
+///
+/// # Usage
+///
+/// ```ignore
+/// use lencode::impl_pack_for_endianness_types;
+///
+/// // For a single type
+/// impl_pack_for_endianness_types!(MyType);
+///
+/// // For multiple types
+/// impl_pack_for_endianness_types!(Type1, Type2, Type3);
+/// ```
+///
+/// The macro will generate Pack implementations that:
+/// - Use little-endian byte ordering for packing
+/// - Validate that the full expected number of bytes are read during unpacking
+/// - Return appropriate errors for insufficient data or space
+#[macro_export]
+macro_rules! impl_pack_for_endianness_types {
+    ($($t:ty),+ $(,)?) => {
+        $(
+            impl $crate::pack::Pack for $t {
+                #[inline(always)]
+                fn pack(&self, writer: &mut impl $crate::io::Write) -> $crate::Result<usize> {
+                    writer.write(&endian_cast::Endianness::le_bytes(self))
+                }
 
-    fn unpack(reader: &mut impl Read) -> Result<Self> {
-        let mut ret = MaybeUninit::<Self>::uninit();
-        let buf_slice = unsafe {
-            core::slice::from_raw_parts_mut(
-                ret.as_mut_ptr() as *mut u8,
-                core::mem::size_of::<Self>(),
-            )
-        };
-        let bytes_read = reader.read(buf_slice)?;
-        if bytes_read != core::mem::size_of::<Self>() {
-            return Err(Error::ReaderOutOfData);
-        }
-        Ok(unsafe { ret.assume_init() })
+                fn unpack(reader: &mut impl $crate::io::Read) -> $crate::Result<Self> {
+                    let mut ret = core::mem::MaybeUninit::<Self>::uninit();
+                    let buf_slice = unsafe {
+                        core::slice::from_raw_parts_mut(
+                            ret.as_mut_ptr() as *mut u8,
+                            core::mem::size_of::<Self>(),
+                        )
+                    };
+                    let bytes_read = reader.read(buf_slice)?;
+                    if bytes_read != core::mem::size_of::<Self>() {
+                        return Err($crate::io::Error::ReaderOutOfData);
+                    }
+                    Ok(unsafe { ret.assume_init() })
+                }
+            }
+        )+
+    };
+}
+
+// Implement Pack for all the standard primitive types that implement Endianness
+impl_pack_for_endianness_types!(
+    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize, f32, f64
+);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::io::Cursor;
+
+    #[test]
+    fn test_macro_usage() {
+        // Test that the macro was used correctly for built-in types
+        let value: u32 = 0x12345678;
+        let mut buffer = vec![0u8; 10];
+        let mut cursor = Cursor::new(&mut buffer[..]);
+
+        // This should work because we used the macro to implement Pack for u32
+        let bytes_written = value.pack(&mut cursor).unwrap();
+        assert_eq!(bytes_written, 4);
+
+        let mut read_cursor = Cursor::new(&buffer[..]);
+        let unpacked: u32 = u32::unpack(&mut read_cursor).unwrap();
+        assert_eq!(unpacked, value);
     }
 }
 
