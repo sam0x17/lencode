@@ -9,12 +9,18 @@ use solana_sdk::{
 use crate::prelude::*;
 
 impl Pack for Pubkey {
+    #[inline(always)]
     fn pack(&self, writer: &mut impl Write) -> Result<usize> {
-        todo!()
+        self.as_array().pack(writer)
     }
 
+    #[inline(always)]
     fn unpack(reader: &mut impl Read) -> Result<Self> {
-        todo!()
+        let mut buf = [0u8; 32];
+        if reader.read(&mut buf)? != 32 {
+            return Err(Error::ReaderOutOfData);
+        }
+        Ok(Pubkey::new_from_array(buf))
     }
 }
 
@@ -129,4 +135,17 @@ fn test_encode_decode_message_header() {
     assert_eq!(n, 1);
     let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf)).unwrap();
     assert_eq!(header, decoded_header);
+}
+
+#[test]
+fn test_pubkey_pack_roundtrip() {
+    for _ in 0..1000 {
+        let pubkey = Pubkey::new_unique();
+        let mut buf = [0u8; 32];
+        let mut cursor = Cursor::new(&mut buf);
+        let n = pubkey.pack(&mut cursor).unwrap();
+        assert_eq!(n, 32);
+        let unpacked_pubkey = Pubkey::unpack(&mut Cursor::new(&mut buf)).unwrap();
+        assert_eq!(pubkey, unpacked_pubkey);
+    }
 }
