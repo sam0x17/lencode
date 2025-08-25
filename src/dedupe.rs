@@ -1,58 +1,60 @@
-use core::hash::{BuildHasher, Hash};
+use core::hash::Hash;
 
-use hashbrown::{DefaultHashBuilder, HashMap, HashTable, hash_table::Entry};
+use hashbrown::{HashMap, hash_map::Entry};
 
 use crate::prelude::*;
 
 #[derive(Clone, Default, PartialEq, Eq)]
-pub struct EncodeCtx {
+pub struct DedupeEncoder {
     table: HashMap<Vec<u8>, usize>,
 }
 
-const FIRST_OCCURRENCE_ID: usize = 0;
+impl DedupeEncoder {
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-#[cfg(feature = "std")]
-thread_local! {
-    static TABLE: std::cell::RefCell<HashTable<usize>> = std::cell::RefCell::new(HashTable::new());
-}
-#[cfg(not(feature = "std"))]
-static TABLE: critical_section::Mutex<core::cell::RefCell<HashTable<usize>>> =
-    critical_section::Mutex::new(core::cell::RefCell::new(HashTable::new()));
+    #[inline(always)]
+    pub fn clear(&mut self) {
+        self.table.clear();
+    }
 
-#[inline]
-#[cfg(feature = "std")]
-pub fn encode_dedupe<T: Hash + Eq + Encode>(val: T, writer: &mut impl Write) -> Result<usize> {
-    let hashcode = DefaultHashBuilder::default().hash_one(&val);
-    TABLE.with_borrow_mut(|table| {
-        let id = table.len() + 1; // 0 is reserved for the first occurrence of new values
-        match table.entry(hashcode, |&stored_index| stored_index == id, |&_| hashcode) {
-            Entry::Occupied(entry) => Lencode::encode_varint(*entry.get(), writer),
+    /// Encodes a value with deduplication.
+    ///
+    /// If the value has been seen before, only its ID is encoded.
+    /// Otherwise, the value is encoded in full, preceded by a special ID (0).
+    ///
+    /// # Arguments
+    ///
+    /// * `val` - The value to encode. It must implement `Hash`, `Eq`, and `Encode`.
+    /// * `writer` - The writer to which the encoded data will be written.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes written to the writer.
+    #[inline]
+    pub fn encode<T: Hash + Eq + Pack>(
+        &mut self,
+        val: &T,
+        writer: &mut impl Write,
+    ) -> Result<usize> {
+        let mut buf = Vec::with_capacity(core::mem::size_of::<T>());
+        val.pack(&mut buf)?;
+        let len = self.table.len();
+        match self.table.entry(buf) {
+            Entry::Occupied(entry) => {
+                // value has been seen before, encode its id
+                Lencode::encode_varint(*entry.get(), writer)
+            }
             Entry::Vacant(entry) => {
-                entry.insert(id);
-                Lencode::encode_varint(FIRST_OCCURRENCE_ID, writer)?;
-                val.encode(writer)
+                // new value, assign a new ID and encode the value
+                entry.insert(len + 1); // ids start at 1
+                let mut total_bytes = 0;
+                total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
+                total_bytes += val.pack(writer)?;
+                Ok(total_bytes)
             }
         }
-    })
+    }
 }
-
-#[inline]
-#[cfg(not(feature = "std"))]
-pub fn encode_dedupe<T: Hash + Eq + Encode>(val: T, writer: &mut impl Write) -> Result<usize> {
-    let hashcode = DefaultHashBuilder::default().hash_one(&val);
-    critical_section::with(|cs| {
-        let table = TABLE.borrow(cs);
-        let mut table = table.borrow_mut();
-        let id = table.len() + 1; // 0 is reserved for the first occurrence of new values
-        match table.entry(hashcode, |&stored_index| stored_index == id, |&_| hashcode) {
-            Entry::Occupied(entry) => Lencode::encode_varint(*entry.get(), writer),
-            Entry::Vacant(entry) => {
-                entry.insert(id);
-                Lencode::encode_varint(FIRST_OCCURRENCE_ID, writer)?;
-                val.encode(writer)
-            }
-        }
-    })
-}
-
-// TODO: actually compare values with Eq
