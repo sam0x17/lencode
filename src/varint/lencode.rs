@@ -20,12 +20,12 @@ pub enum Lencode {}
 
 #[inline(always)]
 pub fn encode<T: Encode>(value: &T, writer: &mut impl Write) -> Result<usize> {
-    value.encode(writer)
+    value.encode(writer, None)
 }
 
 #[inline(always)]
 pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
-    T::decode(reader)
+    T::decode(reader, None)
 }
 
 impl VarintEncodingScheme for Lencode {
@@ -96,14 +96,21 @@ impl VarintEncodingScheme for Lencode {
 // when using lencode with u8 we bypass the integer encoding scheme so we don't waste bytes
 impl Encode for u8 {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         writer.write(&[*self])
     }
 }
 
 impl Decode for u8 {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let mut buf = [0u8; 1];
         reader.read(&mut buf)?;
         Ok(buf[0])
@@ -113,14 +120,21 @@ impl Decode for u8 {
 // when using lencode with i8 we bypass the integer encoding scheme so we don't waste bytes
 impl Encode for i8 {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         writer.write(&[*self as u8])
     }
 }
 
 impl Decode for i8 {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let mut buf = [0u8; 1];
         reader.read(&mut buf)?;
         Ok(buf[0] as i8)
@@ -275,9 +289,9 @@ fn test_encode_decode_lencode_u8_all() {
     for i in 0..=255 {
         let val: u8 = i;
         let mut buf = [0u8; 1];
-        let n = u8::encode(&val, &mut Cursor::new(&mut buf[..])).unwrap();
+        let n = u8::encode(&val, &mut Cursor::new(&mut buf[..]), None).unwrap();
         assert_eq!(n, 1);
-        let decoded = u8::decode(&mut Cursor::new(&buf)).unwrap();
+        let decoded = u8::decode(&mut Cursor::new(&buf), None).unwrap();
         assert_eq!(decoded, val);
     }
 }

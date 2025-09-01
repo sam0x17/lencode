@@ -28,58 +28,79 @@ impl Pack for Pubkey {
 // // them as raw bytes to save the extra one byte of overhead that varint encoding would add.
 // impl Encode for Pubkey {
 //     #[inline(always)]
-//     fn encode(&self, writer: &mut impl Write) -> Result<usize> {
-//         self.as_array().encode(writer)
+//     fn encode(&self, writer: &mut impl Write, dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>) -> Result<usize> {
+//         self.as_array().encode(writer, dedupe_encoder)
 //     }
 // }
 
 // impl Decode for Pubkey {
 //     #[inline(always)]
-//     fn decode(reader: &mut impl Read) -> Result<Self> {
+//     fn decode(reader: &mut impl Read, dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>) -> Result<Self> {
 //         Ok(Pubkey::new_from_array(decode(reader)?))
 //     }
 // }
 
 impl Encode for Hash {
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
-        self.to_bytes().encode(writer)
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
+        self.to_bytes().encode(writer, dedupe_encoder)
     }
 }
 
 impl Decode for Hash {
-    fn decode(reader: &mut impl Read) -> Result<Self> {
-        let bytes = <[u8; HASH_BYTES]>::decode(reader)?;
+    fn decode(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
+        let bytes = <[u8; HASH_BYTES]>::decode(reader, dedupe_decoder)?;
         Ok(Hash::new_from_array(bytes))
     }
 }
 
 impl Encode for Signature {
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
-        self.as_array().encode(writer)
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
+        self.as_array().encode(writer, dedupe_encoder)
     }
 }
 
 impl Decode for Signature {
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let sig: [u8; SIGNATURE_BYTES] = decode(reader)?;
         Ok(Signature::from(sig))
     }
 }
 
 impl Encode for MessageHeader {
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let combined = u32::from_le_bytes([
             self.num_required_signatures,
             self.num_readonly_signed_accounts,
             self.num_readonly_unsigned_accounts,
             0,
         ]);
-        combined.encode(writer)
+        combined.encode(writer, dedupe_encoder)
     }
 }
 
 impl Decode for MessageHeader {
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let combined: u32 = decode(reader)?;
         let combined_bytes = combined.to_le_bytes();
         Ok(MessageHeader {
@@ -92,7 +113,11 @@ impl Decode for MessageHeader {
 
 impl Encode for SanitizedTransaction {
     #[inline(always)]
-    fn encode(&self, _writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        _writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         todo!()
     }
 }
@@ -105,7 +130,7 @@ impl Encode for SanitizedTransaction {
 //         let mut cursor = Cursor::new(&mut buf);
 //         let n = pubkey.encode(&mut cursor).unwrap();
 //         assert_eq!(n, 32);
-//         let decoded_pubkey = Pubkey::decode(&mut Cursor::new(&mut buf)).unwrap();
+//         let decoded_pubkey = Pubkey::decode(&mut Cursor::new(&mut buf), None).unwrap();
 //         assert_eq!(pubkey, decoded_pubkey);
 //     }
 // }
@@ -120,8 +145,8 @@ fn test_encode_decode_message_header() {
         };
         let mut buf = [0u8; 4];
         let mut cursor = Cursor::new(&mut buf);
-        header.encode(&mut cursor).unwrap();
-        let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf)).unwrap();
+        header.encode(&mut cursor, None).unwrap();
+        let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf), None).unwrap();
         assert_eq!(header, decoded_header);
     }
     let header = MessageHeader {
@@ -131,9 +156,9 @@ fn test_encode_decode_message_header() {
     };
     let mut buf = [0u8; 4];
     let mut cursor = Cursor::new(&mut buf);
-    let n = header.encode(&mut cursor).unwrap();
+    let n = header.encode(&mut cursor, None).unwrap();
     assert_eq!(n, 1);
-    let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf)).unwrap();
+    let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf), None).unwrap();
     assert_eq!(header, decoded_header);
 }
 

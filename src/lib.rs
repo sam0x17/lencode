@@ -40,7 +40,11 @@ use prelude::*;
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 pub trait Encode {
-    fn encode(&self, writer: &mut impl Write) -> Result<usize>;
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize>;
 
     #[inline(always)]
     fn encode_len(len: usize, writer: &mut impl Write) -> Result<usize> {
@@ -49,7 +53,10 @@ pub trait Encode {
 }
 
 pub trait Decode {
-    fn decode(reader: &mut impl Read) -> Result<Self>
+    fn decode(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self>
     where
         Self: Sized;
 
@@ -64,14 +71,14 @@ macro_rules! impl_encode_decode_unsigned_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+                fn encode(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>) -> Result<usize> {
                     Lencode::encode_varint(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode(reader: &mut impl Read) -> Result<Self> {
+                fn decode(reader: &mut impl Read, _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>) -> Result<Self> {
                     Lencode::decode_varint(reader)
                 }
 
@@ -88,14 +95,21 @@ impl_encode_decode_unsigned_primitive!(u16, u32, u64, u128);
 
 impl Encode for usize {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         Lencode::encode_varint(*self as u64, writer)
     }
 }
 
 impl Decode for usize {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         Lencode::decode_varint(reader).map(|v: u64| v as usize)
     }
 
@@ -110,14 +124,14 @@ macro_rules! impl_encode_decode_signed_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+                fn encode(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>) -> Result<usize> {
                     Lencode::encode_varint_signed(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode(reader: &mut impl Read) -> Result<Self> {
+                fn decode(reader: &mut impl Read, _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>) -> Result<Self> {
                     Lencode::decode_varint_signed(reader)
                 }
 
@@ -134,14 +148,21 @@ impl_encode_decode_signed_primitive!(i16, i32, i64, i128);
 
 impl Encode for isize {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         Lencode::encode_varint_signed(*self as i64, writer)
     }
 }
 
 impl Decode for isize {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         Lencode::decode_varint_signed(reader).map(|v: i64| v as isize)
     }
 
@@ -153,14 +174,21 @@ impl Decode for isize {
 
 impl Encode for bool {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         Lencode::encode_bool(*self, writer)
     }
 }
 
 impl Decode for bool {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         Lencode::decode_bool(reader)
     }
 
@@ -171,7 +199,11 @@ impl Decode for bool {
 
 impl Encode for &[u8] {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         total_written += writer.write(self)?;
@@ -181,7 +213,11 @@ impl Encode for &[u8] {
 
 impl Encode for &str {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         total_written += writer.write(self.as_bytes())?;
@@ -191,7 +227,11 @@ impl Encode for &str {
 
 impl Encode for String {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         total_written += writer.write(self.as_bytes())?;
@@ -201,7 +241,10 @@ impl Encode for String {
 
 impl Decode for String {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut buf = vec![0u8; len];
         reader.read(&mut buf)?;
@@ -211,12 +254,16 @@ impl Decode for String {
 
 impl<T: Encode> Encode for Option<T> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         match self {
             Some(value) => {
                 let mut total_written = 0;
                 total_written += Lencode::encode_bool(true, writer)?;
-                total_written += value.encode(writer)?;
+                total_written += value.encode(writer, dedupe_encoder)?;
                 Ok(total_written)
             }
             None => Lencode::encode_bool(false, writer),
@@ -226,9 +273,12 @@ impl<T: Encode> Encode for Option<T> {
 
 impl<T: Decode> Decode for Option<T> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         if Lencode::decode_bool(reader)? {
-            Ok(Some(T::decode(reader)?))
+            Ok(Some(T::decode(reader, dedupe_decoder)?))
         } else {
             Ok(None)
         }
@@ -241,18 +291,22 @@ impl<T: Decode> Decode for Option<T> {
 
 impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         match self {
             Ok(value) => {
                 let mut total_written = 0;
                 total_written += Lencode::encode_bool(true, writer)?;
-                total_written += value.encode(writer)?;
+                total_written += value.encode(writer, dedupe_encoder)?;
                 Ok(total_written)
             }
             Err(err) => {
                 let mut total_written = 0;
                 total_written += Lencode::encode_bool(false, writer)?;
-                total_written += err.encode(writer)?;
+                total_written += err.encode(writer, dedupe_encoder)?;
                 Ok(total_written)
             }
         }
@@ -261,11 +315,14 @@ impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
 
 impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         if Lencode::decode_bool(reader)? {
-            Ok(Ok(T::decode(reader)?))
+            Ok(Ok(T::decode(reader, dedupe_decoder)?))
         } else {
-            Ok(Err(E::decode(reader)?))
+            Ok(Err(E::decode(reader, dedupe_decoder)?))
         }
     }
 
@@ -276,10 +333,14 @@ impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
 
 impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         for item in self {
-            total_written += item.encode(writer)?;
+            total_written += item.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -287,10 +348,13 @@ impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
 
 impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let mut arr = [T::default(); N];
         for item in &mut arr {
-            *item = T::decode(reader)?;
+            *item = T::decode(reader, dedupe_decoder.as_deref_mut())?;
         }
         Ok(arr)
     }
@@ -302,11 +366,14 @@ impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
 
 impl<T: Decode> Decode for Vec<T> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut vec = Vec::with_capacity(len);
         for _ in 0..len {
-            vec.push(T::decode(reader)?);
+            vec.push(T::decode(reader, dedupe_decoder.as_deref_mut())?);
         }
         Ok(vec)
     }
@@ -314,11 +381,15 @@ impl<T: Decode> Decode for Vec<T> {
 
 impl<T: Encode> Encode for Vec<T> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for item in self {
-            total_written += item.encode(writer)?;
+            total_written += item.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -326,12 +397,16 @@ impl<T: Encode> Encode for Vec<T> {
 
 impl<K: Encode, V: Encode> Encode for collections::BTreeMap<K, V> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for (key, value) in self {
-            total_written += key.encode(writer)?;
-            total_written += value.encode(writer)?;
+            total_written += key.encode(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += value.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -339,12 +414,15 @@ impl<K: Encode, V: Encode> Encode for collections::BTreeMap<K, V> {
 
 impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut map = collections::BTreeMap::new();
         for _ in 0..len {
-            let key = K::decode(reader)?;
-            let value = V::decode(reader)?;
+            let key = K::decode(reader, dedupe_decoder.as_deref_mut())?;
+            let value = V::decode(reader, dedupe_decoder.as_deref_mut())?;
             map.insert(key, value);
         }
         Ok(map)
@@ -353,11 +431,15 @@ impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
 
 impl<V: Encode> Encode for collections::BTreeSet<V> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode(writer)?;
+            total_written += value.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -365,11 +447,14 @@ impl<V: Encode> Encode for collections::BTreeSet<V> {
 
 impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut set = collections::BTreeSet::new();
         for _ in 0..len {
-            let value = V::decode(reader)?;
+            let value = V::decode(reader, dedupe_decoder.as_deref_mut())?;
             set.insert(value);
         }
         Ok(set)
@@ -378,11 +463,15 @@ impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
 
 impl<V: Encode> Encode for collections::VecDeque<V> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode(writer)?;
+            total_written += value.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -390,11 +479,14 @@ impl<V: Encode> Encode for collections::VecDeque<V> {
 
 impl<V: Decode> Decode for collections::VecDeque<V> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut deque = collections::VecDeque::with_capacity(len);
         for _ in 0..len {
-            let value = V::decode(reader)?;
+            let value = V::decode(reader, dedupe_decoder.as_deref_mut())?;
             deque.push_back(value);
         }
         Ok(deque)
@@ -403,11 +495,15 @@ impl<V: Decode> Decode for collections::VecDeque<V> {
 
 impl<V: Encode> Encode for collections::LinkedList<V> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode(writer)?;
+            total_written += value.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -415,11 +511,14 @@ impl<V: Encode> Encode for collections::LinkedList<V> {
 
 impl<V: Decode> Decode for collections::LinkedList<V> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut list = collections::LinkedList::new();
         for _ in 0..len {
-            let value = V::decode(reader)?;
+            let value = V::decode(reader, dedupe_decoder.as_deref_mut())?;
             list.push_back(value);
         }
         Ok(list)
@@ -428,22 +527,29 @@ impl<V: Decode> Decode for collections::LinkedList<V> {
 
 impl<T: Encode> Encode for collections::BinaryHeap<T> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode(writer)?;
+            total_written += value.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
 }
 impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut heap = collections::BinaryHeap::with_capacity(len);
         for _ in 0..len {
-            let value = T::decode(reader)?;
+            let value = T::decode(reader, dedupe_decoder.as_deref_mut())?;
             heap.push(value);
         }
         Ok(heap)
@@ -453,12 +559,16 @@ impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
 #[cfg(feature = "std")]
 impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for (key, value) in self {
-            total_written += key.encode(writer)?;
-            total_written += value.encode(writer)?;
+            total_written += key.encode(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += value.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -467,12 +577,15 @@ impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
 #[cfg(feature = "std")]
 impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::HashMap<K, V> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut map = std::collections::HashMap::with_capacity(len);
         for _ in 0..len {
-            let key = K::decode(reader)?;
-            let value = V::decode(reader)?;
+            let key = K::decode(reader, dedupe_decoder.as_deref_mut())?;
+            let value = V::decode(reader, dedupe_decoder.as_deref_mut())?;
             map.insert(key, value);
         }
         Ok(map)
@@ -482,11 +595,15 @@ impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::H
 #[cfg(feature = "std")]
 impl<V: Encode> Encode for std::collections::HashSet<V> {
     #[inline(always)]
-    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode(writer)?;
+            total_written += value.encode(writer, dedupe_encoder.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -495,11 +612,14 @@ impl<V: Encode> Encode for std::collections::HashSet<V> {
 #[cfg(feature = "std")]
 impl<V: Decode + Eq + std::hash::Hash> Decode for std::collections::HashSet<V> {
     #[inline(always)]
-    fn decode(reader: &mut impl Read) -> Result<Self> {
+    fn decode(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut set = std::collections::HashSet::with_capacity(len);
         for _ in 0..len {
-            let value = V::decode(reader)?;
+            let value = V::decode(reader, dedupe_decoder.as_deref_mut())?;
             set.insert(value);
         }
         Ok(set)
@@ -511,8 +631,8 @@ fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
         let val: i16 = i;
         let mut buf = [0u8; 3];
-        let n = i16::encode(&val, &mut Cursor::new(&mut buf[..])).unwrap();
-        let decoded = i16::decode(&mut Cursor::new(&buf[..n])).unwrap();
+        let n = i16::encode(&val, &mut Cursor::new(&mut buf[..]), None).unwrap();
+        let decoded = i16::decode(&mut Cursor::new(&buf[..n]), None).unwrap();
         assert_eq!(decoded, val);
     }
 }
@@ -521,9 +641,9 @@ fn test_encode_decode_i16_all() {
 fn test_encode_decode_vec_of_i16_all() {
     let values: Vec<i16> = (i16::MIN..=i16::MAX).collect();
     let mut buf = vec![0u8; 3 * values.len()];
-    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert!(n < values.len() * 3);
-    let decoded = Vec::<i16>::decode(&mut Cursor::new(&buf[..n])).unwrap();
+    let decoded = Vec::<i16>::decode(&mut Cursor::new(&buf[..n]), None).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -533,9 +653,9 @@ fn test_encode_decode_vec_of_many_small_u128() {
         .chain(0..(u16::MAX / 2) as u128)
         .collect();
     let mut buf = vec![0u8; 3 * values.len()];
-    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert!(n < values.len() * 3);
-    let decoded = Vec::<u128>::decode(&mut Cursor::new(&buf[..n])).unwrap();
+    let decoded = Vec::<u128>::decode(&mut Cursor::new(&buf[..n]), None).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -543,9 +663,9 @@ fn test_encode_decode_vec_of_many_small_u128() {
 fn test_encode_decode_vec_of_tiny_u128s() {
     let values: Vec<u128> = (0..127).collect();
     let mut buf = vec![0u8; values.len() + 1];
-    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, values.len() + 1);
-    let decoded = Vec::<u128>::decode(&mut Cursor::new(&buf[..n])).unwrap();
+    let decoded = Vec::<u128>::decode(&mut Cursor::new(&buf[..n]), None).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -553,9 +673,9 @@ fn test_encode_decode_vec_of_tiny_u128s() {
 fn test_encode_decode_bools() {
     let values = vec![true, false, true, false, true];
     let mut buf = vec![0u8; values.len() + 1];
-    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, values.len() + 1);
-    let decoded = Vec::<bool>::decode(&mut Cursor::new(&buf[..n])).unwrap();
+    let decoded = Vec::<bool>::decode(&mut Cursor::new(&buf[..n]), None).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -563,9 +683,9 @@ fn test_encode_decode_bools() {
 fn test_encode_decode_option() {
     let values = vec![Some(42), None, Some(100), None, Some(200)];
     let mut buf = [0u8; 12];
-    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, buf.len());
-    let decoded = Vec::<Option<i32>>::decode(&mut Cursor::new(&buf[..n])).unwrap();
+    let decoded = Vec::<Option<i32>>::decode(&mut Cursor::new(&buf[..n]), None).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -573,9 +693,9 @@ fn test_encode_decode_option() {
 fn test_encode_decode_arrays() {
     let values: [u128; 5] = [1, 2, 3, 4, 5];
     let mut buf = [0u8; 5];
-    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 5);
-    let decoded: [u128; 5] = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    let decoded: [u128; 5] = Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -587,11 +707,11 @@ fn test_tree_map_encode_decode() {
     map.insert(3, 6);
 
     let mut buf = [0u8; 7];
-    let n = map.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = map.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 7);
 
     let decoded: collections::BTreeMap<i32, i32> =
-        Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+        Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -604,11 +724,11 @@ fn test_hash_map_encode_decode() {
     map.insert(3, 6);
 
     let mut buf = [0u8; 7];
-    let n = map.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = map.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 7);
 
     let decoded: std::collections::HashMap<i32, i32> =
-        Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+        Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -621,11 +741,11 @@ fn test_hash_set_encode_decode() {
     set.insert(3);
 
     let mut buf = [0u8; 4];
-    let n = set.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = set.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 4);
 
     let decoded: std::collections::HashSet<i32> =
-        Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+        Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, set);
 }
 
@@ -637,10 +757,11 @@ fn test_btree_set_encode_decode() {
     set.insert(3);
 
     let mut buf = [0u8; 4];
-    let n = set.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = set.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::BTreeSet<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    let decoded: collections::BTreeSet<i32> =
+        Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, set);
 }
 
@@ -652,10 +773,11 @@ fn test_vec_deque_encode_decode() {
     deque.push_back(3);
 
     let mut buf = [0u8; 4];
-    let n = deque.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = deque.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::VecDeque<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    let decoded: collections::VecDeque<i32> =
+        Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, deque);
 }
 
@@ -667,10 +789,11 @@ fn test_linked_list_encode_decode() {
     list.push_back(3);
 
     let mut buf = [0u8; 4];
-    let n = list.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = list.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::LinkedList<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    let decoded: collections::LinkedList<i32> =
+        Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, list);
 }
 
@@ -682,10 +805,11 @@ fn test_binary_heap_encode_decode() {
     heap.push(3);
 
     let mut buf = [0u8; 4];
-    let n = heap.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = heap.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::BinaryHeap<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    let decoded: collections::BinaryHeap<i32> =
+        Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(
         decoded.clone().into_sorted_vec(),
         heap.clone().into_sorted_vec()
@@ -697,15 +821,15 @@ fn test_binary_heap_encode_decode() {
 fn test_string_encode_decode() {
     let value = "Hello, world!";
     let mut buf = [0u8; 14];
-    let n = value.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = value.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 14);
-    let decoded: String = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    let decoded: String = Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, value);
 
     let mut buf = [0u8; 14];
     let value = "";
-    let n = value.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    let n = value.encode(&mut Cursor::new(&mut buf[..]), None).unwrap();
     assert_eq!(n, 1);
-    let decoded: String = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    let decoded: String = Decode::decode(&mut Cursor::new(&buf[..]), None).unwrap();
     assert_eq!(decoded, value);
 }
