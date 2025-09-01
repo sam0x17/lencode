@@ -11,7 +11,7 @@ fn bench_encode_pubkey(c: &mut Criterion) {
                 (cursor, value)
             },
             |(mut cursor, value)| {
-                black_box(value.encode(&mut cursor).unwrap());
+                black_box(value.encode(&mut cursor, None).unwrap());
             },
             criterion::BatchSize::SmallInput,
         )
@@ -26,12 +26,12 @@ fn bench_decode_pubkey(c: &mut Criterion) {
                 let value: Pubkey = Pubkey::new_unique();
                 {
                     let mut cursor = Cursor::new(&mut buf[..]);
-                    value.encode(&mut cursor).unwrap();
+                    value.encode(&mut cursor, None).unwrap();
                 }
                 Cursor::new(buf)
             },
             |mut cursor| {
-                black_box(Pubkey::decode(&mut cursor).unwrap());
+                black_box(Pubkey::decode(&mut cursor, None).unwrap());
             },
             criterion::BatchSize::SmallInput,
         )
