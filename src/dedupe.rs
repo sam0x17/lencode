@@ -15,6 +15,17 @@ impl DedupeEncoder {
         Self::default()
     }
 
+    /// Creates a new `DedupeEncoder` with the specified capacity.
+    ///
+    /// The encoder will be able to hold at least `capacity` unique values
+    /// without reallocating.
+    #[inline(always)]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            table: HashMap::with_capacity(capacity),
+        }
+    }
+
     #[inline(always)]
     pub fn clear(&mut self) {
         self.table.clear();
@@ -80,6 +91,17 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Creates a new `DedupeDecoder` with the specified capacity.
+    ///
+    /// The decoder will be able to hold at least `capacity` cached values
+    /// without reallocating.
+    #[inline(always)]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            table: Vec::with_capacity(capacity),
+        }
     }
 
     #[inline(always)]

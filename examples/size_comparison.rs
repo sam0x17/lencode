@@ -27,7 +27,7 @@ fn main() {
     let borsh_data = borsh::to_vec(&all_pubkeys).unwrap();
 
     // Encode with lencode + deduplication
-    let mut encoder = DedupeEncoder::new();
+    let mut encoder = DedupeEncoder::with_capacity(1000);
     let mut cursor = Cursor::new(Vec::new());
     all_pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap();
     let lencode_data = cursor.into_inner();
@@ -46,7 +46,7 @@ fn main() {
     );
 
     // Verify we can decode correctly
-    let mut decoder = DedupeDecoder::new();
+    let mut decoder = DedupeDecoder::with_capacity(1000);
     let mut cursor = Cursor::new(&lencode_data);
     let decoded: Vec<Pubkey> = Vec::decode(&mut cursor, Some(&mut decoder)).unwrap();
 

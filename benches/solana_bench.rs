@@ -16,7 +16,7 @@ fn bench_encode_pubkey(c: &mut Criterion) {
             || {
                 let cursor = Cursor::new([0u8; 64]);
                 let value: Pubkey = Pubkey::new_unique();
-                let dedupe_encoder = DedupeEncoder::new();
+                let dedupe_encoder = DedupeEncoder::with_capacity(10);
                 (cursor, value, dedupe_encoder)
             },
             |(mut cursor, value, mut dedupe_encoder)| {
@@ -39,13 +39,13 @@ fn bench_decode_pubkey(c: &mut Criterion) {
                 let value: Pubkey = Pubkey::new_unique();
                 {
                     let mut cursor = Cursor::new(&mut buf[..]);
-                    let mut dedupe_encoder = DedupeEncoder::new();
+                    let mut dedupe_encoder = DedupeEncoder::with_capacity(10);
                     value
                         .encode(&mut cursor, Some(&mut dedupe_encoder))
                         .unwrap();
                 }
                 let cursor = Cursor::new(buf);
-                let dedupe_decoder = DedupeDecoder::new();
+                let dedupe_decoder = DedupeDecoder::with_capacity(10);
                 (cursor, dedupe_decoder)
             },
             |(mut cursor, mut dedupe_decoder)| {
@@ -90,13 +90,18 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
         BenchmarkId::new("lencode", "pubkey_vec"),
         &all_pubkeys,
         |b, pubkeys| {
-            b.iter(|| {
-                let mut encoder = DedupeEncoder::new();
-                let mut cursor = Cursor::new(Vec::new());
-                // Encode the vector itself, not individual pubkeys
-                black_box(pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap());
-                cursor.into_inner()
-            })
+            b.iter_batched(
+                || {
+                    let encoder = DedupeEncoder::with_capacity(1000);
+                    let cursor = Cursor::new(Vec::new());
+                    (encoder, cursor)
+                },
+                |(mut encoder, mut cursor)| {
+                    black_box(pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap());
+                    cursor.into_inner()
+                },
+                criterion::BatchSize::SmallInput,
+            )
         },
     );
 
@@ -109,7 +114,7 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
     let borsh_data = borsh::to_vec(&all_pubkeys).unwrap();
 
     let lencode_data = {
-        let mut encoder = DedupeEncoder::new();
+        let mut encoder = DedupeEncoder::with_capacity(1000);
         let mut cursor = Cursor::new(Vec::new());
         all_pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap();
         cursor.into_inner()
@@ -127,11 +132,17 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
         BenchmarkId::new("lencode", "pubkey_vec"),
         &lencode_data,
         |b, data| {
-            b.iter(|| {
-                let mut decoder = DedupeDecoder::new();
-                let mut cursor = Cursor::new(data);
-                black_box(Vec::<Pubkey>::decode(&mut cursor, Some(&mut decoder)).unwrap())
-            })
+            b.iter_batched(
+                || {
+                    let decoder = DedupeDecoder::with_capacity(1000);
+                    let cursor = Cursor::new(data);
+                    (decoder, cursor)
+                },
+                |(mut decoder, mut cursor)| {
+                    black_box(Vec::<Pubkey>::decode(&mut cursor, Some(&mut decoder)).unwrap())
+                },
+                criterion::BatchSize::SmallInput,
+            )
         },
     );
 
