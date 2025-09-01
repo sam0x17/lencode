@@ -1,18 +1,29 @@
 use core::hash::Hash;
 
-use hashbrown::{HashMap, hash_map::Entry};
+use ahash::RandomState;
+use hashbrown::HashMap;
 
 use crate::prelude::*;
 
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct DedupeEncoder {
-    table: HashMap<Vec<u8>, usize>,
+    table: HashMap<Vec<u8>, usize, RandomState>,
+    buffer: Vec<u8>, // Reusable buffer to avoid allocations
+}
+
+impl Default for DedupeEncoder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DedupeEncoder {
     #[inline(always)]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            table: HashMap::with_hasher(RandomState::new()),
+            buffer: Vec::new(),
+        }
     }
 
     /// Creates a new `DedupeEncoder` with the specified capacity.
@@ -22,13 +33,15 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            table: HashMap::with_capacity(capacity),
+            table: HashMap::with_capacity_and_hasher(capacity, RandomState::new()),
+            buffer: Vec::with_capacity(capacity * 32),
         }
     }
 
     #[inline(always)]
     pub fn clear(&mut self) {
         self.table.clear();
+        self.buffer.clear();
     }
 
     /// Returns the number of unique values currently stored in the encoder.
@@ -62,29 +75,33 @@ impl DedupeEncoder {
         val: &T,
         writer: &mut impl Write,
     ) -> Result<usize> {
-        let mut buf = Vec::with_capacity(core::mem::size_of::<T>());
-        val.pack(&mut buf)?;
-        let len = self.table.len();
-        match self.table.entry(buf) {
-            Entry::Occupied(entry) => {
-                // value has been seen before, encode its id
-                Lencode::encode_varint(*entry.get(), writer)
-            }
-            Entry::Vacant(entry) => {
-                // new value, assign a new ID and encode the value
-                entry.insert(len + 1); // ids start at 1
-                let mut total_bytes = 0;
-                total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
-                total_bytes += val.pack(writer)?;
-                Ok(total_bytes)
-            }
+        // Clear and reuse the internal buffer to avoid allocation
+        self.buffer.clear();
+        val.pack(&mut self.buffer)?;
+
+        // First check if we already have this value
+        if let Some(&id) = self.table.get(&self.buffer) {
+            // value has been seen before, encode its id
+            return Lencode::encode_varint(id, writer);
         }
+
+        // New value - insert it and encode
+        let new_id = self.table.len() + 1; // ids start at 1
+        self.table.insert(self.buffer.clone(), new_id);
+
+        let mut total_bytes = 0;
+        total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
+        total_bytes += val.pack(writer)?;
+        Ok(total_bytes)
     }
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct DedupeDecoder {
-    table: Vec<Vec<u8>>,
+    // Single buffer to store all cached values
+    data: Vec<u8>,
+    // Offsets into the data buffer for each cached value (start, length)
+    offsets: Vec<(usize, usize)>,
 }
 
 impl DedupeDecoder {
@@ -100,23 +117,25 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            table: Vec::with_capacity(capacity),
+            data: Vec::new(),
+            offsets: Vec::with_capacity(capacity),
         }
     }
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.table.clear();
+        self.data.clear();
+        self.offsets.clear();
     }
 
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.table.len()
+        self.offsets.len()
     }
 
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.table.is_empty()
+        self.offsets.is_empty()
     }
 
     /// Decodes a value with deduplication.
@@ -140,15 +159,22 @@ impl DedupeDecoder {
             let value = T::unpack(reader)?;
             let mut buf = Vec::with_capacity(core::mem::size_of::<T>());
             value.pack(&mut buf)?;
-            self.table.push(buf);
+
+            // Store the data and record its offset
+            let start = self.data.len();
+            let length = buf.len();
+            self.data.extend_from_slice(&buf);
+            self.offsets.push((start, length));
+
             Ok(value)
         } else {
             // Existing value, retrieve from table
             let table_index = id - 1; // IDs start at 1, but table is 0-indexed
-            if table_index >= self.table.len() {
+            if table_index >= self.offsets.len() {
                 return Err(crate::io::Error::InvalidData);
             }
-            let buf = &self.table[table_index];
+            let (start, length) = self.offsets[table_index];
+            let buf = &self.data[start..start + length];
             let mut cursor = crate::io::Cursor::new(buf);
             T::unpack(&mut cursor)
         }

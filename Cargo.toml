@@ -19,6 +19,7 @@ ruint = { version = "1" }
 newt-hype = { version = "0.2", default-features = false }
 hashbrown = "0.15.5"
 critical-section = "1"
+ahash = { version = "0.8", default-features = false }
 
 [dev-dependencies]
 rayon = "1"
