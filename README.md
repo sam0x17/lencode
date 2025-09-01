@@ -89,7 +89,7 @@ let pubkey1 = Pubkey::new_unique();
 let pubkey2 = Pubkey::new_unique();
 let pubkeys = vec![pubkey1, pubkey2, pubkey1, pubkey1, pubkey2]; // Duplicates
 
-// Encode with deduplication - saves significant space
+// Pubkeys REQUIRE deduplication - they will error without it
 let mut buffer = Vec::new();
 let mut encoder = DedupeEncoder::new();
 for pubkey in &pubkeys {
@@ -98,6 +98,14 @@ for pubkey in &pubkeys {
 
 // First occurrence: 33 bytes (1 + 32), subsequent: 1 byte each
 // Total: 69 bytes vs 160 bytes without deduplication (56% savings!)
+
+// Decode with deduplication
+let mut cursor = Cursor::new(&buffer);
+let mut decoder = DedupeDecoder::new();
+let mut decoded_pubkeys = Vec::new();
+for _ in 0..pubkeys.len() {
+    decoded_pubkeys.push(Pubkey::decode(&mut cursor, Some(&mut decoder))?);
+}
 ```
 
 ## Core Concepts

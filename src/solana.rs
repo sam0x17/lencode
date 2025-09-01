@@ -36,17 +36,8 @@ impl Encode for Pubkey {
         if let Some(dedupe_encoder) = dedupe_encoder {
             dedupe_encoder.encode(self, writer)
         } else {
-            // Without deduplication, just write the raw 32 bytes
-            let bytes = self.as_ref();
-            let mut written = 0;
-            while written < bytes.len() {
-                let n = writer.write(&bytes[written..])?;
-                if n == 0 {
-                    return Err(Error::WriterOutOfSpace);
-                }
-                written += n;
-            }
-            Ok(32)
+            // Pubkeys require deduplication - that's their main benefit
+            Err(Error::InvalidData)
         }
     }
 }
@@ -60,17 +51,8 @@ impl Decode for Pubkey {
         if let Some(dedupe_decoder) = dedupe_decoder {
             dedupe_decoder.decode(reader)
         } else {
-            // Without deduplication, just read the raw 32 bytes
-            let mut buf = [0u8; 32];
-            let mut read_bytes = 0;
-            while read_bytes < 32 {
-                let n = reader.read(&mut buf[read_bytes..])?;
-                if n == 0 {
-                    return Err(Error::ReaderOutOfData);
-                }
-                read_bytes += n;
-            }
-            Ok(Pubkey::new_from_array(buf))
+            // Pubkeys require deduplication - that's their main benefit
+            Err(Error::InvalidData)
         }
     }
 }
@@ -211,19 +193,6 @@ fn test_pubkey_pack_roundtrip() {
 }
 
 #[test]
-fn test_pubkey_encode_decode_roundtrip() {
-    for _ in 0..100 {
-        let pubkey = Pubkey::new_unique();
-        let mut buf = Vec::new();
-        let n = pubkey.encode(&mut buf, None).unwrap();
-        assert_eq!(n, 32); // Should be 32 bytes without deduplication
-        let mut cursor = Cursor::new(&buf);
-        let decoded_pubkey = Pubkey::decode(&mut cursor, None).unwrap();
-        assert_eq!(pubkey, decoded_pubkey);
-    }
-}
-
-#[test]
 fn test_pubkey_deduplication() {
     use crate::dedupe::{DedupeDecoder, DedupeEncoder};
 
@@ -299,4 +268,17 @@ fn test_pubkey_deduplication_without_duplicates() {
 
     assert_eq!(decoded_pubkeys, pubkeys);
     assert_eq!(dedupe_decoder.len(), 5);
+}
+
+#[test]
+fn test_pubkey_requires_deduplication() {
+    let pubkey = Pubkey::new_unique();
+    let mut buf = Vec::new();
+
+    // Should fail when trying to encode without deduplication
+    assert!(pubkey.encode(&mut buf, None).is_err());
+
+    // Should fail when trying to decode without deduplication
+    let mut cursor = Cursor::new(&buf);
+    assert!(Pubkey::decode(&mut cursor, None).is_err());
 }

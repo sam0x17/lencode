@@ -1,5 +1,8 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use lencode::prelude::*;
+use lencode::{
+    dedupe::{DedupeDecoder, DedupeEncoder},
+    prelude::*,
+};
 use solana_sdk::pubkey::Pubkey;
 
 fn bench_encode_pubkey(c: &mut Criterion) {
@@ -8,10 +11,15 @@ fn bench_encode_pubkey(c: &mut Criterion) {
             || {
                 let cursor = Cursor::new([0u8; 64]);
                 let value: Pubkey = Pubkey::new_unique();
-                (cursor, value)
+                let dedupe_encoder = DedupeEncoder::new();
+                (cursor, value, dedupe_encoder)
             },
-            |(mut cursor, value)| {
-                black_box(value.encode(&mut cursor, None).unwrap());
+            |(mut cursor, value, mut dedupe_encoder)| {
+                black_box(
+                    value
+                        .encode(&mut cursor, Some(&mut dedupe_encoder))
+                        .unwrap(),
+                );
             },
             criterion::BatchSize::SmallInput,
         )
@@ -26,12 +34,17 @@ fn bench_decode_pubkey(c: &mut Criterion) {
                 let value: Pubkey = Pubkey::new_unique();
                 {
                     let mut cursor = Cursor::new(&mut buf[..]);
-                    value.encode(&mut cursor, None).unwrap();
+                    let mut dedupe_encoder = DedupeEncoder::new();
+                    value
+                        .encode(&mut cursor, Some(&mut dedupe_encoder))
+                        .unwrap();
                 }
-                Cursor::new(buf)
+                let cursor = Cursor::new(buf);
+                let dedupe_decoder = DedupeDecoder::new();
+                (cursor, dedupe_decoder)
             },
-            |mut cursor| {
-                black_box(Pubkey::decode(&mut cursor, None).unwrap());
+            |(mut cursor, mut dedupe_decoder)| {
+                black_box(Pubkey::decode(&mut cursor, Some(&mut dedupe_decoder)).unwrap());
             },
             criterion::BatchSize::SmallInput,
         )
