@@ -1,9 +1,14 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use lencode::{
     dedupe::{DedupeDecoder, DedupeEncoder},
     prelude::*,
 };
+use rand::Rng;
+use rand::seq::SliceRandom;
 use solana_sdk::pubkey::Pubkey;
+use std::io::Cursor;
+
+use borsh::BorshDeserialize;
 
 fn bench_encode_pubkey(c: &mut Criterion) {
     c.bench_function("lencode_encode_pubkey", |b| {
@@ -51,5 +56,92 @@ fn bench_decode_pubkey(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_encode_pubkey, bench_decode_pubkey);
+fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
+    // Create a vector of 1000 pubkeys where 50% are duplicates
+    // This simulates real-world scenarios where many transactions
+    // reference the same popular accounts/programs
+    let mut rng = rand::rng();
+    let unique_pubkeys: Vec<Pubkey> = (0..500).map(|_| Pubkey::new_unique()).collect();
+
+    // Create duplicates by randomly selecting from unique pubkeys
+    let mut duplicates: Vec<Pubkey> = (0..500)
+        .map(|_| {
+            let idx = rng.random_range(0..unique_pubkeys.len());
+            unique_pubkeys[idx]
+        })
+        .collect();
+
+    // Combine and shuffle to create realistic distribution
+    let mut all_pubkeys = unique_pubkeys;
+    all_pubkeys.append(&mut duplicates);
+    all_pubkeys.shuffle(&mut rng);
+
+    let mut group = c.benchmark_group("encoding_pubkey_vec_50pct_duplicates");
+
+    // Benchmark borsh encoding
+    group.bench_with_input(
+        BenchmarkId::new("borsh", "pubkey_vec"),
+        &all_pubkeys,
+        |b, pubkeys| b.iter(|| black_box(borsh::to_vec(pubkeys).unwrap())),
+    );
+
+    // Benchmark lencode encoding with deduplication
+    group.bench_with_input(
+        BenchmarkId::new("lencode", "pubkey_vec"),
+        &all_pubkeys,
+        |b, pubkeys| {
+            b.iter(|| {
+                let mut encoder = DedupeEncoder::new();
+                let mut cursor = Cursor::new(Vec::new());
+                // Encode the vector itself, not individual pubkeys
+                black_box(pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap());
+                cursor.into_inner()
+            })
+        },
+    );
+
+    group.finish();
+
+    // Benchmark decoding
+    let mut group = c.benchmark_group("decoding_pubkey_vec_50pct_duplicates");
+
+    // Prepare encoded data for both formats
+    let borsh_data = borsh::to_vec(&all_pubkeys).unwrap();
+
+    let lencode_data = {
+        let mut encoder = DedupeEncoder::new();
+        let mut cursor = Cursor::new(Vec::new());
+        all_pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap();
+        cursor.into_inner()
+    };
+
+    // Benchmark borsh decoding
+    group.bench_with_input(
+        BenchmarkId::new("borsh", "pubkey_vec"),
+        &borsh_data,
+        |b, data| b.iter(|| black_box(Vec::<Pubkey>::try_from_slice(data).unwrap())),
+    );
+
+    // Benchmark lencode decoding with deduplication
+    group.bench_with_input(
+        BenchmarkId::new("lencode", "pubkey_vec"),
+        &lencode_data,
+        |b, data| {
+            b.iter(|| {
+                let mut decoder = DedupeDecoder::new();
+                let mut cursor = Cursor::new(data);
+                black_box(Vec::<Pubkey>::decode(&mut cursor, Some(&mut decoder)).unwrap())
+            })
+        },
+    );
+
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_encode_pubkey,
+    bench_decode_pubkey,
+    benchmark_pubkey_vec_with_duplicates
+);
 criterion_main!(benches);

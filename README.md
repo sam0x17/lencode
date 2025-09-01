@@ -4,7 +4,7 @@
 [![Documentation](https://docs.rs/lencode/badge.svg)](https://docs.rs/lencode)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A high-performance Rust crate for encoding and decoding variable-length data using a high
+A Rust crate for encoding and decoding variable-length data using a high
 performance varint encoding scheme with built-in deduplication support.
 
 ## Features

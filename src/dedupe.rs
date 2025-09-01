@@ -20,6 +20,18 @@ impl DedupeEncoder {
         self.table.clear();
     }
 
+    /// Returns the number of unique values currently stored in the encoder.
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
+
+    /// Returns true if the encoder contains no values.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.table.is_empty()
+    }
+
     /// Encodes a value with deduplication.
     ///
     /// If the value has been seen before, only its ID is encoded.
