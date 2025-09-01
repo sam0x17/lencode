@@ -117,7 +117,7 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            data: Vec::new(),
+            data: Vec::with_capacity(capacity * 32),
             offsets: Vec::with_capacity(capacity),
         }
     }
