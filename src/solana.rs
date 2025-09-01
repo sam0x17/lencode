@@ -24,21 +24,56 @@ impl Pack for Pubkey {
     }
 }
 
-// // note: Pubkeys are completely uncompressible using varint encoding so it is better to encode
-// // them as raw bytes to save the extra one byte of overhead that varint encoding would add.
-// impl Encode for Pubkey {
-//     #[inline(always)]
-//     fn encode(&self, writer: &mut impl Write, dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>) -> Result<usize> {
-//         self.as_array().encode(writer, dedupe_encoder)
-//     }
-// }
+// Pubkeys are commonly repeated in Solana transactions, so we use deduplication
+// to avoid encoding the same pubkey multiple times
+impl Encode for Pubkey {
+    #[inline(always)]
+    fn encode(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
+        if let Some(dedupe_encoder) = dedupe_encoder {
+            dedupe_encoder.encode(self, writer)
+        } else {
+            // Without deduplication, just write the raw 32 bytes
+            let bytes = self.as_ref();
+            let mut written = 0;
+            while written < bytes.len() {
+                let n = writer.write(&bytes[written..])?;
+                if n == 0 {
+                    return Err(Error::WriterOutOfSpace);
+                }
+                written += n;
+            }
+            Ok(32)
+        }
+    }
+}
 
-// impl Decode for Pubkey {
-//     #[inline(always)]
-//     fn decode(reader: &mut impl Read, dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>) -> Result<Self> {
-//         Ok(Pubkey::new_from_array(decode(reader)?))
-//     }
-// }
+impl Decode for Pubkey {
+    #[inline(always)]
+    fn decode(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
+        if let Some(dedupe_decoder) = dedupe_decoder {
+            dedupe_decoder.decode(reader)
+        } else {
+            // Without deduplication, just read the raw 32 bytes
+            let mut buf = [0u8; 32];
+            let mut read_bytes = 0;
+            while read_bytes < 32 {
+                let n = reader.read(&mut buf[read_bytes..])?;
+                if n == 0 {
+                    return Err(Error::ReaderOutOfData);
+                }
+                read_bytes += n;
+            }
+            Ok(Pubkey::new_from_array(buf))
+        }
+    }
+}
 
 impl Encode for Hash {
     fn encode(
@@ -173,4 +208,95 @@ fn test_pubkey_pack_roundtrip() {
         let unpacked_pubkey = Pubkey::unpack(&mut Cursor::new(&mut buf)).unwrap();
         assert_eq!(pubkey, unpacked_pubkey);
     }
+}
+
+#[test]
+fn test_pubkey_encode_decode_roundtrip() {
+    for _ in 0..100 {
+        let pubkey = Pubkey::new_unique();
+        let mut buf = Vec::new();
+        let n = pubkey.encode(&mut buf, None).unwrap();
+        assert_eq!(n, 32); // Should be 32 bytes without deduplication
+        let mut cursor = Cursor::new(&buf);
+        let decoded_pubkey = Pubkey::decode(&mut cursor, None).unwrap();
+        assert_eq!(pubkey, decoded_pubkey);
+    }
+}
+
+#[test]
+fn test_pubkey_deduplication() {
+    use crate::dedupe::{DedupeDecoder, DedupeEncoder};
+
+    // Create some test pubkeys, with duplicates
+    let pubkey1 = Pubkey::new_unique();
+    let pubkey2 = Pubkey::new_unique();
+    let pubkey3 = pubkey1; // Duplicate of pubkey1
+    let pubkeys = vec![pubkey1, pubkey2, pubkey3, pubkey1, pubkey2]; // More duplicates
+
+    // Encode with deduplication
+    let mut buf = Vec::new();
+    let mut dedupe_encoder = DedupeEncoder::new();
+
+    let mut total_bytes = 0;
+    for pubkey in &pubkeys {
+        total_bytes += pubkey.encode(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+    }
+
+    // With deduplication, we should save space by not repeating pubkeys
+    // First pubkey: 1 byte (id=0) + 32 bytes (data) = 33 bytes
+    // Second pubkey: 1 byte (id=0) + 32 bytes (data) = 33 bytes
+    // Third pubkey (duplicate of first): 1 byte (id=1) = 1 byte
+    // Fourth pubkey (duplicate of first): 1 byte (id=1) = 1 byte
+    // Fifth pubkey (duplicate of second): 1 byte (id=2) = 1 byte
+    // Total: 33 + 33 + 1 + 1 + 1 = 69 bytes
+    assert_eq!(total_bytes, 69);
+
+    // Decode with deduplication
+    let mut decode_cursor = Cursor::new(&buf);
+    let mut dedupe_decoder = DedupeDecoder::new();
+    let mut decoded_pubkeys = Vec::new();
+
+    for _ in 0..pubkeys.len() {
+        decoded_pubkeys
+            .push(Pubkey::decode(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
+    }
+
+    // Verify all pubkeys were decoded correctly
+    assert_eq!(decoded_pubkeys, pubkeys);
+
+    // Verify deduplication worked - should have only 2 unique pubkeys stored
+    assert_eq!(dedupe_decoder.len(), 2);
+}
+
+#[test]
+fn test_pubkey_deduplication_without_duplicates() {
+    use crate::dedupe::{DedupeDecoder, DedupeEncoder};
+
+    // Create unique pubkeys
+    let pubkeys: Vec<Pubkey> = (0..5).map(|_| Pubkey::new_unique()).collect();
+
+    // Encode with deduplication
+    let mut buf = Vec::new();
+    let mut dedupe_encoder = DedupeEncoder::new();
+
+    let mut total_bytes = 0;
+    for pubkey in &pubkeys {
+        total_bytes += pubkey.encode(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+    }
+
+    // Without duplicates, each pubkey should take 33 bytes (1 + 32)
+    assert_eq!(total_bytes, 5 * 33);
+
+    // Decode and verify
+    let mut decode_cursor = Cursor::new(&buf);
+    let mut dedupe_decoder = DedupeDecoder::new();
+    let mut decoded_pubkeys = Vec::new();
+
+    for _ in 0..pubkeys.len() {
+        decoded_pubkeys
+            .push(Pubkey::decode(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
+    }
+
+    assert_eq!(decoded_pubkeys, pubkeys);
+    assert_eq!(dedupe_decoder.len(), 5);
 }

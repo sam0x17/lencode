@@ -75,6 +75,16 @@ impl DedupeDecoder {
         self.table.clear();
     }
 
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.table.is_empty()
+    }
+
     /// Decodes a value with deduplication.
     ///
     /// If the ID is 0, a new value is decoded and stored in the table.
