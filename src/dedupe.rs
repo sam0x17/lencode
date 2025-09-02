@@ -79,20 +79,27 @@ impl DedupeEncoder {
         self.buffer.clear();
         val.pack(&mut self.buffer)?;
 
-        // First check if we already have this value
-        if let Some(&id) = self.table.get(&self.buffer) {
-            // value has been seen before, encode its id
-            return Lencode::encode_varint(id, writer);
+        // Calculate new_id before entry API to avoid borrowing conflicts
+        let new_id = self.table.len() + 1;
+
+        // Use entry API to avoid double hash lookup
+        use hashbrown::hash_map::Entry;
+        match self.table.entry(core::mem::take(&mut self.buffer)) {
+            Entry::Occupied(entry) => {
+                // Value has been seen before, encode its id
+                let id = *entry.get();
+                Lencode::encode_varint(id, writer)
+            }
+            Entry::Vacant(entry) => {
+                // New value - insert it and encode
+                entry.insert(new_id);
+
+                let mut total_bytes = 0;
+                total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
+                total_bytes += val.pack(writer)?;
+                Ok(total_bytes)
+            }
         }
-
-        // New value - insert it and encode
-        let new_id = self.table.len() + 1; // ids start at 1
-        self.table.insert(self.buffer.clone(), new_id);
-
-        let mut total_bytes = 0;
-        total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
-        total_bytes += val.pack(writer)?;
-        Ok(total_bytes)
     }
 }
 
