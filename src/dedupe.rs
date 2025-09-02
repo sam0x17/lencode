@@ -82,7 +82,6 @@ impl DedupeEncoder {
         // Use the end of key_data as scratch space for new keys
         let original_len = self.key_data.len();
         val.pack(&mut self.key_data)?;
-        let new_key_len = self.key_data.len() - original_len;
 
         // Calculate hash for the key (using the newly appended data)
         let mut hasher = self.hasher.build_hasher();
@@ -91,14 +90,6 @@ impl DedupeEncoder {
 
         // Look for existing entry - need to be careful about the comparison
         let found_entry = self.table.find(hash, |&(_, ref range)| {
-            // Compare the existing key data with our newly appended data
-            if range.len() != new_key_len {
-                return false;
-            }
-            // Only compare against ranges that don't overlap with our new data
-            if range.start >= original_len {
-                return false; // This would be comparing against our own new data
-            }
             &self.key_data[range.start..range.end] == &self.key_data[original_len..]
         });
 
