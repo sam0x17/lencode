@@ -1,14 +1,17 @@
-use core::hash::Hash;
+use core::hash::{BuildHasher, Hash, Hasher};
+use core::ops::Range;
 
 use ahash::RandomState;
-use hashbrown::HashMap;
+use hashbrown::HashTable;
 
 use crate::prelude::*;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct DedupeEncoder {
-    table: HashMap<Vec<u8>, usize, RandomState>,
-    buffer: Vec<u8>, // Reusable buffer to avoid allocations
+    table: HashTable<(usize, Range<usize>)>, // (id, range into key_data)
+    key_data: Vec<u8>,                       // Contiguous storage for all keys
+    buffer: Vec<u8>,                         // Reusable buffer to avoid allocations
+    hasher: RandomState,
 }
 
 impl Default for DedupeEncoder {
@@ -21,8 +24,10 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            table: HashMap::with_hasher(RandomState::new()),
+            table: HashTable::new(),
+            key_data: Vec::new(),
             buffer: Vec::new(),
+            hasher: RandomState::new(),
         }
     }
 
@@ -33,14 +38,17 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            table: HashMap::with_capacity_and_hasher(capacity, RandomState::new()),
-            buffer: Vec::with_capacity(4096),
+            table: HashTable::with_capacity(capacity),
+            key_data: Vec::with_capacity(capacity * 32),
+            buffer: Vec::with_capacity(capacity * 32),
+            hasher: RandomState::new(),
         }
     }
 
     #[inline(always)]
     pub fn clear(&mut self) {
         self.table.clear();
+        self.key_data.clear();
         self.buffer.clear();
     }
 
@@ -79,26 +87,41 @@ impl DedupeEncoder {
         self.buffer.clear();
         val.pack(&mut self.buffer)?;
 
-        // Calculate new_id before entry API to avoid borrowing conflicts
-        let new_id = self.table.len() + 1;
+        // Calculate hash for the key
+        let mut hasher = self.hasher.build_hasher();
+        self.buffer.hash(&mut hasher);
+        let hash = hasher.finish();
 
-        // Use entry API to avoid double hash lookup
-        use hashbrown::hash_map::Entry;
-        match self.table.entry(core::mem::take(&mut self.buffer)) {
-            Entry::Occupied(entry) => {
-                // Value has been seen before, encode its id
-                let id = *entry.get();
-                Lencode::encode_varint(id, writer)
-            }
-            Entry::Vacant(entry) => {
-                // New value - insert it and encode
-                entry.insert(new_id);
+        // Look for existing entry
+        let found_entry = self.table.find(hash, |&(_, ref range)| {
+            &self.key_data[range.clone()] == self.buffer.as_slice()
+        });
 
-                let mut total_bytes = 0;
-                total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
-                total_bytes += val.pack(writer)?;
-                Ok(total_bytes)
-            }
+        if let Some(&(id, _)) = found_entry {
+            // Value has been seen before, encode its id
+            Lencode::encode_varint(id, writer)
+        } else {
+            // New value - store it and encode
+            let new_id = self.table.len() + 1; // ids start at 1
+
+            // Store the key in contiguous memory
+            let start = self.key_data.len();
+            self.key_data.extend_from_slice(&self.buffer);
+            let end = self.key_data.len();
+            let range = start..end;
+
+            // Insert into hash table
+            self.table
+                .insert_unique(hash, (new_id, range), |&(_, ref range)| {
+                    let mut hasher = self.hasher.build_hasher();
+                    self.key_data[range.clone()].hash(&mut hasher);
+                    hasher.finish()
+                });
+
+            let mut total_bytes = 0;
+            total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
+            total_bytes += val.pack(writer)?;
+            Ok(total_bytes)
         }
     }
 }
