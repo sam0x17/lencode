@@ -99,7 +99,7 @@ impl DedupeEncoder {
             if range.start >= original_len {
                 return false; // This would be comparing against our own new data
             }
-            &self.key_data[range.clone()] == &self.key_data[original_len..]
+            &self.key_data[range.start..range.end] == &self.key_data[original_len..]
         });
 
         if let Some(&(id, _)) = found_entry {
@@ -115,7 +115,7 @@ impl DedupeEncoder {
             self.table
                 .insert_unique(hash, (new_id, range), |&(_, ref range)| {
                     let mut hasher = self.hasher.build_hasher();
-                    self.key_data[range.clone()].hash(&mut hasher);
+                    self.key_data[range.start..range.end].hash(&mut hasher);
                     hasher.finish()
                 });
 
