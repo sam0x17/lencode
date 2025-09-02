@@ -10,7 +10,6 @@ use crate::prelude::*;
 pub struct DedupeEncoder {
     table: HashTable<(usize, Range<usize>)>, // (id, range into key_data)
     key_data: Vec<u8>,                       // Contiguous storage for all keys
-    buffer: Vec<u8>,                         // Reusable buffer to avoid allocations
     hasher: RandomState,
 }
 
@@ -26,7 +25,6 @@ impl DedupeEncoder {
         Self {
             table: HashTable::new(),
             key_data: Vec::new(),
-            buffer: Vec::new(),
             hasher: RandomState::new(),
         }
     }
@@ -40,7 +38,6 @@ impl DedupeEncoder {
         Self {
             table: HashTable::with_capacity(capacity),
             key_data: Vec::with_capacity(capacity * 32),
-            buffer: Vec::with_capacity(capacity * 32),
             hasher: RandomState::new(),
         }
     }
@@ -49,7 +46,6 @@ impl DedupeEncoder {
     pub fn clear(&mut self) {
         self.table.clear();
         self.key_data.clear();
-        self.buffer.clear();
     }
 
     /// Returns the number of unique values currently stored in the encoder.
@@ -83,32 +79,37 @@ impl DedupeEncoder {
         val: &T,
         writer: &mut impl Write,
     ) -> Result<usize> {
-        // Clear and reuse the internal buffer to avoid allocation
-        self.buffer.clear();
-        val.pack(&mut self.buffer)?;
+        // Use the end of key_data as scratch space for new keys
+        let original_len = self.key_data.len();
+        val.pack(&mut self.key_data)?;
+        let new_key_len = self.key_data.len() - original_len;
 
-        // Calculate hash for the key
+        // Calculate hash for the key (using the newly appended data)
         let mut hasher = self.hasher.build_hasher();
-        self.buffer.hash(&mut hasher);
+        self.key_data[original_len..].hash(&mut hasher);
         let hash = hasher.finish();
 
-        // Look for existing entry
+        // Look for existing entry - need to be careful about the comparison
         let found_entry = self.table.find(hash, |&(_, ref range)| {
-            &self.key_data[range.clone()] == self.buffer.as_slice()
+            // Compare the existing key data with our newly appended data
+            if range.len() != new_key_len {
+                return false;
+            }
+            // Only compare against ranges that don't overlap with our new data
+            if range.start >= original_len {
+                return false; // This would be comparing against our own new data
+            }
+            &self.key_data[range.clone()] == &self.key_data[original_len..]
         });
 
         if let Some(&(id, _)) = found_entry {
-            // Value has been seen before, encode its id
+            // Value has been seen before, restore original length and encode its id
+            self.key_data.truncate(original_len);
             Lencode::encode_varint(id, writer)
         } else {
-            // New value - store it and encode
+            // New value - keep the data we just appended and encode
             let new_id = self.table.len() + 1; // ids start at 1
-
-            // Store the key in contiguous memory
-            let start = self.key_data.len();
-            self.key_data.extend_from_slice(&self.buffer);
-            let end = self.key_data.len();
-            let range = start..end;
+            let range = original_len..self.key_data.len();
 
             // Insert into hash table
             self.table
