@@ -34,7 +34,7 @@ impl DedupeEncoder {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             table: HashMap::with_capacity_and_hasher(capacity, RandomState::new()),
-            buffer: Vec::with_capacity(capacity * 32),
+            buffer: Vec::with_capacity(4096),
         }
     }
 
