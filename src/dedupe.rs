@@ -1,16 +1,19 @@
-use core::hash::{BuildHasher, Hash, Hasher};
-use core::ops::Range;
+use core::any::Any;
+use core::hash::Hash;
+use hashbrown::HashMap;
 
-use ahash::RandomState;
-use hashbrown::HashTable;
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use std::boxed::Box;
 
 use crate::prelude::*;
 
-#[derive(Clone)]
 pub struct DedupeEncoder {
-    table: HashTable<(usize, Range<usize>)>, // (id, range into key_data)
-    key_data: Vec<u8>,                       // Contiguous storage for all keys
-    hasher: RandomState,
+    // Store values by their assigned ID (global across all types)
+    values_by_id: HashMap<usize, Box<dyn Any + Send + Sync>>,
+    // Next ID to assign (starts at 1)
+    next_id: usize,
 }
 
 impl Default for DedupeEncoder {
@@ -24,9 +27,8 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            table: HashTable::new(),
-            key_data: Vec::new(),
-            hasher: RandomState::new(),
+            values_by_id: HashMap::new(),
+            next_id: 1, // Start at 1 to match decoder
         }
     }
 
@@ -37,28 +39,27 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            table: HashTable::with_capacity(capacity),
-            key_data: Vec::with_capacity(2048),
-            hasher: RandomState::new(),
+            values_by_id: HashMap::with_capacity(capacity),
+            next_id: 1,
         }
     }
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.table.clear();
-        self.key_data.clear();
+        self.values_by_id.clear();
+        self.next_id = 1;
     }
 
     /// Returns the number of unique values currently stored in the encoder.
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.table.len()
+        self.next_id - 1
     }
 
     /// Returns true if the encoder contains no values.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.table.is_empty()
+        self.next_id == 1
     }
 
     /// Encodes a value with deduplication.
@@ -68,69 +69,58 @@ impl DedupeEncoder {
     ///
     /// # Arguments
     ///
-    /// * `val` - The value to encode. It must implement `Hash`, `Eq`, and `Encode`.
+    /// * `val` - The value to encode. It must implement `Hash`, `Eq`, and `Pack`.
     /// * `writer` - The writer to which the encoded data will be written.
     ///
     /// # Returns
     ///
     /// The number of bytes written to the writer.
     #[inline]
-    pub fn encode<T: Hash + Eq + Pack>(
+    pub fn encode<T: Hash + Eq + Pack + Clone + Send + Sync + 'static>(
         &mut self,
         val: &T,
         writer: &mut impl Write,
     ) -> Result<usize> {
-        // Use the end of key_data as scratch space for new keys
-        let original_len = self.key_data.len();
-        val.pack(&mut self.key_data)?;
-
-        // Calculate hash for the key (using the newly appended data)
-        let mut hasher = self.hasher.build_hasher();
-        self.key_data[original_len..].hash(&mut hasher);
-        let hash = hasher.finish();
-
-        // Look for existing entry - need to be careful about the comparison
-        let found_entry = self.table.find(hash, |&(_, ref range)| {
-            &self.key_data[range.start..range.end] == &self.key_data[original_len..]
-        });
-
-        if let Some(&(id, _)) = found_entry {
-            // Value has been seen before, restore original length and encode its id
-            self.key_data.truncate(original_len);
-            Lencode::encode_varint(id, writer)
-        } else {
-            // New value - keep the data we just appended and encode
-            let new_id = self.table.len() + 1; // ids start at 1
-            let range = original_len..self.key_data.len();
-
-            // Insert into hash table
-            self.table
-                .insert_unique(hash, (new_id, range), |&(_, ref range)| {
-                    let mut hasher = self.hasher.build_hasher();
-                    self.key_data[range.start..range.end].hash(&mut hasher);
-                    hasher.finish()
-                });
-
-            let mut total_bytes = 0;
-            total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
-            total_bytes += val.pack(writer)?;
-            Ok(total_bytes)
+        // Check if we've seen this value before by searching through existing values
+        for (&id, stored_value) in &self.values_by_id {
+            if let Some(stored_val) = stored_value.downcast_ref::<T>() {
+                if stored_val == val {
+                    // Found a matching value, encode its ID
+                    return Lencode::encode_varint(id, writer);
+                }
+            }
         }
+
+        // New value - assign an ID and store it
+        let new_id = self.next_id;
+        self.next_id += 1;
+
+        // Store the value
+        self.values_by_id.insert(new_id, Box::new(val.clone()));
+
+        // Encode as new value (ID 0 followed by the actual value)
+        let mut total_bytes = 0;
+        total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
+        total_bytes += val.pack(writer)?;
+        Ok(total_bytes)
     }
 }
 
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Default)]
 pub struct DedupeDecoder {
-    // Single buffer to store all cached values
-    data: Vec<u8>,
-    // Offsets into the data buffer for each cached value (start, length)
-    offsets: Vec<(usize, usize)>,
+    // Store values by their assigned ID (global across all types)
+    values_by_id: HashMap<usize, Box<dyn Any + Send + Sync>>,
+    // Next ID to assign (starts at 1 to match encoder)
+    next_id: usize,
 }
 
 impl DedupeDecoder {
     #[inline(always)]
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            values_by_id: HashMap::new(),
+            next_id: 1, // Start at 1 to match encoder
+        }
     }
 
     /// Creates a new `DedupeDecoder` with the specified capacity.
@@ -140,25 +130,25 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            data: Vec::with_capacity(capacity * 32),
-            offsets: Vec::with_capacity(capacity),
+            values_by_id: HashMap::with_capacity(capacity),
+            next_id: 1,
         }
     }
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.data.clear();
-        self.offsets.clear();
+        self.values_by_id.clear();
+        self.next_id = 1;
     }
 
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.offsets.len()
+        self.next_id - 1
     }
 
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.offsets.is_empty()
+        self.next_id == 1
     }
 
     /// Decodes a value with deduplication.
@@ -174,32 +164,32 @@ impl DedupeDecoder {
     ///
     /// The decoded value.
     #[inline]
-    pub fn decode<T: Pack>(&mut self, reader: &mut impl Read) -> Result<T> {
+    pub fn decode<T: Pack + Clone + Hash + Eq + Send + Sync + 'static>(
+        &mut self,
+        reader: &mut impl Read,
+    ) -> Result<T> {
         let id = Lencode::decode_varint::<usize>(reader)?;
 
         if id == 0 {
             // New value, decode it and store in table
             let value = T::unpack(reader)?;
-            let mut buf = Vec::with_capacity(core::mem::size_of::<T>());
-            value.pack(&mut buf)?;
 
-            // Store the data and record its offset
-            let start = self.data.len();
-            let length = buf.len();
-            self.data.extend_from_slice(&buf);
-            self.offsets.push((start, length));
+            // Store the value by its assigned ID
+            let assigned_id = self.next_id;
+            self.values_by_id
+                .insert(assigned_id, Box::new(value.clone()));
+            self.next_id += 1;
 
             Ok(value)
         } else {
             // Existing value, retrieve from table
-            let table_index = id - 1; // IDs start at 1, but table is 0-indexed
-            if table_index >= self.offsets.len() {
-                return Err(crate::io::Error::InvalidData);
+            if let Some(boxed_value) = self.values_by_id.get(&id) {
+                if let Some(typed_value) = boxed_value.downcast_ref::<T>() {
+                    return Ok(typed_value.clone());
+                }
             }
-            let (start, length) = self.offsets[table_index];
-            let buf = &self.data[start..start + length];
-            let mut cursor = crate::io::Cursor::new(buf);
-            T::unpack(&mut cursor)
+
+            Err(crate::io::Error::InvalidData)
         }
     }
 }
