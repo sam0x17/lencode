@@ -1,4 +1,4 @@
-use core::any::Any;
+use core::any::{Any, TypeId};
 use core::hash::Hash;
 use hashbrown::HashMap;
 
@@ -10,7 +10,9 @@ use std::boxed::Box;
 use crate::prelude::*;
 
 pub struct DedupeEncoder {
-    // Store values by their assigned ID (global across all types)
+    // Store type-specific hashmaps: TypeId -> HashMap<T, usize>
+    type_stores: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    // Store values by their assigned ID for decoder compatibility
     values_by_id: HashMap<usize, Box<dyn Any + Send + Sync>>,
     // Next ID to assign (starts at 1)
     next_id: usize,
@@ -27,6 +29,7 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
+            type_stores: HashMap::new(),
             values_by_id: HashMap::new(),
             next_id: 1, // Start at 1 to match decoder
         }
@@ -39,6 +42,7 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
+            type_stores: HashMap::with_capacity(capacity),
             values_by_id: HashMap::with_capacity(capacity),
             next_id: 1,
         }
@@ -46,6 +50,7 @@ impl DedupeEncoder {
 
     #[inline(always)]
     pub fn clear(&mut self) {
+        self.type_stores.clear();
         self.values_by_id.clear();
         self.next_id = 1;
     }
@@ -81,21 +86,31 @@ impl DedupeEncoder {
         val: &T,
         writer: &mut impl Write,
     ) -> Result<usize> {
-        // Check if we've seen this value before by searching through existing values
-        for (&id, stored_value) in &self.values_by_id {
-            if let Some(stored_val) = stored_value.downcast_ref::<T>() {
-                if stored_val == val {
-                    // Found a matching value, encode its ID
-                    return Lencode::encode_varint(id, writer);
-                }
-            }
+        let type_id = TypeId::of::<T>();
+
+        // Get or create the type-specific store for this type
+        let store = self
+            .type_stores
+            .entry(type_id)
+            .or_insert_with(|| Box::new(HashMap::<T, usize>::new()));
+
+        // Downcast to the concrete type
+        let typed_store = store
+            .downcast_mut::<HashMap<T, usize>>()
+            .expect("Type mismatch in type store");
+
+        // Check if we've already seen this value
+        if let Some(&existing_id) = typed_store.get(val) {
+            // Value has been seen before, encode its ID
+            return Lencode::encode_varint(existing_id, writer);
         }
 
         // New value - assign an ID and store it
         let new_id = self.next_id;
         self.next_id += 1;
 
-        // Store the value
+        // Store in both maps
+        typed_store.insert(val.clone(), new_id);
         self.values_by_id.insert(new_id, Box::new(val.clone()));
 
         // Encode as new value (ID 0 followed by the actual value)
