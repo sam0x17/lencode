@@ -117,19 +117,14 @@ impl DedupeEncoder {
 
 #[derive(Default)]
 pub struct DedupeDecoder {
-    // Store values by their assigned ID (global across all types)
-    values_by_id: HashMap<usize, Box<dyn Any + Send + Sync>>,
-    // Next ID to assign (starts at 1 to match encoder)
-    next_id: usize,
+    // Store values in order - index 0 = ID 1, index 1 = ID 2, etc.
+    values: Vec<Box<dyn Any + Send + Sync>>,
 }
 
 impl DedupeDecoder {
     #[inline(always)]
     pub fn new() -> Self {
-        Self {
-            values_by_id: HashMap::new(),
-            next_id: 1, // Start at 1 to match encoder
-        }
+        Self { values: Vec::new() }
     }
 
     /// Creates a new `DedupeDecoder` with the specified capacity.
@@ -139,25 +134,23 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            values_by_id: HashMap::with_capacity(capacity),
-            next_id: 1,
+            values: Vec::with_capacity(capacity),
         }
     }
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.values_by_id.clear();
-        self.next_id = 1;
+        self.values.clear();
     }
 
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.next_id - 1
+        self.values.len()
     }
 
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.next_id == 1
+        self.values.is_empty()
     }
 
     /// Decodes a value with deduplication.
@@ -183,16 +176,14 @@ impl DedupeDecoder {
             // New value, decode it and store in table
             let value = T::unpack(reader)?;
 
-            // Store the value by its assigned ID
-            let assigned_id = self.next_id;
-            self.values_by_id
-                .insert(assigned_id, Box::new(value.clone()));
-            self.next_id += 1;
+            // Store the value (Vec index = ID - 1)
+            self.values.push(Box::new(value.clone()));
 
             Ok(value)
         } else {
             // Existing value, retrieve from table
-            if let Some(boxed_value) = self.values_by_id.get(&id) {
+            let index = id - 1; // Convert ID to Vec index
+            if let Some(boxed_value) = self.values.get(index) {
                 if let Some(typed_value) = boxed_value.downcast_ref::<T>() {
                     return Ok(typed_value.clone());
                 }
