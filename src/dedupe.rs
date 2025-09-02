@@ -14,6 +14,7 @@ pub struct DedupeEncoder {
 }
 
 impl Default for DedupeEncoder {
+    #[inline(always)]
     fn default() -> Self {
         Self::new()
     }
