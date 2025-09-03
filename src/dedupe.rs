@@ -192,9 +192,10 @@ impl DedupeDecoder {
             // Existing value, retrieve from table
             let index = id - 1; // Convert ID to Vec index
             if let Some(boxed_value) = self.values.get(index)
-                && let Some(typed_value) = boxed_value.downcast_ref::<T>() {
-                    return Ok(typed_value.clone());
-                }
+                && let Some(typed_value) = boxed_value.downcast_ref::<T>()
+            {
+                return Ok(typed_value.clone());
+            }
 
             Err(crate::io::Error::InvalidData)
         }
