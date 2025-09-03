@@ -105,7 +105,7 @@ fn benchmark_roundup(c: &mut Criterion) {
             },
             |buf| {
                 let mut cursor = Cursor::new(buf);
-                black_box(Vec::<u128>::decode(&mut cursor, None).unwrap());
+                black_box(Vec::<u128>::decode_ext(&mut cursor, None).unwrap());
             },
             criterion::BatchSize::SmallInput,
         );

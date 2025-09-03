@@ -49,7 +49,7 @@ fn bench_decode_pubkey(c: &mut Criterion) {
                 (cursor, dedupe_decoder)
             },
             |(mut cursor, mut dedupe_decoder)| {
-                black_box(Pubkey::decode(&mut cursor, Some(&mut dedupe_decoder)).unwrap());
+                black_box(Pubkey::decode_ext(&mut cursor, Some(&mut dedupe_decoder)).unwrap());
             },
             criterion::BatchSize::SmallInput,
         )
@@ -141,7 +141,7 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
                     (decoder, cursor)
                 },
                 |(mut decoder, mut cursor)| {
-                    black_box(Vec::<Pubkey>::decode(&mut cursor, Some(&mut decoder)).unwrap())
+                    black_box(Vec::<Pubkey>::decode_ext(&mut cursor, Some(&mut decoder)).unwrap())
                 },
                 criterion::BatchSize::SmallInput,
             )

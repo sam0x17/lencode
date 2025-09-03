@@ -54,7 +54,7 @@ fn main() {
     // Verify we can decode correctly
     let mut decoder = DedupeDecoder::with_capacity(1000);
     let mut cursor = Cursor::new(&lencode_data);
-    let decoded: Vec<Pubkey> = Vec::decode(&mut cursor, Some(&mut decoder)).unwrap();
+    let decoded: Vec<Pubkey> = Vec::decode_ext(&mut cursor, Some(&mut decoder)).unwrap();
 
     assert_eq!(all_pubkeys.len(), decoded.len());
     assert_eq!(all_pubkeys, decoded);

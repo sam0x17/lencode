@@ -44,7 +44,7 @@ impl Encode for Pubkey {
 
 impl Decode for Pubkey {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
@@ -68,11 +68,11 @@ impl Encode for Hash {
 }
 
 impl Decode for Hash {
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
-        let bytes = <[u8; HASH_BYTES]>::decode(reader, dedupe_decoder)?;
+        let bytes = <[u8; HASH_BYTES]>::decode_ext(reader, dedupe_decoder)?;
         Ok(Hash::new_from_array(bytes))
     }
 }
@@ -88,7 +88,7 @@ impl Encode for Signature {
 }
 
 impl Decode for Signature {
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
@@ -114,7 +114,7 @@ impl Encode for MessageHeader {
 }
 
 impl Decode for MessageHeader {
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
@@ -158,7 +158,9 @@ fn test_encode_decode_pubkey() {
         };
 
         let bytes_before = buf.len();
-        pubkey.encode_ext(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+        pubkey
+            .encode_ext(&mut buf, Some(&mut dedupe_encoder))
+            .unwrap();
         let bytes_written = buf.len() - bytes_before;
 
         if i < 5 {
@@ -177,7 +179,7 @@ fn test_encode_decode_pubkey() {
     let mut decoded_pubkeys = Vec::new();
 
     for _ in 0..10 {
-        let decoded_pubkey = Pubkey::decode(&mut cursor, Some(&mut dedupe_decoder)).unwrap();
+        let decoded_pubkey = Pubkey::decode_ext(&mut cursor, Some(&mut dedupe_decoder)).unwrap();
         decoded_pubkeys.push(decoded_pubkey);
     }
 
@@ -202,7 +204,7 @@ fn test_encode_decode_message_header() {
         let mut buf = [0u8; 4];
         let mut cursor = Cursor::new(&mut buf);
         header.encode_ext(&mut cursor, None).unwrap();
-        let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf), None).unwrap();
+        let decoded_header = MessageHeader::decode_ext(&mut Cursor::new(&mut buf), None).unwrap();
         assert_eq!(header, decoded_header);
     }
     let header = MessageHeader {
@@ -214,7 +216,7 @@ fn test_encode_decode_message_header() {
     let mut cursor = Cursor::new(&mut buf);
     let n = header.encode_ext(&mut cursor, None).unwrap();
     assert_eq!(n, 1);
-    let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf), None).unwrap();
+    let decoded_header = MessageHeader::decode_ext(&mut Cursor::new(&mut buf), None).unwrap();
     assert_eq!(header, decoded_header);
 }
 
@@ -247,7 +249,9 @@ fn test_pubkey_deduplication() {
 
     let mut total_bytes = 0;
     for pubkey in &pubkeys {
-        total_bytes += pubkey.encode_ext(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+        total_bytes += pubkey
+            .encode_ext(&mut buf, Some(&mut dedupe_encoder))
+            .unwrap();
     }
 
     // With deduplication, we should save space by not repeating pubkeys
@@ -266,7 +270,7 @@ fn test_pubkey_deduplication() {
 
     for _ in 0..pubkeys.len() {
         decoded_pubkeys
-            .push(Pubkey::decode(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
+            .push(Pubkey::decode_ext(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
     }
 
     // Verify all pubkeys were decoded correctly
@@ -289,7 +293,9 @@ fn test_pubkey_deduplication_without_duplicates() {
 
     let mut total_bytes = 0;
     for pubkey in &pubkeys {
-        total_bytes += pubkey.encode_ext(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+        total_bytes += pubkey
+            .encode_ext(&mut buf, Some(&mut dedupe_encoder))
+            .unwrap();
     }
 
     // Without duplicates, each pubkey should take 33 bytes (1 + 32)
@@ -302,7 +308,7 @@ fn test_pubkey_deduplication_without_duplicates() {
 
     for _ in 0..pubkeys.len() {
         decoded_pubkeys
-            .push(Pubkey::decode(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
+            .push(Pubkey::decode_ext(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
     }
 
     assert_eq!(decoded_pubkeys, pubkeys);
@@ -319,5 +325,5 @@ fn test_pubkey_requires_deduplication() {
 
     // Should fail when trying to decode without deduplication
     let mut cursor = Cursor::new(&buf);
-    assert!(Pubkey::decode(&mut cursor, None).is_err());
+    assert!(Pubkey::decode_ext(&mut cursor, None).is_err());
 }

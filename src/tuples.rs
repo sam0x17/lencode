@@ -12,11 +12,11 @@ impl<T: Encode> Encode for (T,) {
 
 impl<T: Decode> Decode for (T,) {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
-        Ok((T::decode(reader, dedupe_decoder)?,))
+        Ok((T::decode_ext(reader, dedupe_decoder)?,))
     }
 
     fn decode_len(_reader: &mut impl Read) -> Result<usize> {
@@ -40,13 +40,13 @@ impl<A: Encode, B: Encode> Encode for (A, B) {
 
 impl<A: Decode, B: Decode> Decode for (A, B) {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -72,14 +72,14 @@ impl<A: Encode, B: Encode, C: Encode> Encode for (A, B, C) {
 
 impl<A: Decode, B: Decode, C: Decode> Decode for (A, B, C) {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -106,15 +106,15 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode> Encode for (A, B, C, D) {
 
 impl<A: Decode, B: Decode, C: Decode, D: Decode> Decode for (A, B, C, D) {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -142,16 +142,16 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode> Encode for (A, B, C,
 
 impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode> Decode for (A, B, C, D, E) {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -184,17 +184,17 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode> Decode
     for (A, B, C, D, E, F)
 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder.as_deref_mut())?,
-            F::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            F::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -228,18 +228,18 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode
     for (A, B, C, D, E, F, G)
 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder.as_deref_mut())?,
-            F::decode(reader, dedupe_decoder.as_deref_mut())?,
-            G::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            F::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            G::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -274,19 +274,19 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode
     for (A, B, C, D, E, F, G, H)
 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder.as_deref_mut())?,
-            F::decode(reader, dedupe_decoder.as_deref_mut())?,
-            G::decode(reader, dedupe_decoder.as_deref_mut())?,
-            H::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            F::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            G::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            H::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -340,20 +340,20 @@ impl<
 > Decode for (A, B, C, D, E, F, G, H, I)
 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder.as_deref_mut())?,
-            F::decode(reader, dedupe_decoder.as_deref_mut())?,
-            G::decode(reader, dedupe_decoder.as_deref_mut())?,
-            H::decode(reader, dedupe_decoder.as_deref_mut())?,
-            I::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            F::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            G::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            H::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            I::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -410,21 +410,21 @@ impl<
 > Decode for (A, B, C, D, E, F, G, H, I, J)
 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder.as_deref_mut())?,
-            F::decode(reader, dedupe_decoder.as_deref_mut())?,
-            G::decode(reader, dedupe_decoder.as_deref_mut())?,
-            H::decode(reader, dedupe_decoder.as_deref_mut())?,
-            I::decode(reader, dedupe_decoder.as_deref_mut())?,
-            J::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            F::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            G::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            H::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            I::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            J::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -484,22 +484,22 @@ impl<
 > Decode for (A, B, C, D, E, F, G, H, I, J, K)
 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
-            A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder.as_deref_mut())?,
-            F::decode(reader, dedupe_decoder.as_deref_mut())?,
-            G::decode(reader, dedupe_decoder.as_deref_mut())?,
-            H::decode(reader, dedupe_decoder.as_deref_mut())?,
-            I::decode(reader, dedupe_decoder.as_deref_mut())?,
-            J::decode(reader, dedupe_decoder.as_deref_mut())?,
-            K::decode(reader, dedupe_decoder)?,
+            A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            F::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            G::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            H::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            I::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            J::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+            K::decode_ext(reader, dedupe_decoder)?,
         ))
     }
 
@@ -517,6 +517,6 @@ fn test_7_tuple_encode_decode() {
     assert_eq!(written, 7);
 
     let decoded: (u8, u16, u32, u64, u128, usize, i8) =
-        Decode::decode(&mut Cursor::new(&buffer[..]), None).unwrap();
+        Decode::decode_ext(&mut Cursor::new(&buffer[..]), None).unwrap();
     assert_eq!(decoded, tuple);
 }

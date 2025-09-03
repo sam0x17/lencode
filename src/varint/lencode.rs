@@ -25,7 +25,7 @@ pub fn encode<T: Encode>(value: &T, writer: &mut impl Write) -> Result<usize> {
 
 #[inline(always)]
 pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
-    T::decode(reader, None)
+    T::decode_ext(reader, None)
 }
 
 impl VarintEncodingScheme for Lencode {
@@ -107,7 +107,7 @@ impl Encode for u8 {
 
 impl Decode for u8 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
@@ -131,7 +131,7 @@ impl Encode for i8 {
 
 impl Decode for i8 {
     #[inline(always)]
-    fn decode(
+    fn decode_ext(
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
@@ -291,7 +291,7 @@ fn test_encode_decode_lencode_u8_all() {
         let mut buf = [0u8; 1];
         let n = u8::encode_ext(&val, &mut Cursor::new(&mut buf[..]), None).unwrap();
         assert_eq!(n, 1);
-        let decoded = u8::decode(&mut Cursor::new(&buf), None).unwrap();
+        let decoded = u8::decode_ext(&mut Cursor::new(&buf), None).unwrap();
         assert_eq!(decoded, val);
     }
 }
