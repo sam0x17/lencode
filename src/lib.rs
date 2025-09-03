@@ -50,6 +50,11 @@ pub trait Encode {
     fn encode_len(len: usize, writer: &mut impl Write) -> Result<usize> {
         Lencode::encode_varint(len as u64, writer)
     }
+
+    #[inline(always)]
+    fn encode(&self, writer: &mut impl Write) -> Result<usize> {
+        self.encode_ext(writer, None)
+    }
 }
 
 pub trait Decode {
@@ -63,6 +68,14 @@ pub trait Decode {
     #[inline(always)]
     fn decode_len(reader: &mut impl Read) -> Result<usize> {
         Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
+    }
+
+    #[inline(always)]
+    fn decode(&mut self, reader: &mut impl Read) -> Result<Self>
+    where
+        Self: Sized,
+    {
+        Self::decode_ext(reader, None)
     }
 }
 
