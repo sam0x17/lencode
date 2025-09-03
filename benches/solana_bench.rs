@@ -16,7 +16,7 @@ fn bench_encode_pubkey(c: &mut Criterion) {
             || {
                 let cursor = Cursor::new([0u8; 64]);
                 let value: Pubkey = Pubkey::new_unique();
-                let dedupe_encoder = DedupeEncoder::with_capacity(10);
+                let dedupe_encoder = DedupeEncoder::with_capacity(10, 1);
                 (cursor, value, dedupe_encoder)
             },
             |(mut cursor, value, mut dedupe_encoder)| {
@@ -39,7 +39,7 @@ fn bench_decode_pubkey(c: &mut Criterion) {
                 let value: Pubkey = Pubkey::new_unique();
                 {
                     let mut cursor = Cursor::new(&mut buf[..]);
-                    let mut dedupe_encoder = DedupeEncoder::with_capacity(10);
+                    let mut dedupe_encoder = DedupeEncoder::with_capacity(10, 1);
                     value
                         .encode(&mut cursor, Some(&mut dedupe_encoder))
                         .unwrap();
@@ -92,7 +92,7 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
         |b, pubkeys| {
             b.iter_batched(
                 || {
-                    let encoder = DedupeEncoder::with_capacity(1000);
+                    let encoder = DedupeEncoder::with_capacity(1000, 1);
                     let cursor = Cursor::new(Vec::new());
                     (encoder, cursor)
                 },
@@ -114,7 +114,7 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
     let borsh_data = borsh::to_vec(&all_pubkeys).unwrap();
 
     let lencode_data = {
-        let mut encoder = DedupeEncoder::with_capacity(1000);
+        let mut encoder = DedupeEncoder::with_capacity(1000, 1);
         let mut cursor = Cursor::new(Vec::new());
         all_pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap();
         cursor.into_inner()

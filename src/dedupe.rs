@@ -9,11 +9,15 @@ use std::boxed::Box;
 
 use crate::prelude::*;
 
+const DEFAULT_INITIAL_CAPACITY: usize = 128;
+const DEFAULT_NUM_TYPES: usize = 4;
+
 pub struct DedupeEncoder {
     // Store type-specific hashmaps: TypeId -> HashMap<T, usize>
     type_stores: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
     // Next ID to assign (starts at 1)
     next_id: usize,
+    initial_capacity: usize,
 }
 
 impl Default for DedupeEncoder {
@@ -27,20 +31,22 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            type_stores: HashMap::new(),
+            type_stores: HashMap::with_capacity(DEFAULT_NUM_TYPES),
             next_id: 1, // Start at 1 to match decoder
+            initial_capacity: DEFAULT_INITIAL_CAPACITY,
         }
     }
 
     /// Creates a new `DedupeEncoder` with the specified capacity.
     ///
     /// The encoder will be able to hold at least `capacity` unique values
-    /// without reallocating.
+    /// and `num_types` categories of types without reallocating.
     #[inline(always)]
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(initial_capacity: usize, num_types: usize) -> Self {
         Self {
-            type_stores: HashMap::with_capacity(capacity),
+            type_stores: HashMap::with_capacity(num_types),
             next_id: 1,
+            initial_capacity,
         }
     }
 
@@ -87,7 +93,7 @@ impl DedupeEncoder {
         let store = self
             .type_stores
             .entry(type_id)
-            .or_insert_with(|| Box::new(HashMap::<T, usize>::new()));
+            .or_insert_with(|| Box::new(HashMap::<T, usize>::with_capacity(self.initial_capacity)));
 
         // Downcast to the concrete type
         let typed_store = store
@@ -124,7 +130,9 @@ pub struct DedupeDecoder {
 impl DedupeDecoder {
     #[inline(always)]
     pub fn new() -> Self {
-        Self { values: Vec::new() }
+        Self {
+            values: Vec::with_capacity(DEFAULT_INITIAL_CAPACITY),
+        }
     }
 
     /// Creates a new `DedupeDecoder` with the specified capacity.
