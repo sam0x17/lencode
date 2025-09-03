@@ -1,11 +1,17 @@
+#[cfg(feature = "solana")]
 use lencode::{
     dedupe::{DedupeDecoder, DedupeEncoder},
     prelude::*,
 };
+#[cfg(feature = "solana")]
 use rand::Rng;
-use solana_sdk::pubkey::Pubkey;
+#[cfg(feature = "solana")]
 use std::io::Cursor;
 
+#[cfg(feature = "solana")]
+use solana_sdk::pubkey::Pubkey;
+
+#[cfg(feature = "solana")]
 fn main() {
     // Create a vector of 1000 pubkeys where 50% are duplicates
     let mut rng = rand::rng();
@@ -53,4 +59,10 @@ fn main() {
     assert_eq!(all_pubkeys.len(), decoded.len());
     assert_eq!(all_pubkeys, decoded);
     println!("✓ Decoding verification passed");
+}
+
+#[cfg(not(feature = "solana"))]
+fn main() {
+    println!("This example requires the 'solana' feature to be enabled.");
+    println!("Run with: cargo run --example size_comparison --features=solana");
 }
