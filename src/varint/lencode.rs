@@ -20,7 +20,7 @@ pub enum Lencode {}
 
 #[inline(always)]
 pub fn encode<T: Encode>(value: &T, writer: &mut impl Write) -> Result<usize> {
-    value.encode(writer, None)
+    value.encode_ext(writer, None)
 }
 
 #[inline(always)]
@@ -96,7 +96,7 @@ impl VarintEncodingScheme for Lencode {
 // when using lencode with u8 we bypass the integer encoding scheme so we don't waste bytes
 impl Encode for u8 {
     #[inline(always)]
-    fn encode(
+    fn encode_ext(
         &self,
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
@@ -120,7 +120,7 @@ impl Decode for u8 {
 // when using lencode with i8 we bypass the integer encoding scheme so we don't waste bytes
 impl Encode for i8 {
     #[inline(always)]
-    fn encode(
+    fn encode_ext(
         &self,
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
@@ -289,7 +289,7 @@ fn test_encode_decode_lencode_u8_all() {
     for i in 0..=255 {
         let val: u8 = i;
         let mut buf = [0u8; 1];
-        let n = u8::encode(&val, &mut Cursor::new(&mut buf[..]), None).unwrap();
+        let n = u8::encode_ext(&val, &mut Cursor::new(&mut buf[..]), None).unwrap();
         assert_eq!(n, 1);
         let decoded = u8::decode(&mut Cursor::new(&buf), None).unwrap();
         assert_eq!(decoded, val);

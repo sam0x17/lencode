@@ -48,7 +48,7 @@ fn benchmark_roundup(c: &mut Criterion) {
     group.bench_with_input(BenchmarkId::new("lencode", "vec"), &values, |b, values| {
         let mut cursor = Cursor::new(vec![0u8; values.len() * 32]);
         b.iter(|| {
-            black_box(values.encode(&mut cursor, None).unwrap());
+            black_box(values.encode_ext(&mut cursor, None).unwrap());
         });
     });
 
@@ -100,7 +100,7 @@ fn benchmark_roundup(c: &mut Criterion) {
         b.iter_batched(
             || {
                 let mut cursor = Cursor::new(Vec::new());
-                values.encode(&mut cursor, None).unwrap();
+                values.encode_ext(&mut cursor, None).unwrap();
                 cursor.into_inner()
             },
             |buf| {

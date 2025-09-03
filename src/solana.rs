@@ -28,7 +28,7 @@ impl Pack for Pubkey {
 // to avoid encoding the same pubkey multiple times
 impl Encode for Pubkey {
     #[inline(always)]
-    fn encode(
+    fn encode_ext(
         &self,
         writer: &mut impl Write,
         dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
@@ -58,12 +58,12 @@ impl Decode for Pubkey {
 }
 
 impl Encode for Hash {
-    fn encode(
+    fn encode_ext(
         &self,
         writer: &mut impl Write,
         dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
     ) -> Result<usize> {
-        self.to_bytes().encode(writer, dedupe_encoder)
+        self.to_bytes().encode_ext(writer, dedupe_encoder)
     }
 }
 
@@ -78,12 +78,12 @@ impl Decode for Hash {
 }
 
 impl Encode for Signature {
-    fn encode(
+    fn encode_ext(
         &self,
         writer: &mut impl Write,
         dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
     ) -> Result<usize> {
-        self.as_array().encode(writer, dedupe_encoder)
+        self.as_array().encode_ext(writer, dedupe_encoder)
     }
 }
 
@@ -98,7 +98,7 @@ impl Decode for Signature {
 }
 
 impl Encode for MessageHeader {
-    fn encode(
+    fn encode_ext(
         &self,
         writer: &mut impl Write,
         dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
@@ -109,7 +109,7 @@ impl Encode for MessageHeader {
             self.num_readonly_unsigned_accounts,
             0,
         ]);
-        combined.encode(writer, dedupe_encoder)
+        combined.encode_ext(writer, dedupe_encoder)
     }
 }
 
@@ -130,7 +130,7 @@ impl Decode for MessageHeader {
 
 impl Encode for SanitizedTransaction {
     #[inline(always)]
-    fn encode(
+    fn encode_ext(
         &self,
         _writer: &mut impl Write,
         _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
@@ -158,7 +158,7 @@ fn test_encode_decode_pubkey() {
         };
 
         let bytes_before = buf.len();
-        pubkey.encode(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+        pubkey.encode_ext(&mut buf, Some(&mut dedupe_encoder)).unwrap();
         let bytes_written = buf.len() - bytes_before;
 
         if i < 5 {
@@ -201,7 +201,7 @@ fn test_encode_decode_message_header() {
         };
         let mut buf = [0u8; 4];
         let mut cursor = Cursor::new(&mut buf);
-        header.encode(&mut cursor, None).unwrap();
+        header.encode_ext(&mut cursor, None).unwrap();
         let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf), None).unwrap();
         assert_eq!(header, decoded_header);
     }
@@ -212,7 +212,7 @@ fn test_encode_decode_message_header() {
     };
     let mut buf = [0u8; 4];
     let mut cursor = Cursor::new(&mut buf);
-    let n = header.encode(&mut cursor, None).unwrap();
+    let n = header.encode_ext(&mut cursor, None).unwrap();
     assert_eq!(n, 1);
     let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf), None).unwrap();
     assert_eq!(header, decoded_header);
@@ -247,7 +247,7 @@ fn test_pubkey_deduplication() {
 
     let mut total_bytes = 0;
     for pubkey in &pubkeys {
-        total_bytes += pubkey.encode(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+        total_bytes += pubkey.encode_ext(&mut buf, Some(&mut dedupe_encoder)).unwrap();
     }
 
     // With deduplication, we should save space by not repeating pubkeys
@@ -289,7 +289,7 @@ fn test_pubkey_deduplication_without_duplicates() {
 
     let mut total_bytes = 0;
     for pubkey in &pubkeys {
-        total_bytes += pubkey.encode(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+        total_bytes += pubkey.encode_ext(&mut buf, Some(&mut dedupe_encoder)).unwrap();
     }
 
     // Without duplicates, each pubkey should take 33 bytes (1 + 32)
@@ -315,7 +315,7 @@ fn test_pubkey_requires_deduplication() {
     let mut buf = Vec::new();
 
     // Should fail when trying to encode without deduplication
-    assert!(pubkey.encode(&mut buf, None).is_err());
+    assert!(pubkey.encode_ext(&mut buf, None).is_err());
 
     // Should fail when trying to decode without deduplication
     let mut cursor = Cursor::new(&buf);

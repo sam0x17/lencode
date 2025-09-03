@@ -22,7 +22,7 @@ fn bench_encode_pubkey(c: &mut Criterion) {
             |(mut cursor, value, mut dedupe_encoder)| {
                 black_box(
                     value
-                        .encode(&mut cursor, Some(&mut dedupe_encoder))
+                        .encode_ext(&mut cursor, Some(&mut dedupe_encoder))
                         .unwrap(),
                 );
             },
@@ -41,7 +41,7 @@ fn bench_decode_pubkey(c: &mut Criterion) {
                     let mut cursor = Cursor::new(&mut buf[..]);
                     let mut dedupe_encoder = DedupeEncoder::with_capacity(10, 1);
                     value
-                        .encode(&mut cursor, Some(&mut dedupe_encoder))
+                        .encode_ext(&mut cursor, Some(&mut dedupe_encoder))
                         .unwrap();
                 }
                 let cursor = Cursor::new(buf);
@@ -97,7 +97,7 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
                     (encoder, cursor)
                 },
                 |(mut encoder, mut cursor)| {
-                    black_box(pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap());
+                    black_box(pubkeys.encode_ext(&mut cursor, Some(&mut encoder)).unwrap());
                     cursor.into_inner()
                 },
                 criterion::BatchSize::SmallInput,
@@ -116,7 +116,9 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
     let lencode_data = {
         let mut encoder = DedupeEncoder::with_capacity(1000, 1);
         let mut cursor = Cursor::new(Vec::new());
-        all_pubkeys.encode(&mut cursor, Some(&mut encoder)).unwrap();
+        all_pubkeys
+            .encode_ext(&mut cursor, Some(&mut encoder))
+            .unwrap();
         cursor.into_inner()
     };
 
