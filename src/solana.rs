@@ -203,8 +203,8 @@ fn test_encode_decode_message_header() {
         };
         let mut buf = [0u8; 4];
         let mut cursor = Cursor::new(&mut buf);
-        header.encode_ext(&mut cursor, None).unwrap();
-        let decoded_header = MessageHeader::decode_ext(&mut Cursor::new(&mut buf), None).unwrap();
+        header.encode(&mut cursor).unwrap();
+        let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf)).unwrap();
         assert_eq!(header, decoded_header);
     }
     let header = MessageHeader {
@@ -214,9 +214,9 @@ fn test_encode_decode_message_header() {
     };
     let mut buf = [0u8; 4];
     let mut cursor = Cursor::new(&mut buf);
-    let n = header.encode_ext(&mut cursor, None).unwrap();
+    let n = header.encode(&mut cursor).unwrap();
     assert_eq!(n, 1);
-    let decoded_header = MessageHeader::decode_ext(&mut Cursor::new(&mut buf), None).unwrap();
+    let decoded_header = MessageHeader::decode(&mut Cursor::new(&mut buf)).unwrap();
     assert_eq!(header, decoded_header);
 }
 

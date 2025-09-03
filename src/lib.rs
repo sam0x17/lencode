@@ -71,7 +71,7 @@ pub trait Decode {
     }
 
     #[inline(always)]
-    fn decode(&mut self, reader: &mut impl Read) -> Result<Self>
+    fn decode(reader: &mut impl Read) -> Result<Self>
     where
         Self: Sized,
     {
@@ -644,8 +644,8 @@ fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
         let val: i16 = i;
         let mut buf = [0u8; 3];
-        let n = i16::encode_ext(&val, &mut Cursor::new(&mut buf[..]), None).unwrap();
-        let decoded = i16::decode_ext(&mut Cursor::new(&buf[..n]), None).unwrap();
+        let n = val.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+        let decoded = i16::decode(&mut Cursor::new(&buf[..n])).unwrap();
         assert_eq!(decoded, val);
     }
 }
@@ -654,11 +654,9 @@ fn test_encode_decode_i16_all() {
 fn test_encode_decode_vec_of_i16_all() {
     let values: Vec<i16> = (i16::MIN..=i16::MAX).collect();
     let mut buf = vec![0u8; 3 * values.len()];
-    let n = values
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert!(n < values.len() * 3);
-    let decoded = Vec::<i16>::decode_ext(&mut Cursor::new(&buf[..n]), None).unwrap();
+    let decoded = Vec::<i16>::decode(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -668,11 +666,9 @@ fn test_encode_decode_vec_of_many_small_u128() {
         .chain(0..(u16::MAX / 2) as u128)
         .collect();
     let mut buf = vec![0u8; 3 * values.len()];
-    let n = values
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert!(n < values.len() * 3);
-    let decoded = Vec::<u128>::decode_ext(&mut Cursor::new(&buf[..n]), None).unwrap();
+    let decoded = Vec::<u128>::decode(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -680,11 +676,9 @@ fn test_encode_decode_vec_of_many_small_u128() {
 fn test_encode_decode_vec_of_tiny_u128s() {
     let values: Vec<u128> = (0..127).collect();
     let mut buf = vec![0u8; values.len() + 1];
-    let n = values
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, values.len() + 1);
-    let decoded = Vec::<u128>::decode_ext(&mut Cursor::new(&buf[..n]), None).unwrap();
+    let decoded = Vec::<u128>::decode(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -692,11 +686,9 @@ fn test_encode_decode_vec_of_tiny_u128s() {
 fn test_encode_decode_bools() {
     let values = vec![true, false, true, false, true];
     let mut buf = vec![0u8; values.len() + 1];
-    let n = values
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, values.len() + 1);
-    let decoded = Vec::<bool>::decode_ext(&mut Cursor::new(&buf[..n]), None).unwrap();
+    let decoded = Vec::<bool>::decode(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -704,11 +696,9 @@ fn test_encode_decode_bools() {
 fn test_encode_decode_option() {
     let values = vec![Some(42), None, Some(100), None, Some(200)];
     let mut buf = [0u8; 12];
-    let n = values
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, buf.len());
-    let decoded = Vec::<Option<i32>>::decode_ext(&mut Cursor::new(&buf[..n]), None).unwrap();
+    let decoded = Vec::<Option<i32>>::decode(&mut Cursor::new(&buf[..n])).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -716,11 +706,9 @@ fn test_encode_decode_option() {
 fn test_encode_decode_arrays() {
     let values: [u128; 5] = [1, 2, 3, 4, 5];
     let mut buf = [0u8; 5];
-    let n = values
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 5);
-    let decoded: [u128; 5] = Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+    let decoded: [u128; 5] = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, values);
 }
 
@@ -732,13 +720,11 @@ fn test_tree_map_encode_decode() {
     map.insert(3, 6);
 
     let mut buf = [0u8; 7];
-    let n = map
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = map.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 7);
 
     let decoded: collections::BTreeMap<i32, i32> =
-        Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+        Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -751,13 +737,11 @@ fn test_hash_map_encode_decode() {
     map.insert(3, 6);
 
     let mut buf = [0u8; 7];
-    let n = map
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = map.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 7);
 
     let decoded: std::collections::HashMap<i32, i32> =
-        Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+        Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, map);
 }
 
@@ -770,13 +754,11 @@ fn test_hash_set_encode_decode() {
     set.insert(3);
 
     let mut buf = [0u8; 4];
-    let n = set
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = set.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 4);
 
     let decoded: std::collections::HashSet<i32> =
-        Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+        Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, set);
 }
 
@@ -788,13 +770,10 @@ fn test_btree_set_encode_decode() {
     set.insert(3);
 
     let mut buf = [0u8; 4];
-    let n = set
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = set.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::BTreeSet<i32> =
-        Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+    let decoded: collections::BTreeSet<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, set);
 }
 
@@ -806,13 +785,10 @@ fn test_vec_deque_encode_decode() {
     deque.push_back(3);
 
     let mut buf = [0u8; 4];
-    let n = deque
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = deque.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::VecDeque<i32> =
-        Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+    let decoded: collections::VecDeque<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, deque);
 }
 
@@ -824,13 +800,10 @@ fn test_linked_list_encode_decode() {
     list.push_back(3);
 
     let mut buf = [0u8; 4];
-    let n = list
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = list.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::LinkedList<i32> =
-        Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+    let decoded: collections::LinkedList<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, list);
 }
 
@@ -842,13 +815,10 @@ fn test_binary_heap_encode_decode() {
     heap.push(3);
 
     let mut buf = [0u8; 4];
-    let n = heap
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = heap.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 4);
 
-    let decoded: collections::BinaryHeap<i32> =
-        Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+    let decoded: collections::BinaryHeap<i32> = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(
         decoded.clone().into_sorted_vec(),
         heap.clone().into_sorted_vec()
@@ -860,19 +830,15 @@ fn test_binary_heap_encode_decode() {
 fn test_string_encode_decode() {
     let value = "Hello, world!";
     let mut buf = [0u8; 14];
-    let n = value
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = value.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 14);
-    let decoded: String = Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+    let decoded: String = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, value);
 
     let mut buf = [0u8; 14];
     let value = "";
-    let n = value
-        .encode_ext(&mut Cursor::new(&mut buf[..]), None)
-        .unwrap();
+    let n = value.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 1);
-    let decoded: String = Decode::decode_ext(&mut Cursor::new(&buf[..]), None).unwrap();
+    let decoded: String = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, value);
 }
