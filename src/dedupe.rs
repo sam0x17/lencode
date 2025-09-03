@@ -58,13 +58,13 @@ impl DedupeEncoder {
 
     /// Returns the number of unique values currently stored in the encoder.
     #[inline(always)]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.next_id - 1
     }
 
     /// Returns true if the encoder contains no values.
     #[inline(always)]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.next_id == 1
     }
 
@@ -191,11 +191,10 @@ impl DedupeDecoder {
         } else {
             // Existing value, retrieve from table
             let index = id - 1; // Convert ID to Vec index
-            if let Some(boxed_value) = self.values.get(index) {
-                if let Some(typed_value) = boxed_value.downcast_ref::<T>() {
+            if let Some(boxed_value) = self.values.get(index)
+                && let Some(typed_value) = boxed_value.downcast_ref::<T>() {
                     return Ok(typed_value.clone());
                 }
-            }
 
             Err(crate::io::Error::InvalidData)
         }

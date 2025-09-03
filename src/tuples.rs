@@ -33,7 +33,7 @@ impl<A: Encode, B: Encode> Encode for (A, B) {
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.1.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.1.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -46,7 +46,7 @@ impl<A: Decode, B: Decode> Decode for (A, B) {
     ) -> Result<Self> {
         Ok((
             A::decode(reader, dedupe_decoder.as_deref_mut())?,
-            B::decode(reader, dedupe_decoder.as_deref_mut())?,
+            B::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -65,7 +65,7 @@ impl<A: Encode, B: Encode, C: Encode> Encode for (A, B, C) {
         let mut total_written = 0;
         total_written += self.0.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.1.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.2.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.2.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -79,7 +79,7 @@ impl<A: Decode, B: Decode, C: Decode> Decode for (A, B, C) {
         Ok((
             A::decode(reader, dedupe_decoder.as_deref_mut())?,
             B::decode(reader, dedupe_decoder.as_deref_mut())?,
-            C::decode(reader, dedupe_decoder.as_deref_mut())?,
+            C::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -99,7 +99,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode> Encode for (A, B, C, D) {
         total_written += self.0.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.1.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.2.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.3.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.3.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -114,7 +114,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode> Decode for (A, B, C, D) {
             A::decode(reader, dedupe_decoder.as_deref_mut())?,
             B::decode(reader, dedupe_decoder.as_deref_mut())?,
             C::decode(reader, dedupe_decoder.as_deref_mut())?,
-            D::decode(reader, dedupe_decoder.as_deref_mut())?,
+            D::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -135,7 +135,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode> Encode for (A, B, C,
         total_written += self.1.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.2.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.3.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.4.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.4.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -151,7 +151,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode> Decode for (A, B, C,
             B::decode(reader, dedupe_decoder.as_deref_mut())?,
             C::decode(reader, dedupe_decoder.as_deref_mut())?,
             D::decode(reader, dedupe_decoder.as_deref_mut())?,
-            E::decode(reader, dedupe_decoder.as_deref_mut())?,
+            E::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -175,7 +175,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode> Encode
         total_written += self.2.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.3.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.4.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.5.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.5.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -194,7 +194,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode> Decode
             C::decode(reader, dedupe_decoder.as_deref_mut())?,
             D::decode(reader, dedupe_decoder.as_deref_mut())?,
             E::decode(reader, dedupe_decoder.as_deref_mut())?,
-            F::decode(reader, dedupe_decoder.as_deref_mut())?,
+            F::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -219,7 +219,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode
         total_written += self.3.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.4.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.5.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.6.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.6.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -239,7 +239,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode
             D::decode(reader, dedupe_decoder.as_deref_mut())?,
             E::decode(reader, dedupe_decoder.as_deref_mut())?,
             F::decode(reader, dedupe_decoder.as_deref_mut())?,
-            G::decode(reader, dedupe_decoder.as_deref_mut())?,
+            G::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -265,7 +265,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode
         total_written += self.4.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.5.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.6.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.7.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.7.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -286,7 +286,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode
             E::decode(reader, dedupe_decoder.as_deref_mut())?,
             F::decode(reader, dedupe_decoder.as_deref_mut())?,
             G::decode(reader, dedupe_decoder.as_deref_mut())?,
-            H::decode(reader, dedupe_decoder.as_deref_mut())?,
+            H::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -322,7 +322,7 @@ impl<
         total_written += self.5.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.6.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.7.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.8.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.8.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -353,7 +353,7 @@ impl<
             F::decode(reader, dedupe_decoder.as_deref_mut())?,
             G::decode(reader, dedupe_decoder.as_deref_mut())?,
             H::decode(reader, dedupe_decoder.as_deref_mut())?,
-            I::decode(reader, dedupe_decoder.as_deref_mut())?,
+            I::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -391,7 +391,7 @@ impl<
         total_written += self.6.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.7.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.8.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.9.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.9.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -424,7 +424,7 @@ impl<
             G::decode(reader, dedupe_decoder.as_deref_mut())?,
             H::decode(reader, dedupe_decoder.as_deref_mut())?,
             I::decode(reader, dedupe_decoder.as_deref_mut())?,
-            J::decode(reader, dedupe_decoder.as_deref_mut())?,
+            J::decode(reader, dedupe_decoder)?,
         ))
     }
 
@@ -464,7 +464,7 @@ impl<
         total_written += self.7.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.8.encode(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self.9.encode(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.10.encode(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.10.encode(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -499,7 +499,7 @@ impl<
             H::decode(reader, dedupe_decoder.as_deref_mut())?,
             I::decode(reader, dedupe_decoder.as_deref_mut())?,
             J::decode(reader, dedupe_decoder.as_deref_mut())?,
-            K::decode(reader, dedupe_decoder.as_deref_mut())?,
+            K::decode(reader, dedupe_decoder)?,
         ))
     }
 
