@@ -139,18 +139,57 @@ impl Encode for SanitizedTransaction {
     }
 }
 
-// #[test]
-// fn test_encode_decode_pubkey() {
-//     for _ in 0..1000 {
-//         let pubkey = Pubkey::new_unique();
-//         let mut buf = [0u8; 64];
-//         let mut cursor = Cursor::new(&mut buf);
-//         let n = pubkey.encode(&mut cursor).unwrap();
-//         assert_eq!(n, 32);
-//         let decoded_pubkey = Pubkey::decode(&mut Cursor::new(&mut buf), None).unwrap();
-//         assert_eq!(pubkey, decoded_pubkey);
-//     }
-// }
+#[test]
+fn test_encode_decode_pubkey() {
+    use crate::dedupe::{DedupeDecoder, DedupeEncoder};
+
+    // Create shared deduper instances that persist across the loop
+    let mut buf = Vec::new();
+    let mut dedupe_encoder = DedupeEncoder::new();
+    let mut encoded_pubkeys = Vec::<Pubkey>::new();
+
+    // Encode some pubkeys, including duplicates to test deduplication
+    for i in 0..10 {
+        let pubkey = if i < 5 {
+            Pubkey::new_unique()
+        } else {
+            // Reuse some pubkeys to test deduplication
+            encoded_pubkeys[i - 5].clone()
+        };
+
+        let bytes_before = buf.len();
+        pubkey.encode(&mut buf, Some(&mut dedupe_encoder)).unwrap();
+        let bytes_written = buf.len() - bytes_before;
+
+        if i < 5 {
+            // First time seeing each pubkey: 1 byte (id=0) + 32 bytes (data) = 33 bytes
+            assert_eq!(bytes_written, 33);
+            encoded_pubkeys.push(pubkey);
+        } else {
+            // Duplicate pubkey: just the ID, should be 1 byte
+            assert_eq!(bytes_written, 1);
+        }
+    }
+
+    // Decode all pubkeys
+    let mut cursor = Cursor::new(&buf);
+    let mut dedupe_decoder = DedupeDecoder::new();
+    let mut decoded_pubkeys = Vec::new();
+
+    for _ in 0..10 {
+        let decoded_pubkey = Pubkey::decode(&mut cursor, Some(&mut dedupe_decoder)).unwrap();
+        decoded_pubkeys.push(decoded_pubkey);
+    }
+
+    // Verify the pattern: first 5 unique, then 5 duplicates
+    for i in 0..10 {
+        if i < 5 {
+            assert_eq!(decoded_pubkeys[i], encoded_pubkeys[i]);
+        } else {
+            assert_eq!(decoded_pubkeys[i], encoded_pubkeys[i - 5]);
+        }
+    }
+}
 
 #[test]
 fn test_encode_decode_message_header() {
