@@ -860,6 +860,16 @@ impl<T: Decode> Decode for core::marker::PhantomData<T> {
 }
 
 #[test]
+fn test_encode_decode_unit_type() {
+    let val = ();
+    let mut buf = [0u8; 1];
+    let n = val.encode(&mut Cursor::new(&mut buf[..])).unwrap();
+    assert_eq!(n, 0);
+    let decoded = <()>::decode(&mut Cursor::new(&buf[..n])).unwrap();
+    assert_eq!(decoded, val);
+}
+
+#[test]
 fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
         let val: i16 = i;
