@@ -42,18 +42,18 @@ use lencode::prelude::*;
 // Encode a value
 let value = 42u64;
 let mut buffer = Vec::new();
-let bytes_written = value.encode(&mut buffer, None)?;
+let bytes_written = value.encode(&mut buffer)?;
 
 // Decode the value
 let mut cursor = Cursor::new(&buffer);
-let decoded: u64 = u64::decode(&mut cursor, None)?;
+let decoded: u64 = u64::decode(&mut cursor)?;
 assert_eq!(value, decoded);
 ```
 
 ### With Deduplication
 
 ```rust
-use lencode::{prelude::*, dedupe::{DedupeEncoder, DedupeDecoder}};
+use lencode::prelude::*;
 
 // Values with duplicates
 let values = vec![100u32, 200u32, 100u32, 300u32, 200u32];
@@ -61,17 +61,12 @@ let values = vec![100u32, 200u32, 100u32, 300u32, 200u32];
 // Encode with deduplication
 let mut buffer = Vec::new();
 let mut encoder = DedupeEncoder::new();
-for value in &values {
-    value.encode(&mut buffer, Some(&mut encoder))?;
-}
+let bytes_written = values.encode_ext(&mut buffer, Some(&mut encoder))?;
 
 // Decode with deduplication
 let mut cursor = Cursor::new(&buffer);
 let mut decoder = DedupeDecoder::new();
-let mut decoded_values = Vec::new();
-for _ in 0..values.len() {
-    decoded_values.push(u32::decode(&mut cursor, Some(&mut decoder))?);
-}
+let decoded_values: Vec<u32> = Vec::decode_ext(&mut cursor, Some(&mut decoder))?;
 
 assert_eq!(values, decoded_values);
 // With deduplication, repeated values only store a reference after first occurrence
@@ -82,7 +77,7 @@ assert_eq!(values, decoded_values);
 ```rust
 #[cfg(feature = "solana")]
 use solana_sdk::pubkey::Pubkey;
-use lencode::{prelude::*, dedupe::{DedupeEncoder, DedupeDecoder}};
+use lencode::prelude::*;
 
 // Pubkeys in Solana transactions often repeat
 let pubkey1 = Pubkey::new_unique();
@@ -92,9 +87,7 @@ let pubkeys = vec![pubkey1, pubkey2, pubkey1, pubkey1, pubkey2]; // Duplicates
 // Pubkeys REQUIRE deduplication - they will error without it
 let mut buffer = Vec::new();
 let mut encoder = DedupeEncoder::new();
-for pubkey in &pubkeys {
-    pubkey.encode(&mut buffer, Some(&mut encoder))?;
-}
+let bytes_written = pubkeys.encode_ext(&mut buffer, Some(&mut encoder))?;
 
 // First occurrence: 33 bytes (1 + 32), subsequent: 1 byte each
 // Total: 69 bytes vs 160 bytes without deduplication (56% savings!)
@@ -102,10 +95,9 @@ for pubkey in &pubkeys {
 // Decode with deduplication
 let mut cursor = Cursor::new(&buffer);
 let mut decoder = DedupeDecoder::new();
-let mut decoded_pubkeys = Vec::new();
-for _ in 0..pubkeys.len() {
-    decoded_pubkeys.push(Pubkey::decode(&mut cursor, Some(&mut decoder))?);
-}
+let decoded_pubkeys: Vec<Pubkey> = Vec::decode_ext(&mut cursor, Some(&mut decoder))?;
+
+assert_eq!(pubkeys, decoded_pubkeys);
 ```
 
 ## Core Concepts
@@ -196,18 +188,18 @@ struct Point {
 }
 
 impl Encode for Point {
-    fn encode(&self, writer: &mut impl Write, dedupe_encoder: Option<&mut DedupeEncoder>) -> Result<usize> {
+    fn encode_ext(&self, writer: &mut impl Write, dedupe_encoder: Option<&mut DedupeEncoder>) -> Result<usize> {
         let mut bytes = 0;
-        bytes += self.x.encode(writer, dedupe_encoder.as_deref_mut())?;
-        bytes += self.y.encode(writer, dedupe_encoder)?;
+        bytes += self.x.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        bytes += self.y.encode_ext(writer, dedupe_encoder)?;
         Ok(bytes)
     }
 }
 
 impl Decode for Point {
-    fn decode(reader: &mut impl Read, dedupe_decoder: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let x = f64::decode(reader, dedupe_decoder.as_deref_mut())?;
-        let y = f64::decode(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, dedupe_decoder: Option<&mut DedupeDecoder>) -> Result<Self> {
+        let x = f64::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let y = f64::decode_ext(reader, dedupe_decoder)?;
         Ok(Point { x, y })
     }
 }
@@ -231,7 +223,7 @@ impl Pack for Point {
 ### Low-level Varint Operations
 
 ```rust
-use lencode::{prelude::*, varint::Lencode};
+use lencode::prelude::*;
 
 // Direct varint encoding/decoding
 let value = 12345u64;
@@ -255,7 +247,7 @@ Lencode provides comprehensive error handling:
 ```rust
 use lencode::io::Error;
 
-match value.encode(&mut buffer, None) {
+match value.encode(&mut buffer) {
     Ok(bytes_written) => println!("Encoded {} bytes", bytes_written),
     Err(Error::WriterOutOfSpace) => println!("Buffer too small"),
     Err(Error::ReaderOutOfData) => println!("Unexpected end of data"),
