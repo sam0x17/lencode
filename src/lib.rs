@@ -706,6 +706,32 @@ impl<T: Decode> Decode for core::ops::RangeInclusive<T> {
     }
 }
 
+impl<T: Encode> Encode for core::ops::RangeFrom<T> {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
+        self.start.encode_ext(writer, dedupe_encoder.as_deref_mut())
+    }
+}
+
+impl<T: Decode> Decode for core::ops::RangeFrom<T> {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
+        let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        Ok(core::ops::RangeFrom { start })
+    }
+
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 #[test]
 fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
