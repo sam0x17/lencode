@@ -20,9 +20,9 @@ generic-array = "1"
 solana-sdk = { version = "2", optional = true }
 ruint = { version = "1" }
 newt-hype = { version = "0.2", default-features = false }
-hashbrown = "0.15.5"
+hashbrown = "0.15"
 critical-section = "1"
-ahash = { version = "0.8", default-features = false }
+ahash = { version = "0", default-features = false }
 
 lencode-macros = { path = "macros", version = "0.1.0" }
 
