@@ -28,6 +28,7 @@ impl DedupeEncodeable for Pubkey {}
 impl DedupeDecodeable for Pubkey {}
 
 impl Encode for Hash {
+    #[inline(always)]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
@@ -38,6 +39,7 @@ impl Encode for Hash {
 }
 
 impl Decode for Hash {
+    #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
         dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
@@ -48,6 +50,7 @@ impl Decode for Hash {
 }
 
 impl Encode for Signature {
+    #[inline(always)]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
@@ -58,6 +61,7 @@ impl Encode for Signature {
 }
 
 impl Decode for Signature {
+    #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
@@ -68,6 +72,7 @@ impl Decode for Signature {
 }
 
 impl Encode for MessageHeader {
+    #[inline(always)]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
@@ -84,6 +89,7 @@ impl Encode for MessageHeader {
 }
 
 impl Decode for MessageHeader {
+    #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
