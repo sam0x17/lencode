@@ -24,38 +24,8 @@ impl Pack for Pubkey {
     }
 }
 
-// Pubkeys are commonly repeated in Solana transactions, so we use deduplication
-// to avoid encoding the same pubkey multiple times
-impl Encode for Pubkey {
-    #[inline(always)]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
-    ) -> Result<usize> {
-        if let Some(dedupe_encoder) = dedupe_encoder {
-            dedupe_encoder.encode(self, writer)
-        } else {
-            // Pubkeys require deduplication - that's their main benefit
-            Err(Error::InvalidData)
-        }
-    }
-}
-
-impl Decode for Pubkey {
-    #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
-    ) -> Result<Self> {
-        if let Some(dedupe_decoder) = dedupe_decoder {
-            dedupe_decoder.decode(reader)
-        } else {
-            // Pubkeys require deduplication - that's their main benefit
-            Err(Error::InvalidData)
-        }
-    }
-}
+impl DedupeEncodeable for Pubkey {}
+impl DedupeDecodeable for Pubkey {}
 
 impl Encode for Hash {
     fn encode_ext(
@@ -313,17 +283,4 @@ fn test_pubkey_deduplication_without_duplicates() {
 
     assert_eq!(decoded_pubkeys, pubkeys);
     assert_eq!(dedupe_decoder.len(), 5);
-}
-
-#[test]
-fn test_pubkey_requires_deduplication() {
-    let pubkey = Pubkey::new_unique();
-    let mut buf = Vec::new();
-
-    // Should fail when trying to encode without deduplication
-    assert!(pubkey.encode_ext(&mut buf, None).is_err());
-
-    // Should fail when trying to decode without deduplication
-    let mut cursor = Cursor::new(&buf);
-    assert!(Pubkey::decode_ext(&mut cursor, None).is_err());
 }

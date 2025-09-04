@@ -12,6 +12,39 @@ use crate::prelude::*;
 const DEFAULT_INITIAL_CAPACITY: usize = 128;
 const DEFAULT_NUM_TYPES: usize = 4;
 
+pub trait DedupeEncodeable: Hash + Eq + Pack + Clone + Send + Sync + 'static {}
+
+impl<T: DedupeEncodeable> Encode for T {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
+        if let Some(encoder) = dedupe_encoder {
+            encoder.encode(self, writer)
+        } else {
+            self.pack(writer)
+        }
+    }
+}
+
+pub trait DedupeDecodeable: Pack + Clone + Hash + Eq + Send + Sync + 'static {}
+
+impl<T: DedupeDecodeable> Decode for T {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
+        if let Some(decoder) = dedupe_decoder {
+            decoder.decode(reader)
+        } else {
+            T::unpack(reader)
+        }
+    }
+}
+
 pub struct DedupeEncoder {
     // Store type-specific hashmaps: TypeId -> HashMap<T, usize>
     type_stores: HashMap<TypeId, Box<dyn Any + Send + Sync>>,

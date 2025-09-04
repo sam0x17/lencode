@@ -29,6 +29,7 @@ pub mod prelude {
     pub use crate::pack::*;
     pub use crate::u256::*;
     pub use crate::varint::*;
+    pub use dedupe::*;
 }
 
 use prelude::*;
