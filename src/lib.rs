@@ -25,11 +25,12 @@ pub mod solana;
 
 pub mod prelude {
     pub use super::*;
+    pub use crate::dedupe::*;
     pub use crate::io::*;
     pub use crate::pack::*;
     pub use crate::u256::*;
     pub use crate::varint::*;
-    pub use dedupe::*;
+    pub use lencode_macros::*;
 }
 
 use prelude::*;

@@ -24,6 +24,8 @@ hashbrown = "0.15.5"
 critical-section = "1"
 ahash = { version = "0.8", default-features = false }
 
+lencode-macros = { path = "macros", version = "0.1.0" }
+
 [dev-dependencies]
 rayon = "1"
 rand = "0.9"
