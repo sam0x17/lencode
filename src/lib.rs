@@ -834,6 +834,31 @@ impl Decode for () {
     }
 }
 
+impl<T: Encode> Encode for core::marker::PhantomData<T> {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        _writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
+        Ok(0)
+    }
+}
+
+impl<T: Decode> Decode for core::marker::PhantomData<T> {
+    #[inline(always)]
+    fn decode_ext(
+        _reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
+        Ok(core::marker::PhantomData)
+    }
+
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 #[test]
 fn test_encode_decode_i16_all() {
     for i in i16::MIN..=i16::MAX {
