@@ -859,6 +859,36 @@ impl<T: Decode> Decode for core::marker::PhantomData<T> {
     }
 }
 
+#[cfg(feature = "std")]
+impl<T: Encode + Clone> Encode for std::borrow::Cow<'_, T> {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+    ) -> Result<usize> {
+        self.as_ref().encode_ext(writer, dedupe_encoder)
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T: Decode + Clone> Decode for std::borrow::Cow<'_, T> {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+    ) -> Result<Self> {
+        Ok(std::borrow::Cow::Owned(T::decode_ext(
+            reader,
+            dedupe_decoder,
+        )?))
+    }
+
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 #[test]
 fn test_encode_decode_unit_type() {
     let val = ();
