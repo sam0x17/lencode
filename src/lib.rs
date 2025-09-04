@@ -44,7 +44,7 @@ pub trait Encode {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize>;
 
     #[inline(always)]
@@ -61,7 +61,7 @@ pub trait Encode {
 pub trait Decode {
     fn decode_ext(
         reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self>
     where
         Self: Sized;
@@ -85,14 +85,14 @@ macro_rules! impl_encode_decode_unsigned_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode_ext(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>) -> Result<usize> {
+                fn encode_ext(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut DedupeEncoder>) -> Result<usize> {
                     Lencode::encode_varint(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode_ext(reader: &mut impl Read, _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>) -> Result<Self> {
+                fn decode_ext(reader: &mut impl Read, _dedupe_decoder: Option<&mut DedupeDecoder>) -> Result<Self> {
                     Lencode::decode_varint(reader)
                 }
 
@@ -112,7 +112,7 @@ impl Encode for usize {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         Lencode::encode_varint(*self as u64, writer)
     }
@@ -122,7 +122,7 @@ impl Decode for usize {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Lencode::decode_varint(reader).map(|v: u64| v as usize)
     }
@@ -138,14 +138,14 @@ macro_rules! impl_encode_decode_signed_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode_ext(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>) -> Result<usize> {
+                fn encode_ext(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut DedupeEncoder>) -> Result<usize> {
                     Lencode::encode_varint_signed(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode_ext(reader: &mut impl Read, _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>) -> Result<Self> {
+                fn decode_ext(reader: &mut impl Read, _dedupe_decoder: Option<&mut DedupeDecoder>) -> Result<Self> {
                     Lencode::decode_varint_signed(reader)
                 }
 
@@ -165,7 +165,7 @@ impl Encode for isize {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         Lencode::encode_varint_signed(*self as i64, writer)
     }
@@ -175,7 +175,7 @@ impl Decode for isize {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Lencode::decode_varint_signed(reader).map(|v: i64| v as isize)
     }
@@ -191,7 +191,7 @@ impl Encode for bool {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         Lencode::encode_bool(*self, writer)
     }
@@ -201,7 +201,7 @@ impl Decode for bool {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Lencode::decode_bool(reader)
     }
@@ -216,7 +216,7 @@ impl Encode for &[u8] {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -230,7 +230,7 @@ impl Encode for &str {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -244,7 +244,7 @@ impl Encode for String {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -257,7 +257,7 @@ impl Decode for String {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut buf = vec![0u8; len];
@@ -271,7 +271,7 @@ impl<T: Encode> Encode for Option<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         match self {
             Some(value) => {
@@ -289,7 +289,7 @@ impl<T: Decode> Decode for Option<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         if Lencode::decode_bool(reader)? {
             Ok(Some(T::decode_ext(reader, dedupe_decoder)?))
@@ -308,7 +308,7 @@ impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         match self {
             Ok(value) => {
@@ -331,7 +331,7 @@ impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         if Lencode::decode_bool(reader)? {
             Ok(Ok(T::decode_ext(reader, dedupe_decoder)?))
@@ -350,7 +350,7 @@ impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         for item in self {
@@ -364,7 +364,7 @@ impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let mut arr = [T::default(); N];
         for item in &mut arr {
@@ -382,7 +382,7 @@ impl<T: Decode> Decode for Vec<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut vec = Vec::with_capacity(len);
@@ -398,7 +398,7 @@ impl<T: Encode> Encode for Vec<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -414,7 +414,7 @@ impl<K: Encode, V: Encode> Encode for collections::BTreeMap<K, V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -430,7 +430,7 @@ impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut map = collections::BTreeMap::new();
@@ -448,7 +448,7 @@ impl<V: Encode> Encode for collections::BTreeSet<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -463,7 +463,7 @@ impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut set = collections::BTreeSet::new();
@@ -480,7 +480,7 @@ impl<V: Encode> Encode for collections::VecDeque<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -495,7 +495,7 @@ impl<V: Decode> Decode for collections::VecDeque<V> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut deque = collections::VecDeque::with_capacity(len);
@@ -512,7 +512,7 @@ impl<V: Encode> Encode for collections::LinkedList<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -527,7 +527,7 @@ impl<V: Decode> Decode for collections::LinkedList<V> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut list = collections::LinkedList::new();
@@ -544,7 +544,7 @@ impl<T: Encode> Encode for collections::BinaryHeap<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -558,7 +558,7 @@ impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut heap = collections::BinaryHeap::with_capacity(len);
@@ -576,7 +576,7 @@ impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -593,7 +593,7 @@ impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::H
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut map = std::collections::HashMap::with_capacity(len);
@@ -612,7 +612,7 @@ impl<V: Encode> Encode for std::collections::HashSet<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
@@ -628,7 +628,7 @@ impl<V: Decode + Eq + std::hash::Hash> Decode for std::collections::HashSet<V> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut set = std::collections::HashSet::with_capacity(len);
@@ -645,7 +645,7 @@ impl<T: Encode> Encode for core::ops::Range<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self
@@ -660,7 +660,7 @@ impl<T: Decode> Decode for core::ops::Range<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
         let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
@@ -677,7 +677,7 @@ impl<T: Encode> Encode for core::ops::RangeInclusive<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self
@@ -694,7 +694,7 @@ impl<T: Decode> Decode for core::ops::RangeInclusive<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
         let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
@@ -711,7 +711,7 @@ impl<T: Encode> Encode for core::ops::RangeFrom<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.start.encode_ext(writer, dedupe_encoder.as_deref_mut())
     }
@@ -721,7 +721,7 @@ impl<T: Decode> Decode for core::ops::RangeFrom<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
         Ok(core::ops::RangeFrom { start })
@@ -737,7 +737,7 @@ impl<T: Encode> Encode for core::ops::RangeTo<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.end.encode_ext(writer, dedupe_encoder.as_deref_mut())
     }
@@ -747,7 +747,7 @@ impl<T: Decode> Decode for core::ops::RangeTo<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
         Ok(core::ops::RangeTo { end })
@@ -763,7 +763,7 @@ impl<T: Encode> Encode for core::ops::RangeToInclusive<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.end.encode_ext(writer, dedupe_encoder.as_deref_mut())
     }
@@ -773,7 +773,7 @@ impl<T: Decode> Decode for core::ops::RangeToInclusive<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
         Ok(core::ops::RangeToInclusive { end })
@@ -789,7 +789,7 @@ impl Encode for core::ops::RangeFull {
     fn encode_ext(
         &self,
         _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         Ok(0)
     }
@@ -799,7 +799,7 @@ impl Decode for core::ops::RangeFull {
     #[inline(always)]
     fn decode_ext(
         _reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok(core::ops::RangeFull {})
     }
@@ -814,7 +814,7 @@ impl Encode for () {
     fn encode_ext(
         &self,
         _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         Ok(0)
     }
@@ -824,7 +824,7 @@ impl Decode for () {
     #[inline(always)]
     fn decode_ext(
         _reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok(())
     }
@@ -839,7 +839,7 @@ impl<T: Encode> Encode for core::marker::PhantomData<T> {
     fn encode_ext(
         &self,
         _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         Ok(0)
     }
@@ -849,7 +849,7 @@ impl<T: Decode> Decode for core::marker::PhantomData<T> {
     #[inline(always)]
     fn decode_ext(
         _reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok(core::marker::PhantomData)
     }
@@ -865,7 +865,7 @@ impl<T: Encode + Clone> Encode for std::borrow::Cow<'_, T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.as_ref().encode_ext(writer, dedupe_encoder)
     }
@@ -876,7 +876,7 @@ impl<T: Decode + Clone> Decode for std::borrow::Cow<'_, T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok(std::borrow::Cow::Owned(T::decode_ext(
             reader,

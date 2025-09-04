@@ -4,7 +4,7 @@ impl<T: Encode> Encode for (T,) {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.0.encode_ext(writer, dedupe_encoder)
     }
@@ -14,7 +14,7 @@ impl<T: Decode> Decode for (T,) {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((T::decode_ext(reader, dedupe_decoder)?,))
     }
@@ -29,7 +29,7 @@ impl<A: Encode, B: Encode> Encode for (A, B) {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -42,7 +42,7 @@ impl<A: Decode, B: Decode> Decode for (A, B) {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -60,7 +60,7 @@ impl<A: Encode, B: Encode, C: Encode> Encode for (A, B, C) {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -74,7 +74,7 @@ impl<A: Decode, B: Decode, C: Decode> Decode for (A, B, C) {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -93,7 +93,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode> Encode for (A, B, C, D) {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -108,7 +108,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode> Decode for (A, B, C, D) {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -128,7 +128,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode> Encode for (A, B, C,
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -144,7 +144,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode> Decode for (A, B, C,
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -167,7 +167,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode> Encode
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -186,7 +186,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode> Decode
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -210,7 +210,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -230,7 +230,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -255,7 +255,7 @@ impl<A: Encode, B: Encode, C: Encode, D: Encode, E: Encode, F: Encode, G: Encode
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -276,7 +276,7 @@ impl<A: Decode, B: Decode, C: Decode, D: Decode, E: Decode, F: Decode, G: Decode
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -311,7 +311,7 @@ impl<
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -342,7 +342,7 @@ impl<
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -379,7 +379,7 @@ impl<
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -412,7 +412,7 @@ impl<
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
@@ -451,7 +451,7 @@ impl<
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += self.0.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -486,7 +486,7 @@ impl<
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         Ok((
             A::decode_ext(reader, dedupe_decoder.as_deref_mut())?,

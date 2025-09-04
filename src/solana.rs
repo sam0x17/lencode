@@ -1,5 +1,6 @@
 use solana_sdk::{
     hash::{HASH_BYTES, Hash},
+    instruction::CompiledInstruction,
     message::MessageHeader,
     pubkey::Pubkey,
     signature::{SIGNATURE_BYTES, Signature},
@@ -32,7 +33,7 @@ impl Encode for Hash {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.to_bytes().encode_ext(writer, dedupe_encoder)
     }
@@ -42,7 +43,7 @@ impl Decode for Hash {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let bytes = <[u8; HASH_BYTES]>::decode_ext(reader, dedupe_decoder)?;
         Ok(Hash::new_from_array(bytes))
@@ -54,7 +55,7 @@ impl Encode for Signature {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.as_array().encode_ext(writer, dedupe_encoder)
     }
@@ -64,7 +65,7 @@ impl Decode for Signature {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let sig: [u8; SIGNATURE_BYTES] = decode(reader)?;
         Ok(Signature::from(sig))
@@ -76,7 +77,7 @@ impl Encode for MessageHeader {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let combined = u32::from_le_bytes([
             self.num_required_signatures,
@@ -92,7 +93,7 @@ impl Decode for MessageHeader {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let combined: u32 = decode(reader)?;
         let combined_bytes = combined.to_le_bytes();
@@ -104,21 +105,78 @@ impl Decode for MessageHeader {
     }
 }
 
+impl Encode for CompiledInstruction {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total_bytes = 0;
+        total_bytes += self
+            .program_id_index
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .accounts
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .data
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        Ok(total_bytes)
+    }
+}
+
+impl Decode for CompiledInstruction {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let program_id_index: u8 = u8::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let accounts: Vec<u8> = Vec::<u8>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let data: Vec<u8> = Vec::<u8>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        Ok(CompiledInstruction {
+            program_id_index,
+            accounts,
+            data,
+        })
+    }
+}
+
 impl Encode for SanitizedTransaction {
     #[inline(always)]
     fn encode_ext(
         &self,
         _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         todo!()
     }
 }
 
 #[test]
-fn test_encode_decode_pubkey() {
-    use crate::dedupe::{DedupeDecoder, DedupeEncoder};
+fn test_encode_decode_compiled_instruction() {
+    for _ in 0..1000 {
+        let instruction = CompiledInstruction {
+            program_id_index: rand::random::<u8>(),
+            accounts: (0..rand::random::<u8>() % 10)
+                .map(|_| rand::random::<u8>())
+                .collect(),
+            data: (0..rand::random::<u8>() % 20)
+                .map(|_| rand::random::<u8>())
+                .collect(),
+        };
+        let mut buf = [0u8; 100];
+        let mut cursor = Cursor::new(&mut buf);
+        instruction.encode_ext(&mut cursor, None).unwrap();
+        let decoded_instruction =
+            CompiledInstruction::decode_ext(&mut Cursor::new(&buf), None).unwrap();
+        assert_eq!(instruction, decoded_instruction);
+    }
+}
 
+#[test]
+fn test_encode_decode_pubkey() {
     // Create shared deduper instances that persist across the loop
     let mut buf = Vec::new();
     let mut dedupe_encoder = DedupeEncoder::new();
@@ -211,7 +269,7 @@ fn test_pubkey_pack_roundtrip() {
 
 #[test]
 fn test_pubkey_deduplication() {
-    use crate::dedupe::{DedupeDecoder, DedupeEncoder};
+    use {DedupeDecoder, DedupeEncoder};
 
     // Create some test pubkeys, with duplicates
     let pubkey1 = Pubkey::new_unique();
@@ -258,7 +316,7 @@ fn test_pubkey_deduplication() {
 
 #[test]
 fn test_pubkey_deduplication_without_duplicates() {
-    use crate::dedupe::{DedupeDecoder, DedupeEncoder};
+    use {DedupeDecoder, DedupeEncoder};
 
     // Create unique pubkeys
     let pubkeys: Vec<Pubkey> = (0..5).map(|_| Pubkey::new_unique()).collect();
