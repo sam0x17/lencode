@@ -652,7 +652,7 @@ impl<T: Encode> Encode for core::ops::Range<T> {
         total_written += self
             .start
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.end.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_written += self.end.encode_ext(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -664,7 +664,7 @@ impl<T: Decode> Decode for core::ops::Range<T> {
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let end = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::Range { start, end })
     }
 
@@ -686,7 +686,7 @@ impl<T: Encode> Encode for core::ops::RangeInclusive<T> {
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
         total_written += self
             .end()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
@@ -698,7 +698,7 @@ impl<T: Decode> Decode for core::ops::RangeInclusive<T> {
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let end = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::RangeInclusive::new(start, end))
     }
 
@@ -714,7 +714,7 @@ impl<T: Encode> Encode for core::ops::RangeFrom<T> {
         writer: &mut impl Write,
         mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        self.start.encode_ext(writer, dedupe_encoder.as_deref_mut())
+        self.start.encode_ext(writer, dedupe_encoder)
     }
 }
 
@@ -724,7 +724,7 @@ impl<T: Decode> Decode for core::ops::RangeFrom<T> {
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let start = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::RangeFrom { start })
     }
 
@@ -740,7 +740,7 @@ impl<T: Encode> Encode for core::ops::RangeTo<T> {
         writer: &mut impl Write,
         mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        self.end.encode_ext(writer, dedupe_encoder.as_deref_mut())
+        self.end.encode_ext(writer, dedupe_encoder)
     }
 }
 
@@ -750,7 +750,7 @@ impl<T: Decode> Decode for core::ops::RangeTo<T> {
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let end = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::RangeTo { end })
     }
 
@@ -766,7 +766,7 @@ impl<T: Encode> Encode for core::ops::RangeToInclusive<T> {
         writer: &mut impl Write,
         mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        self.end.encode_ext(writer, dedupe_encoder.as_deref_mut())
+        self.end.encode_ext(writer, dedupe_encoder)
     }
 }
 
@@ -776,7 +776,7 @@ impl<T: Decode> Decode for core::ops::RangeToInclusive<T> {
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        let end = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let end = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::RangeToInclusive { end })
     }
 

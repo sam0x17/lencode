@@ -121,7 +121,7 @@ impl Encode for CompiledInstruction {
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
         total_bytes += self
             .data
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, dedupe_encoder)?;
         Ok(total_bytes)
     }
 }
@@ -134,7 +134,7 @@ impl Decode for CompiledInstruction {
     ) -> Result<Self> {
         let program_id_index: u8 = u8::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
         let accounts: Vec<u8> = Vec::<u8>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let data: Vec<u8> = Vec::<u8>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let data: Vec<u8> = Vec::<u8>::decode_ext(reader, dedupe_decoder)?;
         Ok(CompiledInstruction {
             program_id_index,
             accounts,

@@ -56,7 +56,6 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     match derive_input.data {
         syn::Data::Struct(data_struct) => {
-            let name = name;
             let fields = data_struct.fields;
             let encode_body = match fields {
                 syn::Fields::Named(ref named_fields) => {
@@ -85,7 +84,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                 }
                 syn::Fields::Unit => quote! {},
             };
-            return Ok(quote! {
+            Ok(quote! {
                 impl #impl_generics #krate::prelude::Encode for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn encode_ext(
@@ -98,10 +97,9 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         Ok(total_bytes)
                     }
                 }
-            });
+            })
         }
         syn::Data::Enum(data_enum) => {
-            let name = name;
             let variant_matches = data_enum.variants.iter().enumerate().map(|(idx, v)| {
 				let vname = &v.ident;
 				let idx_lit = syn::Index::from(idx);
@@ -156,7 +154,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
 					}
 				}
 			});
-            return Ok(quote! {
+            Ok(quote! {
                 impl #impl_generics #krate::prelude::Encode for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn encode_ext(
@@ -171,14 +169,14 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         Ok(total_bytes)
                     }
                 }
-            });
+            })
         }
         syn::Data::Union(_data_union) => {
             // Unions are not supported
-            return Err(syn::Error::new_spanned(
+            Err(syn::Error::new_spanned(
                 derive_input.ident,
                 "Encode cannot be derived for unions",
-            ));
+            ))
         }
     }
 }
@@ -204,7 +202,6 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     match derive_input.data {
         syn::Data::Struct(data_struct) => {
-            let name = name;
             let fields = data_struct.fields;
             let decode_body = match fields {
                 syn::Fields::Named(ref named_fields) => {
@@ -236,7 +233,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                 }
                 syn::Fields::Unit => quote! { Ok(#name) },
             };
-            return Ok(quote! {
+            Ok(quote! {
                 impl #impl_generics #krate::prelude::Decode for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn decode_ext(
@@ -246,10 +243,9 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         #decode_body
                     }
                 }
-            });
+            })
         }
         syn::Data::Enum(data_enum) => {
-            let name = name;
             let variant_matches = data_enum.variants.iter().enumerate().map(|(idx, v)| {
                 let vname = &v.ident;
                 let idx_lit = syn::Index::from(idx);
@@ -284,7 +280,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                     }
                 }
             });
-            return Ok(quote! {
+            Ok(quote! {
                 impl #impl_generics #krate::prelude::Decode for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn decode_ext(
@@ -298,14 +294,14 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         }
                     }
                 }
-            });
+            })
         }
         syn::Data::Union(_data_union) => {
             // Unions are not supported
-            return Err(syn::Error::new_spanned(
+            Err(syn::Error::new_spanned(
                 derive_input.ident,
                 "Decode cannot be derived for unions",
-            ));
+            ))
         }
     }
 }
