@@ -712,7 +712,7 @@ impl<T: Encode> Encode for core::ops::RangeFrom<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.start.encode_ext(writer, dedupe_encoder)
     }
@@ -722,7 +722,7 @@ impl<T: Decode> Decode for core::ops::RangeFrom<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let start = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::RangeFrom { start })
@@ -738,7 +738,7 @@ impl<T: Encode> Encode for core::ops::RangeTo<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.end.encode_ext(writer, dedupe_encoder)
     }
@@ -748,7 +748,7 @@ impl<T: Decode> Decode for core::ops::RangeTo<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let end = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::RangeTo { end })
@@ -764,7 +764,7 @@ impl<T: Encode> Encode for core::ops::RangeToInclusive<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         self.end.encode_ext(writer, dedupe_encoder)
     }
@@ -774,7 +774,7 @@ impl<T: Decode> Decode for core::ops::RangeToInclusive<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let end = T::decode_ext(reader, dedupe_decoder)?;
         Ok(core::ops::RangeToInclusive { end })
