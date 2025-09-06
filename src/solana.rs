@@ -1,7 +1,7 @@
 use solana_sdk::{
     hash::{HASH_BYTES, Hash},
     instruction::CompiledInstruction,
-    message::MessageHeader,
+    message::{Message, MessageHeader},
     pubkey::Pubkey,
     signature::{SIGNATURE_BYTES, Signature},
     transaction::SanitizedTransaction,
@@ -119,9 +119,7 @@ impl Encode for CompiledInstruction {
         total_bytes += self
             .accounts
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total_bytes += self
-            .data
-            .encode_ext(writer, dedupe_encoder)?;
+        total_bytes += self.data.encode_ext(writer, dedupe_encoder)?;
         Ok(total_bytes)
     }
 }
@@ -143,6 +141,50 @@ impl Decode for CompiledInstruction {
     }
 }
 
+impl Encode for Message {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total_bytes = 0;
+        total_bytes += self
+            .header
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .account_keys
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .recent_blockhash
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self.instructions.encode_ext(writer, dedupe_encoder)?;
+        Ok(total_bytes)
+    }
+}
+
+impl Decode for Message {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let header: MessageHeader =
+            MessageHeader::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let account_keys: Vec<Pubkey> =
+            Vec::<Pubkey>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let recent_blockhash: Hash = Hash::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let instructions: Vec<CompiledInstruction> =
+            Vec::<CompiledInstruction>::decode_ext(reader, dedupe_decoder)?;
+        Ok(Message {
+            header,
+            account_keys,
+            recent_blockhash,
+            instructions,
+        })
+    }
+}
+
 impl Encode for SanitizedTransaction {
     #[inline(always)]
     fn encode_ext(
@@ -151,6 +193,45 @@ impl Encode for SanitizedTransaction {
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         todo!()
+    }
+}
+
+#[test]
+fn test_encode_decode_message() {
+    for _ in 0..1000 {
+        let header = MessageHeader {
+            num_required_signatures: rand::random::<u8>(),
+            num_readonly_signed_accounts: rand::random::<u8>(),
+            num_readonly_unsigned_accounts: rand::random::<u8>(),
+        };
+        let account_keys: Vec<Pubkey> = (0..rand::random::<u8>() % 10)
+            .map(|_| Pubkey::new_unique())
+            .collect();
+        let recent_blockhash = Hash::new_unique();
+        let instructions: Vec<CompiledInstruction> = (0..rand::random::<u8>() % 5)
+            .map(|_| CompiledInstruction {
+                program_id_index: rand::random::<u8>(),
+                accounts: (0..rand::random::<u8>() % 10)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+                data: (0..rand::random::<u8>() % 20)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+            })
+            .collect();
+
+        let message = Message {
+            header,
+            account_keys,
+            recent_blockhash,
+            instructions,
+        };
+
+        let mut buf = [0u8; 512];
+        let mut cursor = Cursor::new(&mut buf);
+        message.encode_ext(&mut cursor, None).unwrap();
+        let decoded_message = Message::decode_ext(&mut Cursor::new(&buf), None).unwrap();
+        assert_eq!(message, decoded_message);
     }
 }
 
