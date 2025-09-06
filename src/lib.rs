@@ -53,6 +53,13 @@ pub trait Encode {
         Lencode::encode_varint(len as u64, writer)
     }
 
+    // Encode an enum discriminant in a consistent, compact form.
+    // Default encoding uses unsigned varint.
+    #[inline(always)]
+    fn encode_discriminant(discriminant: usize, writer: &mut impl Write) -> Result<usize> {
+        Lencode::encode_varint(discriminant as u64, writer)
+    }
+
     #[inline(always)]
     fn encode(&self, writer: &mut impl Write) -> Result<usize> {
         self.encode_ext(writer, None)
@@ -69,6 +76,13 @@ pub trait Decode {
 
     #[inline(always)]
     fn decode_len(reader: &mut impl Read) -> Result<usize> {
+        Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
+    }
+
+    // Decode an enum discriminant encoded by `Encode::encode_discriminant`.
+    // Default decoding reads an unsigned varint.
+    #[inline(always)]
+    fn decode_discriminant(reader: &mut impl Read) -> Result<usize> {
         Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
     }
 

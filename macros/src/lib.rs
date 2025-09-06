@@ -119,7 +119,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
 						});
 						quote! {
 							#name::#vname { #(#field_names),* } => {
-								total_bytes += <u64 as #krate::prelude::Encode>::encode_ext(&(#idx_lit as u64), writer, dedupe_encoder.as_deref_mut())?;
+								total_bytes += <usize as #krate::prelude::Encode>::encode_discriminant(#idx_lit as usize, writer)?;
 								#(#field_encodes)*
 							}
 						}
@@ -140,7 +140,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
 						});
 						quote! {
 							#name::#vname( #(#field_indices),* ) => {
-								total_bytes += <u64 as #krate::prelude::Encode>::encode_ext(&(#idx_lit as u64), writer, dedupe_encoder.as_deref_mut())?;
+								total_bytes += <usize as #krate::prelude::Encode>::encode_discriminant(#idx_lit as usize, writer)?;
 								#(#field_encodes)*
 							}
 						}
@@ -148,7 +148,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
 					syn::Fields::Unit => {
 						quote! {
 							#name::#vname => {
-								total_bytes += <u64 as #krate::prelude::Encode>::encode_ext(&(#idx_lit as u64), writer, dedupe_encoder.as_deref_mut())?;
+								total_bytes += <usize as #krate::prelude::Encode>::encode_discriminant(#idx_lit as usize, writer)?;
 							}
 						}
 					}
@@ -287,7 +287,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         reader: &mut impl #krate::io::Read,
                         mut dedupe_decoder: Option<&mut #krate::dedupe::DedupeDecoder>,
                     ) -> #krate::Result<Self> {
-                        let variant_idx = <u64 as #krate::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())? as usize;
+                        let variant_idx = <usize as #krate::prelude::Decode>::decode_discriminant(reader)?;
                         match variant_idx {
                             #(#variant_matches)*
                             _ => Err(#krate::io::Error::InvalidData),
