@@ -1,7 +1,10 @@
 use solana_sdk::{
     hash::{HASH_BYTES, Hash},
     instruction::CompiledInstruction,
-    message::{Message, MessageHeader},
+    message::{
+        Message, MessageHeader,
+        v0::{self, MessageAddressTableLookup},
+    },
     pubkey::Pubkey,
     signature::{SIGNATURE_BYTES, Signature},
     transaction::SanitizedTransaction,
@@ -184,6 +187,68 @@ impl Decode for Message {
         })
     }
 }
+
+impl Encode for MessageAddressTableLookup {
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total_bytes = 0;
+        total_bytes += self
+            .account_key
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .writable_indexes
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self.readonly_indexes.encode_ext(writer, dedupe_encoder)?;
+        Ok(total_bytes)
+    }
+}
+
+impl Decode for MessageAddressTableLookup {
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let account_key: Pubkey = Pubkey::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let writable_indexes: Vec<u8> =
+            Vec::<u8>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let readonly_indexes: Vec<u8> = Vec::<u8>::decode_ext(reader, dedupe_decoder)?;
+        Ok(MessageAddressTableLookup {
+            account_key,
+            writable_indexes,
+            readonly_indexes,
+        })
+    }
+}
+
+// impl Encode for v0::Message {
+//     #[inline(always)]
+//     fn encode_ext(
+//         &self,
+//         writer: &mut impl Write,
+//         mut dedupe_encoder: Option<&mut DedupeEncoder>,
+//     ) -> Result<usize> {
+//         let mut total_bytes = 0;
+//         total_bytes += self
+//             .header
+//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+//         total_bytes += self
+//             .account_keys
+//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+//         total_bytes += self
+//             .recent_blockhash
+//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+//         total_bytes += self
+//             .instructions
+//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+//         total_bytes += self
+//             .address_table_lookups
+//             .encode_ext(writer, dedupe_encoder)?;
+//         Ok(total_bytes)
+//     }
+// }
 
 impl Encode for SanitizedTransaction {
     #[inline(always)]
