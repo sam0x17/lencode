@@ -404,6 +404,49 @@ impl<'a> Decode for v0::LoadedMessage<'a> {
     }
 }
 
+impl Encode for SanitizedTransaction {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total = 0;
+        total += self
+            .message()
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total += self
+            .message_hash()
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total += self
+            .is_simple_vote_transaction()
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        let sigs: Vec<Signature> = self.signatures().to_vec();
+        total += sigs.encode_ext(writer, dedupe_encoder)?;
+        Ok(total)
+    }
+}
+
+impl Decode for SanitizedTransaction {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let message = SanitizedMessage::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let message_hash = Hash::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let is_simple_vote_tx = bool::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let signatures = Vec::<Signature>::decode_ext(reader, dedupe_decoder)?;
+        SanitizedTransaction::try_new_from_fields(
+            message,
+            message_hash,
+            is_simple_vote_tx,
+            signatures,
+        )
+        .map_err(|_| Error::InvalidData)
+    }
+}
+
 impl Decode for SanitizedMessage {
     #[inline]
     fn decode_ext(
@@ -425,16 +468,7 @@ impl Decode for SanitizedMessage {
     }
 }
 
-impl Encode for SanitizedTransaction {
-    #[inline(always)]
-    fn encode_ext(
-        &self,
-        _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        todo!()
-    }
-}
+// removed obsolete placeholder impl for SanitizedTransaction
 
 #[test]
 fn test_encode_decode_sanitized_message() {
@@ -491,6 +525,205 @@ fn test_encode_decode_sanitized_message() {
         }
         _ => panic!("Decoded variant does not match original"),
     }
+}
+
+#[test]
+fn test_encode_decode_sanitized_transaction_legacy() {
+    // Build a simple legacy message
+    let header = MessageHeader {
+        num_required_signatures: 2,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![
+        Pubkey::new_unique(),
+        Pubkey::new_unique(),
+        Pubkey::new_unique(),
+    ];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![CompiledInstruction {
+        program_id_index: 0,
+        accounts: vec![1, 2],
+        data: vec![9, 8, 7],
+    }];
+    let message = Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+    };
+
+    let is_writable_account_cache = vec![true, false, false];
+    let legacy_message = LegacyMessage {
+        message: std::borrow::Cow::Owned(message),
+        is_writable_account_cache,
+    };
+
+    let sanitized = SanitizedMessage::Legacy(legacy_message);
+    let signatures = vec![Signature::default(), Signature::default()];
+    let tx =
+        SanitizedTransaction::try_new_from_fields(sanitized, Hash::new_unique(), false, signatures)
+            .unwrap();
+
+    // Round-trip encode/decode
+    let mut buf = Vec::new();
+    tx.encode(&mut buf).unwrap();
+    let decoded = SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(tx, decoded);
+}
+
+#[test]
+fn test_encode_decode_sanitized_transaction_v0() {
+    // Build a simple v0 message with loaded addresses
+    let header = MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![Pubkey::new_unique(), Pubkey::new_unique()];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![CompiledInstruction {
+        program_id_index: 1,
+        accounts: vec![0],
+        data: vec![1, 2, 3, 4],
+    }];
+    let address_table_lookups = Vec::<MessageAddressTableLookup>::new();
+    let msg = v0::Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+        address_table_lookups,
+    };
+    let loaded_addresses = v0::LoadedAddresses {
+        writable: vec![Pubkey::new_unique()],
+        readonly: vec![Pubkey::new_unique()],
+    };
+    let sanitized_v0 =
+        v0::LoadedMessage::new(msg, loaded_addresses, &std::collections::HashSet::default());
+    let sanitized = SanitizedMessage::V0(sanitized_v0);
+
+    let signatures = vec![Signature::default()];
+    let tx =
+        SanitizedTransaction::try_new_from_fields(sanitized, Hash::new_unique(), false, signatures)
+            .unwrap();
+
+    // Round-trip encode/decode
+    let mut buf = Vec::new();
+    tx.encode(&mut buf).unwrap();
+    let decoded = SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(tx, decoded);
+}
+
+#[test]
+fn test_sanitized_transaction_legacy_with_dedup() {
+    // Create repeated pubkeys to exercise dedupe
+    let k1 = Pubkey::new_unique();
+    let k2 = Pubkey::new_unique();
+    let k3 = k1; // repeat
+
+    let header = MessageHeader {
+        num_required_signatures: 2,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![k1, k2, k3, k2, k1];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![CompiledInstruction {
+        program_id_index: 0,
+        accounts: vec![1, 2, 3],
+        data: vec![42, 1, 2, 3],
+    }];
+    let message = Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+    };
+    let is_writable_account_cache = vec![true, false, false, false, true];
+    let legacy_message = LegacyMessage {
+        message: std::borrow::Cow::Owned(message),
+        is_writable_account_cache,
+    };
+    let sanitized = SanitizedMessage::Legacy(legacy_message);
+    let tx = SanitizedTransaction::try_new_from_fields(
+        sanitized,
+        Hash::new_unique(),
+        false,
+        vec![Signature::default(), Signature::default()],
+    )
+    .unwrap();
+
+    let mut enc = DedupeEncoder::new();
+    let mut buf1 = Vec::new();
+    tx.encode_ext(&mut buf1, Some(&mut enc)).unwrap();
+
+    // Encoding the same tx with the same encoder should be smaller since pubkeys are deduped
+    let mut buf2 = Vec::new();
+    tx.encode_ext(&mut buf2, Some(&mut enc)).unwrap();
+    assert!(buf2.len() < buf1.len());
+
+    // Round-trip decode both using a shared decoder to respect IDs
+    let mut dec = DedupeDecoder::new();
+    let tx1 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec)).unwrap();
+    let tx2 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec)).unwrap();
+    assert_eq!(tx, tx1);
+    assert_eq!(tx, tx2);
+}
+
+#[test]
+fn test_sanitized_transaction_v0_with_dedup() {
+    // Repeated pubkeys across account_keys and loaded addresses
+    let k1 = Pubkey::new_unique();
+    let k2 = Pubkey::new_unique();
+
+    let header = MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![k1, k2, k1, k2];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![CompiledInstruction {
+        program_id_index: 1,
+        accounts: vec![0, 2],
+        data: vec![7, 7, 7],
+    }];
+    let address_table_lookups = vec![];
+    let msg = v0::Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+        address_table_lookups,
+    };
+    let loaded_addresses = v0::LoadedAddresses {
+        writable: vec![k1, k2, k1],
+        readonly: vec![k2],
+    };
+    let loaded =
+        v0::LoadedMessage::new(msg, loaded_addresses, &std::collections::HashSet::default());
+    let sanitized = SanitizedMessage::V0(loaded);
+    let tx = SanitizedTransaction::try_new_from_fields(
+        sanitized,
+        Hash::new_unique(),
+        false,
+        vec![Signature::default()],
+    )
+    .unwrap();
+
+    let mut enc = DedupeEncoder::new();
+    let mut buf1 = Vec::new();
+    tx.encode_ext(&mut buf1, Some(&mut enc)).unwrap();
+    let mut buf2 = Vec::new();
+    tx.encode_ext(&mut buf2, Some(&mut enc)).unwrap();
+    assert!(buf2.len() < buf1.len());
+
+    let mut dec = DedupeDecoder::new();
+    let tx1 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec)).unwrap();
+    let tx2 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec)).unwrap();
+    assert_eq!(tx, tx1);
+    assert_eq!(tx, tx2);
 }
 
 #[test]
