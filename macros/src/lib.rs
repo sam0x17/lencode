@@ -11,8 +11,8 @@ fn enum_repr_ty(attrs: &[Attribute]) -> Option<Type> {
             let _ = attr.parse_nested_meta(|meta| {
                 if let Some(ident) = meta.path.get_ident() {
                     match ident.to_string().as_str() {
-                        "u8" | "u16" | "u32" | "u64" | "usize" |
-                        "i8" | "i16" | "i32" | "i64" | "isize" => {
+                        "u8" | "u16" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "i64"
+                        | "isize" => {
                             let ty_ident = Ident::new(&ident.to_string(), Span::call_site());
                             out = Some(parse_quote!(#ty_ident));
                         }

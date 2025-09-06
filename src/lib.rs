@@ -698,9 +698,7 @@ impl<T: Encode> Encode for core::ops::RangeInclusive<T> {
         total_written += self
             .start()
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self
-            .end()
-            .encode_ext(writer, dedupe_encoder)?;
+        total_written += self.end().encode_ext(writer, dedupe_encoder)?;
         Ok(total_written)
     }
 }
