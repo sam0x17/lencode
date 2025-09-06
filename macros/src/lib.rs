@@ -2,7 +2,29 @@ use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{DeriveInput, Ident, Result, parse_quote, parse2};
+use syn::{Attribute, DeriveInput, Ident, Result, Type, parse_quote, parse2};
+
+fn enum_repr_ty(attrs: &[Attribute]) -> Option<Type> {
+    let mut out: Option<Type> = None;
+    for attr in attrs {
+        if attr.path().is_ident("repr") {
+            let _ = attr.parse_nested_meta(|meta| {
+                if let Some(ident) = meta.path.get_ident() {
+                    match ident.to_string().as_str() {
+                        "u8" | "u16" | "u32" | "u64" | "usize" |
+                        "i8" | "i16" | "i32" | "i64" | "isize" => {
+                            let ty_ident = Ident::new(&ident.to_string(), Span::call_site());
+                            out = Some(parse_quote!(#ty_ident));
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(())
+            });
+        }
+    }
+    out
+}
 
 fn crate_path() -> TokenStream2 {
     // Resolve the path to the main `lencode` crate from the macro crate,
@@ -100,6 +122,13 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
             })
         }
         syn::Data::Enum(data_enum) => {
+            let is_c_like = data_enum
+                .variants
+                .iter()
+                .all(|v| matches!(v.fields, syn::Fields::Unit));
+            let repr_ty = enum_repr_ty(&derive_input.attrs);
+            let use_numeric_disc = is_c_like && repr_ty.is_some();
+            let repr_ty_ts = repr_ty.unwrap_or(parse_quote!(usize));
             let variant_matches = data_enum.variants.iter().enumerate().map(|(idx, v)| {
 				let vname = &v.ident;
 				let idx_lit = syn::Index::from(idx);
@@ -146,12 +175,21 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
 						}
 					}
 					syn::Fields::Unit => {
-						quote! {
-							#name::#vname => {
-								total_bytes += <usize as #krate::prelude::Encode>::encode_discriminant(#idx_lit as usize, writer)?;
-							}
-						}
-					}
+                        if use_numeric_disc {
+                            quote! {
+                                #name::#vname => {
+                                    let disc = (#name::#vname as #repr_ty_ts) as usize;
+                                    total_bytes += <usize as #krate::prelude::Encode>::encode_discriminant(disc, writer)?;
+                                }
+                            }
+                        } else {
+                            quote! {
+                                #name::#vname => {
+                                    total_bytes += <usize as #krate::prelude::Encode>::encode_discriminant(#idx_lit as usize, writer)?;
+                                }
+                            }
+                        }
+                    }
 				}
 			});
             Ok(quote! {
@@ -246,6 +284,13 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
             })
         }
         syn::Data::Enum(data_enum) => {
+            let is_c_like = data_enum
+                .variants
+                .iter()
+                .all(|v| matches!(v.fields, syn::Fields::Unit));
+            let repr_ty = enum_repr_ty(&derive_input.attrs);
+            let use_numeric_disc = is_c_like && repr_ty.is_some();
+            let repr_ty_ts = repr_ty.unwrap_or(parse_quote!(usize));
             let variant_matches = data_enum.variants.iter().enumerate().map(|(idx, v)| {
                 let vname = &v.ident;
                 let idx_lit = syn::Index::from(idx);
@@ -274,8 +319,14 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         }
                     }
                     syn::Fields::Unit => {
-                        quote! {
-                            #idx_lit => Ok(#name::#vname),
+                        if use_numeric_disc {
+                            quote! {
+                                ((#name::#vname as #repr_ty_ts) as usize) => Ok(#name::#vname),
+                            }
+                        } else {
+                            quote! {
+                                #idx_lit => Ok(#name::#vname),
+                            }
                         }
                     }
                 }

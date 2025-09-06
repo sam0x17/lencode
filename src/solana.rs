@@ -2,7 +2,7 @@ use solana_sdk::{
     hash::{HASH_BYTES, Hash},
     instruction::CompiledInstruction,
     message::{
-        LegacyMessage, Message, MessageHeader,
+        LegacyMessage, Message, MessageHeader, SanitizedMessage,
         v0::{self, MessageAddressTableLookup},
     },
     pubkey::Pubkey,
@@ -310,6 +310,121 @@ impl Decode for LegacyMessage<'_> {
     }
 }
 
+impl Encode for SanitizedMessage {
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total_bytes = 0;
+        match self {
+            SanitizedMessage::Legacy(inner) => {
+                total_bytes += <usize as Encode>::encode_discriminant(0, writer)?;
+                total_bytes += inner.encode_ext(writer, dedupe_encoder)?;
+            }
+            SanitizedMessage::V0(inner) => {
+                total_bytes += <usize as Encode>::encode_discriminant(1, writer)?;
+                total_bytes += inner.encode_ext(writer, dedupe_encoder)?;
+            }
+        }
+        Ok(total_bytes)
+    }
+}
+
+impl Encode for v0::LoadedAddresses {
+    #[inline(always)]
+    #[allow(clippy::needless_option_as_deref)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total = 0;
+        total += self
+            .writable
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total += self
+            .readonly
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        Ok(total)
+    }
+}
+
+impl Decode for v0::LoadedAddresses {
+    #[inline(always)]
+    #[allow(clippy::needless_option_as_deref)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let writable = Vec::<Pubkey>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let readonly = Vec::<Pubkey>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        Ok(v0::LoadedAddresses { writable, readonly })
+    }
+}
+
+impl<'a> Encode for v0::LoadedMessage<'a> {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total = 0;
+        total += self
+            .message
+            .as_ref()
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total += self
+            .loaded_addresses
+            .as_ref()
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total += self
+            .is_writable_account_cache
+            .encode_ext(writer, dedupe_encoder)?;
+        Ok(total)
+    }
+}
+
+impl<'a> Decode for v0::LoadedMessage<'a> {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let message = v0::Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let loaded_addresses =
+            v0::LoadedAddresses::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let is_writable_account_cache = Vec::<bool>::decode_ext(reader, dedupe_decoder)?;
+        Ok(v0::LoadedMessage {
+            message: std::borrow::Cow::Owned(message),
+            loaded_addresses: std::borrow::Cow::Owned(loaded_addresses),
+            is_writable_account_cache,
+        })
+    }
+}
+
+impl Decode for SanitizedMessage {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let disc = <usize as Decode>::decode_discriminant(reader)?;
+        match disc {
+            0 => {
+                let inner = LegacyMessage::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+                Ok(SanitizedMessage::Legacy(inner))
+            }
+            1 => {
+                let inner = v0::LoadedMessage::decode_ext(reader, dedupe_decoder)?;
+                Ok(SanitizedMessage::V0(inner))
+            }
+            _ => Err(Error::InvalidData),
+        }
+    }
+}
+
 impl Encode for SanitizedTransaction {
     #[inline(always)]
     fn encode_ext(
@@ -318,6 +433,63 @@ impl Encode for SanitizedTransaction {
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         todo!()
+    }
+}
+
+#[test]
+fn test_encode_decode_sanitized_message() {
+    let header = MessageHeader {
+        num_required_signatures: 2,
+        num_readonly_signed_accounts: 1,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![
+        Pubkey::new_unique(),
+        Pubkey::new_unique(),
+        Pubkey::new_unique(),
+        Pubkey::new_unique(),
+    ];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![
+        CompiledInstruction {
+            program_id_index: 0,
+            accounts: vec![1, 2],
+            data: vec![1, 2, 3],
+        },
+        CompiledInstruction {
+            program_id_index: 1,
+            accounts: vec![0, 3],
+            data: vec![4, 5, 6],
+        },
+    ];
+    let message = Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+    };
+    let legacy_message = LegacyMessage {
+        message: std::borrow::Cow::Owned(message),
+        is_writable_account_cache: vec![true, false, true, false],
+    };
+    let original = SanitizedMessage::Legacy(legacy_message);
+
+    let mut buffer = Vec::new();
+    let bytes_written = original.encode(&mut buffer).unwrap();
+    assert!(bytes_written > 0);
+
+    let mut cursor = Cursor::new(&buffer);
+    let decoded: SanitizedMessage = SanitizedMessage::decode(&mut cursor).unwrap();
+
+    match (&original, &decoded) {
+        (SanitizedMessage::Legacy(orig), SanitizedMessage::Legacy(decoded)) => {
+            assert_eq!(orig.message, decoded.message);
+            assert_eq!(
+                orig.is_writable_account_cache,
+                decoded.is_writable_account_cache
+            );
+        }
+        _ => panic!("Decoded variant does not match original"),
     }
 }
 
