@@ -2,7 +2,7 @@ use solana_sdk::{
     hash::{HASH_BYTES, Hash},
     instruction::CompiledInstruction,
     message::{
-        Message, MessageHeader,
+        LegacyMessage, Message, MessageHeader,
         v0::{self, MessageAddressTableLookup},
     },
     pubkey::Pubkey,
@@ -277,6 +277,39 @@ impl Decode for v0::Message {
     }
 }
 
+impl Encode for LegacyMessage<'_> {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total_bytes = 0;
+        total_bytes += self
+            .message
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .is_writable_account_cache
+            .encode_ext(writer, dedupe_encoder)?;
+        Ok(total_bytes)
+    }
+}
+
+impl Decode for LegacyMessage<'_> {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let message: Message = Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let is_writable_account_cache: Vec<bool> = Vec::<bool>::decode_ext(reader, dedupe_decoder)?;
+        Ok(LegacyMessage {
+            message: std::borrow::Cow::Owned(message),
+            is_writable_account_cache,
+        })
+    }
+}
+
 impl Encode for SanitizedTransaction {
     #[inline(always)]
     fn encode_ext(
@@ -285,6 +318,59 @@ impl Encode for SanitizedTransaction {
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         todo!()
+    }
+}
+
+#[test]
+fn test_encode_decode_legacy_message() {
+    for _ in 0..1000 {
+        let header = MessageHeader {
+            num_required_signatures: rand::random::<u8>(),
+            num_readonly_signed_accounts: rand::random::<u8>(),
+            num_readonly_unsigned_accounts: rand::random::<u8>(),
+        };
+        let account_keys: Vec<Pubkey> = (0..rand::random::<u8>() % 10)
+            .map(|_| Pubkey::new_unique())
+            .collect();
+        let recent_blockhash = Hash::new_unique();
+        let instructions: Vec<CompiledInstruction> = (0..rand::random::<u8>() % 5)
+            .map(|_| CompiledInstruction {
+                program_id_index: rand::random::<u8>(),
+                accounts: (0..rand::random::<u8>() % 10)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+                data: (0..rand::random::<u8>() % 20)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+            })
+            .collect();
+
+        let message = Message {
+            header,
+            account_keys,
+            recent_blockhash,
+            instructions,
+        };
+
+        let is_writable_account_cache: Vec<bool> = (0..message.account_keys.len())
+            .map(|_| rand::random::<bool>())
+            .collect();
+
+        let legacy_message = LegacyMessage {
+            message: std::borrow::Cow::Owned(message),
+            is_writable_account_cache,
+        };
+
+        let mut buf = [0u8; 1024];
+        let mut cursor = Cursor::new(&mut buf);
+        legacy_message.encode_ext(&mut cursor, None).unwrap();
+        let decoded_legacy_message =
+            LegacyMessage::decode_ext(&mut Cursor::new(&buf), None).unwrap();
+        assert_eq!(legacy_message.message, decoded_legacy_message.message);
+        assert_eq!(
+            legacy_message.is_writable_account_cache,
+            decoded_legacy_message.is_writable_account_cache
+        );
     }
 }
 
