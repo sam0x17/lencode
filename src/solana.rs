@@ -189,6 +189,7 @@ impl Decode for Message {
 }
 
 impl Encode for MessageAddressTableLookup {
+    #[inline]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
@@ -207,6 +208,7 @@ impl Encode for MessageAddressTableLookup {
 }
 
 impl Decode for MessageAddressTableLookup {
+    #[inline]
     fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
@@ -223,32 +225,57 @@ impl Decode for MessageAddressTableLookup {
     }
 }
 
-// impl Encode for v0::Message {
-//     #[inline(always)]
-//     fn encode_ext(
-//         &self,
-//         writer: &mut impl Write,
-//         mut dedupe_encoder: Option<&mut DedupeEncoder>,
-//     ) -> Result<usize> {
-//         let mut total_bytes = 0;
-//         total_bytes += self
-//             .header
-//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-//         total_bytes += self
-//             .account_keys
-//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-//         total_bytes += self
-//             .recent_blockhash
-//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-//         total_bytes += self
-//             .instructions
-//             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-//         total_bytes += self
-//             .address_table_lookups
-//             .encode_ext(writer, dedupe_encoder)?;
-//         Ok(total_bytes)
-//     }
-// }
+impl Encode for v0::Message {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total_bytes = 0;
+        total_bytes += self
+            .header
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .account_keys
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .recent_blockhash
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .instructions
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total_bytes += self
+            .address_table_lookups
+            .encode_ext(writer, dedupe_encoder)?;
+        Ok(total_bytes)
+    }
+}
+
+impl Decode for v0::Message {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let header: MessageHeader =
+            MessageHeader::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let account_keys: Vec<Pubkey> =
+            Vec::<Pubkey>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let recent_blockhash: Hash = Hash::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let instructions: Vec<CompiledInstruction> =
+            Vec::<CompiledInstruction>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let address_table_lookups: Vec<MessageAddressTableLookup> =
+            Vec::<MessageAddressTableLookup>::decode_ext(reader, dedupe_decoder)?;
+        Ok(v0::Message {
+            header,
+            account_keys,
+            recent_blockhash,
+            instructions,
+            address_table_lookups,
+        })
+    }
+}
 
 impl Encode for SanitizedTransaction {
     #[inline(always)]
@@ -258,6 +285,57 @@ impl Encode for SanitizedTransaction {
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         todo!()
+    }
+}
+
+#[test]
+fn test_encode_decode_v0_message() {
+    for _ in 0..1000 {
+        let header = MessageHeader {
+            num_required_signatures: rand::random::<u8>(),
+            num_readonly_signed_accounts: rand::random::<u8>(),
+            num_readonly_unsigned_accounts: rand::random::<u8>(),
+        };
+        let account_keys: Vec<Pubkey> = (0..rand::random::<u8>() % 10)
+            .map(|_| Pubkey::new_unique())
+            .collect();
+        let recent_blockhash = Hash::new_unique();
+        let instructions: Vec<CompiledInstruction> = (0..rand::random::<u8>() % 5)
+            .map(|_| CompiledInstruction {
+                program_id_index: rand::random::<u8>(),
+                accounts: (0..rand::random::<u8>() % 10)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+                data: (0..rand::random::<u8>() % 20)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+            })
+            .collect();
+        let address_table_lookups: Vec<MessageAddressTableLookup> = (0..rand::random::<u8>() % 3)
+            .map(|_| MessageAddressTableLookup {
+                account_key: Pubkey::new_unique(),
+                writable_indexes: (0..rand::random::<u8>() % 5)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+                readonly_indexes: (0..rand::random::<u8>() % 5)
+                    .map(|_| rand::random::<u8>())
+                    .collect(),
+            })
+            .collect();
+
+        let message = v0::Message {
+            header,
+            account_keys,
+            recent_blockhash,
+            instructions,
+            address_table_lookups,
+        };
+
+        let mut buf = [0u8; 1024];
+        let mut cursor = Cursor::new(&mut buf);
+        message.encode_ext(&mut cursor, None).unwrap();
+        let decoded_message = v0::Message::decode_ext(&mut Cursor::new(&buf), None).unwrap();
+        assert_eq!(message, decoded_message);
     }
 }
 
