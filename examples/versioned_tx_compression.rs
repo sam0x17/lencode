@@ -9,13 +9,13 @@ use rand::Rng;
 use solana_sdk::{
     hash::Hash,
     instruction::CompiledInstruction,
-    message::{LegacyMessage, Message, MessageHeader, SanitizedMessage, v0},
+    message::{Message, MessageHeader, VersionedMessage, v0},
     pubkey::Pubkey,
     signature::Signature,
-    transaction::{SanitizedTransaction, VersionedTransaction},
+    transaction::VersionedTransaction,
 };
 #[cfg(feature = "solana")]
-use std::{collections::HashSet, io::Cursor, time::Instant};
+use std::{io::Cursor, time::Instant};
 
 #[cfg(feature = "solana")]
 fn gen_pubkeys(count: usize, dup_ratio: f64) -> Vec<Pubkey> {
@@ -32,7 +32,7 @@ fn gen_pubkeys(count: usize, dup_ratio: f64) -> Vec<Pubkey> {
 }
 
 #[cfg(feature = "solana")]
-fn build_legacy_tx(dup_ratio: f64) -> SanitizedTransaction {
+fn build_legacy_tx(dup_ratio: f64) -> VersionedTransaction {
     let mut rng = rand::rng();
     let account_keys = gen_pubkeys(16, dup_ratio);
     let header = MessageHeader {
@@ -51,20 +51,20 @@ fn build_legacy_tx(dup_ratio: f64) -> SanitizedTransaction {
                 .collect(),
         })
         .collect();
-    let message = Message {
+    let legacy_message = Message {
         header,
         account_keys,
         recent_blockhash: Hash::new_unique(),
         instructions,
     };
-    let sanitized_msg = SanitizedMessage::Legacy(LegacyMessage::new(message, &HashSet::default()));
-    let sigs = vec![Signature::default(), Signature::default()];
-    SanitizedTransaction::try_new_from_fields(sanitized_msg, Hash::new_unique(), false, sigs)
-        .unwrap()
+    VersionedTransaction {
+        signatures: vec![Signature::default(), Signature::default()],
+        message: VersionedMessage::Legacy(legacy_message),
+    }
 }
 
 #[cfg(feature = "solana")]
-fn build_v0_tx(dup_ratio: f64) -> SanitizedTransaction {
+fn build_v0_tx(dup_ratio: f64) -> VersionedTransaction {
     let mut rng = rand::rng();
     let account_keys = gen_pubkeys(12, dup_ratio);
     let header = MessageHeader {
@@ -83,22 +83,17 @@ fn build_v0_tx(dup_ratio: f64) -> SanitizedTransaction {
                 .collect(),
         })
         .collect();
-    let message = v0::Message {
+    let v0_message = v0::Message {
         header,
         account_keys,
         recent_blockhash: Hash::new_unique(),
         instructions,
         address_table_lookups: vec![],
     };
-    let loaded_addresses = v0::LoadedAddresses {
-        writable: gen_pubkeys(6, dup_ratio),
-        readonly: gen_pubkeys(4, dup_ratio),
-    };
-    let loaded = v0::LoadedMessage::new(message, loaded_addresses, &HashSet::default());
-    let sanitized_msg = SanitizedMessage::V0(loaded);
-    let sigs = vec![Signature::default()];
-    SanitizedTransaction::try_new_from_fields(sanitized_msg, Hash::new_unique(), false, sigs)
-        .unwrap()
+    VersionedTransaction {
+        signatures: vec![Signature::default()],
+        message: VersionedMessage::V0(v0_message),
+    }
 }
 
 #[cfg(feature = "solana")]
@@ -109,12 +104,11 @@ fn main() {
     // Build a mixed set of versioned transactions (half legacy, half v0)
     let mut vtxs: Vec<VersionedTransaction> = Vec::with_capacity(TX_COUNT);
     for i in 0..TX_COUNT {
-        let stx = if i % 2 == 0 {
-            build_legacy_tx(DUP_RATIO)
+        if i % 2 == 0 {
+            vtxs.push(build_legacy_tx(DUP_RATIO));
         } else {
-            build_v0_tx(DUP_RATIO)
-        };
-        vtxs.push(stx.to_versioned_transaction());
+            vtxs.push(build_v0_tx(DUP_RATIO));
+        }
     }
 
     // bincode: serialize VersionedTransaction via serde
@@ -140,7 +134,7 @@ fn main() {
         DUP_RATIO * 100.0
     );
     println!("bincode size: {} bytes", bincode_len);
-    println!("lencode  size: {} bytes (dedupe on)", lencode_len);
+    println!("lencode size: {} bytes (dedupe on)", lencode_len);
     println!("compression ratio (lencode/bincode): {:.3}", ratio);
     println!("space savings vs bincode: {:.1}%", savings);
     println!("unique values captured by dedupe: {}", enc.len());
@@ -158,5 +152,5 @@ fn main() {
 #[cfg(not(feature = "solana"))]
 fn main() {
     println!("This example requires the 'solana' feature to be enabled.");
-    println!("Run with: cargo run --example sanitized_tx_compression --features=solana");
+    println!("Run with: cargo run --example versioned_tx_compression --features=solana");
 }
