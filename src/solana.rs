@@ -2,12 +2,12 @@ use solana_sdk::{
     hash::{HASH_BYTES, Hash},
     instruction::CompiledInstruction,
     message::{
-        LegacyMessage, Message, MessageHeader, SanitizedMessage,
+        LegacyMessage, Message, MessageHeader, SanitizedMessage, VersionedMessage,
         v0::{self, MessageAddressTableLookup},
     },
     pubkey::Pubkey,
     signature::{SIGNATURE_BYTES, Signature},
-    transaction::SanitizedTransaction,
+    transaction::{SanitizedTransaction, VersionedTransaction},
 };
 
 use crate::prelude::*;
@@ -466,6 +466,185 @@ impl Decode for SanitizedMessage {
             _ => Err(Error::InvalidData),
         }
     }
+}
+
+impl Encode for VersionedMessage {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total = 0;
+        match self {
+            VersionedMessage::Legacy(message) => {
+                total += <usize as Encode>::encode_discriminant(0, writer)?;
+                total += message.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            }
+            VersionedMessage::V0(message) => {
+                total += <usize as Encode>::encode_discriminant(1, writer)?;
+                total += message.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            }
+        }
+        Ok(total)
+    }
+}
+
+impl Decode for VersionedMessage {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let disc = <usize as Decode>::decode_discriminant(reader)?;
+        match disc {
+            0 => {
+                let legacy = Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+                Ok(VersionedMessage::Legacy(legacy))
+            }
+            1 => {
+                let v0msg = v0::Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+                Ok(VersionedMessage::V0(v0msg))
+            }
+            _ => Err(Error::InvalidData),
+        }
+    }
+}
+
+impl Encode for VersionedTransaction {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let mut total = 0;
+        total += self
+            .signatures
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        total += self
+            .message
+            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        Ok(total)
+    }
+}
+
+impl Decode for VersionedTransaction {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let signatures = Vec::<Signature>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let message = VersionedMessage::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        Ok(VersionedTransaction {
+            signatures,
+            message,
+        })
+    }
+}
+
+#[test]
+fn test_versioned_message_encode_decode_legacy() {
+    let header = MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![Pubkey::new_unique(), Pubkey::new_unique()];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![CompiledInstruction {
+        program_id_index: 0,
+        accounts: vec![1],
+        data: vec![1, 2, 3],
+    }];
+    let legacy = Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+    };
+    let vm = VersionedMessage::Legacy(legacy);
+
+    let mut buf = Vec::new();
+    vm.encode(&mut buf).unwrap();
+    let decoded = VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
+    assert_eq!(vm, decoded);
+}
+
+#[test]
+fn test_versioned_message_encode_decode_v0() {
+    let header = MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![Pubkey::new_unique(), Pubkey::new_unique()];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![CompiledInstruction {
+        program_id_index: 1,
+        accounts: vec![0],
+        data: vec![9, 9],
+    }];
+    let address_table_lookups: Vec<MessageAddressTableLookup> = Vec::new();
+    let v0msg = v0::Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+        address_table_lookups,
+    };
+    let vm = VersionedMessage::V0(v0msg);
+
+    let mut buf = Vec::new();
+    vm.encode(&mut buf).unwrap();
+    let decoded = VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
+    assert_eq!(vm, decoded);
+}
+
+#[test]
+fn test_versioned_transaction_roundtrip_and_dedupe() {
+    // Construct a message with repeated pubkeys to exercise dedupe
+    let k = Pubkey::new_unique();
+    let header = MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 2,
+    };
+    let account_keys = vec![k, k, k];
+    let recent_blockhash = Hash::new_unique();
+    let instructions = vec![CompiledInstruction {
+        program_id_index: 2,
+        accounts: vec![0, 1],
+        data: vec![0xAA],
+    }];
+    let message = VersionedMessage::Legacy(Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+    });
+    let tx = VersionedTransaction {
+        signatures: vec![Signature::default()],
+        message,
+    };
+
+    // Encode without dedupe
+    let mut buf_plain = Vec::new();
+    tx.encode_ext(&mut buf_plain, None).unwrap();
+
+    // Encode with dedupe
+    let mut enc = DedupeEncoder::new();
+    let mut buf_dedupe = Vec::new();
+    tx.encode_ext(&mut buf_dedupe, Some(&mut enc)).unwrap();
+    assert!(buf_dedupe.len() < buf_plain.len());
+
+    // Round-trip with decoder
+    let mut dec = DedupeDecoder::new();
+    let tx_dec =
+        VersionedTransaction::decode_ext(&mut std::io::Cursor::new(&buf_dedupe), Some(&mut dec))
+            .unwrap();
+    assert_eq!(tx, tx_dec);
 }
 
 // removed obsolete placeholder impl for SanitizedTransaction
