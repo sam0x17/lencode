@@ -261,28 +261,9 @@ match value.encode(&mut buffer) {
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
-### Development
-
-```bash
-# Run tests
-cargo test --all-features
-
-# Run benchmarks
-cargo bench --all-features
-
-# Check no-std compatibility
-cargo check --no-default-features
-
-# Format code
-cargo fmt
-
-# Run clippy
-cargo clippy --all-features
-```
-
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Changelog
 
