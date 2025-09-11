@@ -50,18 +50,34 @@ impl VarintEncodingScheme for Lencode {
         let first_byte = val_bytes[0];
 
         if first_byte & 0x80 == 0 {
-            // Small integer: single byte, left-align in buffer (little endian)
-            val_bytes[0] = first_byte & 0x7F;
+            // Small integer: single byte. Place at LSB position depending on endianness.
+            let byte = first_byte & 0x7F;
+            #[cfg(target_endian = "little")]
+            {
+                val_bytes[0] = byte;
+            }
+            #[cfg(target_endian = "big")]
+            {
+                let size = mem::size_of::<I>();
+                val_bytes[size - 1] = byte;
+            }
             Ok(val)
         } else {
-            // Large integer: read n bytes, left-align in buffer (little endian)
+            // Large integer: read n bytes representing the integer in little-endian order.
+            // Place bytes at the least-significant end of the native representation.
             let n = (first_byte & 0x7F) as usize;
             // if n == 0 || n > mem::size_of::<I>() {
             //     return Err(Error::InvalidData);
             // }
-            reader.read(&mut val_bytes[..n])?;
+            #[cfg(target_endian = "little")]
+            {
+                reader.read(&mut val_bytes[..n])?;
+            }
             #[cfg(target_endian = "big")]
-            val_bytes[..n].reverse();
+            {
+                let size = mem::size_of::<I>();
+                reader.read(&mut val_bytes[size - n..size])?;
+            }
             Ok(val)
         }
     }
