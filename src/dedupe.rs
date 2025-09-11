@@ -12,6 +12,12 @@ use crate::prelude::*;
 const DEFAULT_INITIAL_CAPACITY: usize = 128;
 const DEFAULT_NUM_TYPES: usize = 4;
 
+/// Marker trait for types eligible for deduplicated encoding.
+///
+/// Types must be hashable, equatable, clonable and packable so they can be
+/// stored in the encoder’s table and written on first occurrence.
+/// Implement this with a blanket `impl` for your type when you want
+/// [`Encode::encode_ext`] to take advantage of [`DedupeEncoder`].
 pub trait DedupeEncodeable: Hash + Eq + Pack + Clone + Send + Sync + 'static {}
 
 impl<T: DedupeEncodeable> Encode for T {
@@ -29,6 +35,9 @@ impl<T: DedupeEncodeable> Encode for T {
     }
 }
 
+/// Marker trait for types eligible for deduplicated decoding.
+///
+/// Pairs with `DedupeEncodeable`; see that trait for details.
 pub trait DedupeDecodeable: Pack + Clone + Hash + Eq + Send + Sync + 'static {}
 
 impl<T: DedupeDecodeable> Decode for T {
@@ -45,6 +54,7 @@ impl<T: DedupeDecodeable> Decode for T {
     }
 }
 
+/// Stateful encoder that replaces repeated values with compact IDs.
 pub struct DedupeEncoder {
     // Store type-specific hashmaps: TypeId -> HashMap<T, usize>
     type_stores: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
@@ -61,6 +71,7 @@ impl Default for DedupeEncoder {
 }
 
 impl DedupeEncoder {
+    /// Creates a new empty `DedupeEncoder`.
     #[inline(always)]
     pub fn new() -> Self {
         Self {
@@ -70,10 +81,10 @@ impl DedupeEncoder {
         }
     }
 
-    /// Creates a new `DedupeEncoder` with the specified capacity.
+    /// Creates a new [`DedupeEncoder`] with the specified capacity.
     ///
-    /// The encoder will be able to hold at least `capacity` unique values
-    /// and `num_types` categories of types without reallocating.
+    /// The encoder will be able to hold at least `capacity` unique values and `num_types`
+    /// categories of types without reallocating.
     #[inline(always)]
     pub fn with_capacity(initial_capacity: usize, num_types: usize) -> Self {
         Self {
@@ -83,19 +94,20 @@ impl DedupeEncoder {
         }
     }
 
+    /// Removes all cached entries and resets assigned IDs.
     #[inline(always)]
     pub fn clear(&mut self) {
         self.type_stores.clear();
         self.next_id = 1;
     }
 
-    /// Returns the number of unique values currently stored in the encoder.
+    /// Returns the number of unique values currently stored in the encoder (seen so far).
     #[inline(always)]
     pub const fn len(&self) -> usize {
         self.next_id - 1
     }
 
-    /// Returns true if the encoder contains no values.
+    /// Returns `true` if no values have been seen yet.
     #[inline(always)]
     pub const fn is_empty(&self) -> bool {
         self.next_id == 1
@@ -103,8 +115,8 @@ impl DedupeEncoder {
 
     /// Encodes a value with deduplication.
     ///
-    /// If the value has been seen before, only its ID is encoded.
-    /// Otherwise, the value is encoded in full, preceded by a special ID (0).
+    /// If the value has been seen before, only its ID is encoded. Otherwise, the value is
+    /// encoded in full, preceded by a special ID (0).
     ///
     /// # Arguments
     ///
@@ -113,7 +125,10 @@ impl DedupeEncoder {
     ///
     /// # Returns
     ///
-    /// The number of bytes written to the writer.
+    /// The number of bytes written to the writer. Encodes `val` with deduplication support.
+    ///
+    /// When the value is first seen, this writes a special ID `0` followed by the packed
+    /// value. On subsequent occurrences, only the assigned ID is written.
     #[inline]
     pub fn encode<T: Hash + Eq + Pack + Clone + Send + Sync + 'static>(
         &mut self,
@@ -155,12 +170,14 @@ impl DedupeEncoder {
 }
 
 #[derive(Default)]
+/// Companion to [`DedupeEncoder`] that reconstructs repeated values from IDs.
 pub struct DedupeDecoder {
     // Store values in order - index 0 = ID 1, index 1 = ID 2, etc.
     values: Vec<Box<dyn Any + Send + Sync>>,
 }
 
 impl DedupeDecoder {
+    /// Creates a new empty `DedupeDecoder`.
     #[inline(always)]
     pub fn new() -> Self {
         Self {
@@ -168,10 +185,10 @@ impl DedupeDecoder {
         }
     }
 
-    /// Creates a new `DedupeDecoder` with the specified capacity.
+    /// Creates a new [`DedupeDecoder`] with the specified capacity.
     ///
-    /// The decoder will be able to hold at least `capacity` cached values
-    /// without reallocating.
+    /// The decoder will be able to hold at least `capacity` cached values without
+    /// reallocating. Creates a decoder with a pre‑allocated value table of `capacity`.
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -179,16 +196,19 @@ impl DedupeDecoder {
         }
     }
 
+    /// Clears cached values.
     #[inline(always)]
     pub fn clear(&mut self) {
         self.values.clear();
     }
 
+    /// Returns the number of cached values.
     #[inline(always)]
     pub fn len(&self) -> usize {
         self.values.len()
     }
 
+    /// Returns `true` if the cache is empty.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
@@ -196,8 +216,8 @@ impl DedupeDecoder {
 
     /// Decodes a value with deduplication.
     ///
-    /// If the ID is 0, a new value is decoded and stored in the table.
-    /// Otherwise, the value is retrieved from the table using the given ID.
+    /// If the ID is 0, a new value is decoded and stored in the table. Otherwise, the value is
+    /// retrieved from the table using the given ID.
     ///
     /// # Arguments
     ///
@@ -205,7 +225,10 @@ impl DedupeDecoder {
     ///
     /// # Returns
     ///
-    /// The decoded value.
+    /// The decoded value. Decodes a value with deduplication support.
+    ///
+    /// If the next ID is `0`, a fresh value is decoded, stored, and returned. Otherwise, the
+    /// referenced value is loaded from the cache.
     #[inline]
     pub fn decode<T: Pack + Clone + Hash + Eq + Send + Sync + 'static>(
         &mut self,

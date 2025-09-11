@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use core::mem;
 
-/// The Lencode integer encoding [`Scheme`] is designed to encode integers in a variable-length
+/// The Lencode integer encoding scheme is designed to encode integers in a variable‑length
 /// format that is efficient for both small and large values both in terms of space and speed.
 ///
 /// Lencode is a hybrid scheme where small integers <= 127 are encoded in a single byte (the

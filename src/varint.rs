@@ -1,3 +1,4 @@
+//! Varint traits and helpers used by the Lencode scheme.
 use core::fmt::{Debug, Display};
 use core::ops::*;
 
@@ -11,28 +12,28 @@ pub use lencode::*;
 use newt_hype::*;
 base_newtype!(CustomPrimitiveBase);
 
-/// A trait describing an encoding scheme
+/// A trait describing a variable‑length integer and boolean encoding scheme.
 pub trait VarintEncodingScheme: Sized {
-    /// Encodes an unsigned integer value using the scheme, writing to the given writer.
+    /// Encodes an unsigned integer value using the scheme, writing to the given [`Write`].
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize>;
 
-    /// Decodes an unsigned integer value using the scheme, reading from the given reader.
+    /// Decodes an unsigned integer value using the scheme, reading from the given [`Read`].
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I>;
 
-    /// Encodes a signed integer value using the scheme, writing to the given writer.
+    /// Encodes a signed integer value using the scheme, writing to the given [`Write`].
     fn encode_varint_signed<I: SignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
         I::encode_int(val, writer)
     }
 
-    /// Decodes a signed integer value using the scheme, reading from the given reader.
+    /// Decodes a signed integer value using the scheme, reading from the given [`Read`].
     fn decode_varint_signed<I: SignedInteger>(reader: &mut impl Read) -> Result<I> {
         I::decode_int(reader)
     }
 
-    /// Encodes a boolean value using the scheme, writing to the given writer.
+    /// Encodes a boolean value using the scheme, writing to the given [`Write`].
     fn encode_bool(val: bool, writer: &mut impl Write) -> Result<usize>;
 
-    /// Decodes a boolean value using the scheme, reading from the given reader.
+    /// Decodes a boolean value using the scheme, reading from the given [`Read`].
     fn decode_bool(reader: &mut impl Read) -> Result<bool>;
 }
 
@@ -48,6 +49,7 @@ pub trait Zero {
     const ZERO: Self;
 }
 
+/// Trait for types that have a constant representing the value 127.
 pub trait OneHundredTwentySeven {
     /// The value 127 for this type.
     const ONE_HUNDRED_TWENTY_SEVEN: Self;
@@ -71,6 +73,11 @@ pub trait ByteLength {
     const BYTE_LENGTH: usize;
 }
 
+/// Trait implemented by all supported unsigned integer types.
+///
+/// This unifies the operations and constants needed by the varint
+/// implementation and provides helpers to encode/decode using the active
+/// scheme.
 pub trait UnsignedInteger:
     Sized
     + Copy
@@ -103,17 +110,20 @@ pub trait UnsignedInteger:
     + Min
     + ByteLength
 {
+    /// Encodes this unsigned integer using the active varint scheme.
     #[inline(always)]
     fn encode_uint(self, writer: &mut impl Write) -> Result<usize> {
         Lencode::encode_varint(self, writer)
     }
 
+    /// Decodes an unsigned integer using the active varint scheme.
     #[inline(always)]
     fn decode_uint(reader: &mut impl Read) -> Result<Self> {
         Lencode::decode_varint(reader)
     }
 }
 
+/// Implements the internal integer helper traits for the given unsigned types.
 #[macro_export]
 macro_rules! impl_unsigned_integer {
     ($($t:ty),*) => {
@@ -159,6 +169,7 @@ pub trait ToSigned {
     fn to_signed(self) -> Self::Signed;
 }
 
+/// Implements [`ToUnsigned`]/[`ToSigned`] pairwise conversions for signed/unsigned primitives.
 #[macro_export]
 macro_rules! impl_to_unsigned_signed {
     ($(($signed:ty, $unsigned:ty)),*) => {
@@ -240,13 +251,13 @@ pub trait SignedInteger:
     + ByteLength
     + ToUnsigned
 {
-    /// Encodes this signed integer using the given [`Scheme`] and ZigZag encoding.
+    /// Encodes this signed integer using the active varint scheme and ZigZag encoding.
     #[inline(always)]
     fn encode_int(self, writer: &mut impl Write) -> Result<usize> {
         zigzag_encode(self).encode_uint(writer)
     }
 
-    /// Decodes a signed integer using the given [`Scheme`] and ZigZag decoding.
+    /// Decodes a signed integer using the active varint scheme and ZigZag decoding.
     #[inline(always)]
     fn decode_int(reader: &mut impl Read) -> Result<Self> {
         Ok(zigzag_decode(<Self as ToUnsigned>::Unsigned::decode_uint(

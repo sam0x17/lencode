@@ -1,4 +1,32 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+//! Compact, fast binary encoding with varints and optional deduplication.
+//!
+//! This crate provides two core traits, [`Encode`] and [`Decode`], for serializing types to a
+//! [`Write`] and deserializing from a [`Read`] without relying on `std`. Integer types use a
+//! compact variable‑length scheme (see [`Lencode`]) that encodes small values in a single byte
+//! while remaining efficient for large values.
+//!
+//! Optional deduplication can be enabled per encode/decode call via
+//! [`DedupeEncoder`]/[`DedupeDecoder`], which replaces repeated values with small IDs to
+//! reduce size for data with many duplicates.
+//!
+//! Derive macros for [`Encode`] and [`Decode`] are available from the companion crate
+//! [`lencode_macros`] and re‑exported in [`prelude`].
+//!
+//! Quick start:
+//!
+//! ```rust
+//! use lencode::prelude::*;
+//!
+//! #[derive(Encode, Decode, PartialEq, Debug)]
+//! struct Point { x: u64, y: u64 }
+//!
+//! let p = Point { x: 3, y: 5 };
+//! let mut buf = Vec::new();
+//! let _n = encode(&p, &mut buf).unwrap();
+//! let q: Point = decode(&mut std::io::Cursor::new(&buf)).unwrap();
+//! assert_eq!(p, q);
+//! ```
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -23,6 +51,7 @@ pub mod varint;
 #[cfg(feature = "solana")]
 pub mod solana;
 
+/// Convenience re‑exports for common traits, modules and derive macros.
 pub mod prelude {
     pub use super::*;
     pub use crate::dedupe::*;
@@ -35,16 +64,25 @@ pub mod prelude {
 
 use prelude::*;
 
+/// Encodes `value` into `writer` using the type’s [`Encode`] implementation.
+///
+/// Returns the number of bytes written on success.
 #[inline(always)]
 pub fn encode<T: Encode>(value: &T, writer: &mut impl Write) -> Result<usize> {
     value.encode_ext(writer, None)
 }
 
+/// Decodes a value of type `T` from `reader` using `T`’s [`Decode`] implementation.
 #[inline(always)]
 pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
     T::decode_ext(reader, None)
 }
 
+/// Encodes `value` with optional deduplication via [`DedupeEncoder`].
+///
+/// Pass `Some(&mut DedupeEncoder)` to enable value deduplication for supported
+/// types (those that implement [`Pack`] and the dedupe marker traits). When
+/// `None`, encoding proceeds normally.
 #[inline(always)]
 pub fn encode_ext(
     value: &impl Encode,
@@ -54,6 +92,11 @@ pub fn encode_ext(
     value.encode_ext(writer, dedupe_encoder)
 }
 
+/// Decodes a value with optional deduplication via [`DedupeDecoder`].
+///
+/// Pass `Some(&mut DedupeDecoder)` to enable table‑based decoding that
+/// reconstructs repeated values from compact IDs. When `None`, decoding
+/// proceeds normally.
 #[inline(always)]
 pub fn decode_ext<T: Decode>(
     reader: &mut impl Read,
@@ -62,38 +105,48 @@ pub fn decode_ext<T: Decode>(
     T::decode_ext(reader, dedupe_decoder)
 }
 
-// Provide a Result alias that defaults to this crate's [`Error`] type while
-// still allowing callers (and macros) to specify a different error type when
-// needed. This avoids clashing with macros that expect the standard `Result`
-// alias to accept two generic parameters.
+// Provide a Result alias that defaults to this crate's [`Error`] type while still allowing
+// callers (and macros) to specify a different error type when needed. This avoids clashing
+// with macros that expect the standard `Result` alias to accept two generic parameters.
+/// Crate‑wide `Result` that defaults to [`Error`].
+///
+/// The second parameter remains customizable for macros that expect a two‑parameter `Result`
+/// alias.
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
+/// Trait for types that can be encoded to a binary stream.
 pub trait Encode {
+    /// Encodes `self` to `writer`, optionally using [`DedupeEncoder`].
     fn encode_ext(
         &self,
         writer: &mut impl Write,
         dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize>;
 
+    /// Encodes a collection length in a compact form.
     #[inline(always)]
     fn encode_len(len: usize, writer: &mut impl Write) -> Result<usize> {
         Lencode::encode_varint(len as u64, writer)
     }
 
-    // Encode an enum discriminant in a consistent, compact form.
-    // Default encoding uses unsigned varint.
+    /// Encodes an enum discriminant in a compact, consistent form.
+    ///
+    /// The default uses an unsigned varint.
     #[inline(always)]
     fn encode_discriminant(discriminant: usize, writer: &mut impl Write) -> Result<usize> {
         Lencode::encode_varint(discriminant as u64, writer)
     }
 
+    /// Convenience wrapper around [`Encode::encode_ext`] without deduplication.
     #[inline(always)]
     fn encode(&self, writer: &mut impl Write) -> Result<usize> {
         self.encode_ext(writer, None)
     }
 }
 
+/// Trait for types that can be decoded from a binary stream.
 pub trait Decode {
+    /// Decodes `Self` from `reader`, optionally using [`DedupeDecoder`].
     fn decode_ext(
         reader: &mut impl Read,
         dedupe_decoder: Option<&mut DedupeDecoder>,
@@ -101,18 +154,21 @@ pub trait Decode {
     where
         Self: Sized;
 
+    /// Decodes a collection length previously encoded with [`Encode::encode_len`].
     #[inline(always)]
     fn decode_len(reader: &mut impl Read) -> Result<usize> {
         Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
     }
 
-    // Decode an enum discriminant encoded by `Encode::encode_discriminant`.
-    // Default decoding reads an unsigned varint.
+    /// Decodes an enum discriminant previously encoded with [`Encode::encode_discriminant`].
+    ///
+    /// The default reads an unsigned varint.
     #[inline(always)]
     fn decode_discriminant(reader: &mut impl Read) -> Result<usize> {
         Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
     }
 
+    /// Convenience wrapper around [`Decode::decode_ext`] without deduplication.
     #[inline(always)]
     fn decode(reader: &mut impl Read) -> Result<Self>
     where

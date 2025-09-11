@@ -1,3 +1,11 @@
+//! Derive macros for `lencode` encoding/decoding traits.
+//!
+//! - `#[derive(Encode)]` implements `lencode::Encode` by writing fields in declaration order
+//!   and encoding enum discriminants compactly.
+//! - `#[derive(Decode)]` implements `lencode::Decode` to read the same layout.
+//!
+//! For C‑like enums with an explicit `#[repr(uN/iN)]`, the numeric value of the discriminant
+//! is preserved; otherwise, the variant index is used.
 use proc_macro::TokenStream;
 use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -27,20 +35,25 @@ fn enum_repr_ty(attrs: &[Attribute]) -> Option<Type> {
 }
 
 fn crate_path() -> TokenStream2 {
-    // Resolve the path to the main `lencode` crate from the macro crate,
-    // honoring any potential crate renames by the downstream user.
-    // Fallback to `crate` during unit tests or when used inside `lencode` itself.
+    // Resolve the path to the main `lencode` crate from the macro crate, honoring any
+    // potential crate renames by the downstream user. In ambiguous contexts like doctests,
+    // prefer the absolute `::lencode` path.
     let found = crate_name("lencode");
     match found {
-        Ok(FoundCrate::Itself) => quote!(crate),
+        Ok(FoundCrate::Itself) => quote!(::lencode),
         Ok(FoundCrate::Name(actual_name)) => {
             let ident = Ident::new(&actual_name, Span::call_site());
             quote!(::#ident)
         }
-        Err(_) => quote!(crate),
+        Err(_) => quote!(::lencode),
     }
 }
 
+/// Derives `lencode::Encode` for structs and enums.
+///
+/// - Structs: fields are encoded in declaration order.
+/// - Enums: a compact discriminant is written, then any fields as for structs. C‑like enums
+///   with `#[repr(uN/iN)]` preserve the numeric discriminant.
 #[proc_macro_derive(Encode)]
 pub fn derive_encode(input: TokenStream) -> TokenStream {
     match derive_encode_impl(input) {
@@ -49,6 +62,9 @@ pub fn derive_encode(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Derives `lencode::Decode` for structs and enums.
+///
+/// The layout matches what `#[derive(Encode)]` produces.
 #[proc_macro_derive(Decode)]
 pub fn derive_decode(input: TokenStream) -> TokenStream {
     match derive_decode_impl(input) {
@@ -367,20 +383,20 @@ fn test_derive_encode_struct_basic() {
     };
     let derived = derive_encode_impl(tokens).unwrap();
     let expected = quote! {
-        impl crate::prelude::Encode for TestStruct {
+        impl ::lencode::prelude::Encode for TestStruct {
             #[inline(always)]
             fn encode_ext(
                 &self,
-                writer: &mut impl crate::io::Write,
-                mut dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
-            ) -> crate::Result<usize> {
+                writer: &mut impl ::lencode::io::Write,
+                mut dedupe_encoder: Option<&mut ::lencode::dedupe::DedupeEncoder>,
+            ) -> ::lencode::Result<usize> {
                 let mut total_bytes = 0;
-                total_bytes += <u32 as crate::prelude::Encode>::encode_ext(
+                total_bytes += <u32 as ::lencode::prelude::Encode>::encode_ext(
                     &self.a,
                     writer,
                     dedupe_encoder.as_deref_mut()
                 )?;
-                total_bytes += <String as crate::prelude::Encode>::encode_ext(
+                total_bytes += <String as ::lencode::prelude::Encode>::encode_ext(
                     &self.b,
                     writer,
                     dedupe_encoder.as_deref_mut()
@@ -402,15 +418,15 @@ fn test_derive_decode_struct_basic() {
     };
     let derived = derive_decode_impl(tokens).unwrap();
     let expected = quote! {
-        impl crate::prelude::Decode for TestStruct {
+        impl ::lencode::prelude::Decode for TestStruct {
             #[inline(always)]
             fn decode_ext(
-                reader: &mut impl crate::io::Read,
-                mut dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
-            ) -> crate::Result<Self> {
+                reader: &mut impl ::lencode::io::Read,
+                mut dedupe_decoder: Option<&mut ::lencode::dedupe::DedupeDecoder>,
+            ) -> ::lencode::Result<Self> {
                 Ok(TestStruct {
-                    a: <u32 as crate::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-                    b: <String as crate::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+                    a: <u32 as ::lencode::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+                    b: <String as ::lencode::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
                 })
             }
         }

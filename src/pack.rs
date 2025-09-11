@@ -4,7 +4,13 @@ use crate::prelude::*;
 ///
 /// This is a requirement for types that implement the dedupe encoding/decoding strategy.
 pub trait Pack: Sized {
+    /// Writes `self` to `writer` using a stable, platform‑independent layout.
+    ///
+    /// The stream is any type implementing [`Write`].
     fn pack(&self, writer: &mut impl Write) -> Result<usize>;
+    /// Reads `Self` from `reader` using the format produced by [`Pack::pack`].
+    ///
+    /// The source is any type implementing [`Read`].
     fn unpack(reader: &mut impl Read) -> Result<Self>;
 }
 
@@ -31,7 +37,7 @@ impl<const N: usize, T: Pack> Pack for [T; N] {
     }
 }
 
-/// Macro to implement the Pack trait for types that implement Endianness.
+/// Macro to implement the [`Pack`] trait for types that implement [`endian_cast::Endianness`].
 /// This avoids orphan rule issues by allowing explicit implementations per type.
 ///
 /// # Usage

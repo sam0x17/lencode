@@ -1,3 +1,7 @@
+//! A compact [`U256`] newtype with varint and endianness support.
+//!
+//! This module exposes [`U256`], a 256‑bit unsigned integer backed by `ruint` and integrated
+//! with this crate’s integer helper traits, enabling varint encoding via [`Lencode`].
 use crate::prelude::*;
 
 use core::ops::{Shl, ShlAssign, Shr, ShrAssign};

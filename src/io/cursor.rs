@@ -1,5 +1,7 @@
 use super::{Error, Read, Write};
 
+/// In‑memory cursor implementing [`Read`]/[`Write`]
+/// over a byte slice‑like buffer.
 pub struct Cursor<T> {
     stream: T,
     position: usize,

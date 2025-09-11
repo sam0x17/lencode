@@ -1,3 +1,4 @@
+//! Lightweight, no-std compatible I/O traits and adapters used by the [`Encode`]/[`Decode`] APIs.
 mod cursor;
 
 pub use cursor::*;
@@ -8,19 +9,27 @@ use crate::*;
 use bitvec::prelude::*;
 
 #[derive(Debug)]
+/// Error type returned by encoding/decoding and I/O adapters.
 pub enum Error {
+    /// Input data was malformed or inconsistent.
     InvalidData,
+    /// A size or length field was invalid for the operation.
     IncorrectLength,
+    /// The writer had insufficient capacity to accept all bytes.
     WriterOutOfSpace,
+    /// The reader ran out of data before the operation completed.
     ReaderOutOfData,
     #[cfg(feature = "std")]
+    /// Wrapped `std::io::Error` when using the `std` feature.
     StdIo(std::io::Error),
     #[cfg(not(feature = "std"))]
+    /// Placeholder for `std::io::Error` when `std` is unavailable.
     StdIo(StdIoShim),
 }
 
 #[cfg(not(feature = "std"))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+/// Empty stand‑in used as a no‑std substitute for `std::io::Error`.
 pub enum StdIoShim {}
 
 impl core::fmt::Display for Error {
@@ -77,12 +86,19 @@ impl From<Error> for std::io::Error {
     }
 }
 
+/// Minimal read abstraction used by this crate in both std and no‑std modes.
 pub trait Read {
+    /// Fills `buf` with bytes from the underlying source, returning the number
+    /// of bytes read or an error if no data is available.
     fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
 }
 
+/// Minimal write abstraction used by this crate in both std and no‑std modes.
 pub trait Write {
+    /// Writes the entire `buf` into the underlying sink when possible and
+    /// returns the number of bytes written.
     fn write(&mut self, buf: &[u8]) -> Result<usize>;
+    /// Flushes any internal buffers, if applicable.
     fn flush(&mut self) -> Result<()>;
 }
 
