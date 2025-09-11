@@ -24,8 +24,57 @@
 //! let p = Point { x: 3, y: 5 };
 //! let mut buf = Vec::new();
 //! let _n = encode(&p, &mut buf).unwrap();
-//! let q: Point = decode(&mut std::io::Cursor::new(&buf)).unwrap();
+//! let q: Point = decode(&mut Cursor::new(&buf)).unwrap();
 //! assert_eq!(p, q);
+//! ```
+//!
+//! Collections and primitives:
+//!
+//! ```rust
+//! use lencode::prelude::*;
+//!
+//! let values: Vec<u128> = (0..10).collect();
+//! let mut buf = Vec::new();
+//! encode(&values, &mut buf).unwrap();
+//! let roundtrip: Vec<u128> = decode(&mut Cursor::new(&buf)).unwrap();
+//! assert_eq!(values, roundtrip);
+//! ```
+//!
+//! Deduplication (smaller output for repeated values):
+//!
+//! ```rust
+//! use lencode::prelude::*;
+//!
+//! // A small type we want to dedupe; implements Pack and the dedupe markers.
+//! // Note that this is a toy example, in practice `MyId` would be more
+//! // efficiently encoded using regular lencode encoding because it wraps a u32.
+//! #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+//! struct MyId(u32);
+//!
+//! impl Pack for MyId {
+//!     fn pack(&self, w: &mut impl Write) -> Result<usize> { self.0.pack(w) }
+//!     fn unpack(r: &mut impl Read) -> Result<Self> { Ok(Self(u32::unpack(r)?)) }
+//! }
+//! impl DedupeEncodeable for MyId {}
+//! impl DedupeDecodeable for MyId {}
+//!
+//! // Prepare some data with many repeats
+//! let vals = vec![MyId(42), MyId(7), MyId(42), MyId(7), MyId(42), MyId(7), MyId(42)];
+//!
+//! // Encode without deduplication
+//! let mut plain = Vec::new();
+//! encode(&vals, &mut plain).unwrap();
+//!
+//! // Encode with deduplication enabled
+//! let mut enc = DedupeEncoder::new();
+//! let mut deduped = Vec::new();
+//! encode_ext(&vals, &mut deduped, Some(&mut enc)).unwrap();
+//! assert!(deduped.len() < plain.len());
+//!
+//! // Round-trip decoding with a DedupeDecoder
+//! let mut dec = DedupeDecoder::new();
+//! let rt: Vec<MyId> = decode_ext(&mut Cursor::new(&deduped), Some(&mut dec)).unwrap();
+//! assert_eq!(rt, vals);
 //! ```
 
 #[cfg(not(feature = "std"))]
