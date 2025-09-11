@@ -61,7 +61,7 @@ impl VarintEncodingScheme for Lencode {
             // }
             reader.read(&mut val_bytes[..n])?;
             #[cfg(target_endian = "big")]
-            endian_cast::reverse(val_bytes);
+            val_bytes[..n].reverse();
             Ok(val)
         }
     }
