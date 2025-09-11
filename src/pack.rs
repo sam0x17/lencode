@@ -67,16 +67,23 @@ macro_rules! impl_pack_for_endianness_types {
                 }
 
                 fn unpack(reader: &mut impl $crate::io::Read) -> $crate::Result<Self> {
-                    let mut ret = core::mem::MaybeUninit::<Self>::uninit();
-                    let buf_slice = unsafe {
-                        core::slice::from_raw_parts_mut(
-                            ret.as_mut_ptr() as *mut u8,
-                            core::mem::size_of::<Self>(),
-                        )
-                    };
-                    let bytes_read = reader.read(buf_slice)?;
-                    if bytes_read != core::mem::size_of::<Self>() {
+                    let size = core::mem::size_of::<Self>();
+                    let mut tmp = [0u8; core::mem::size_of::<Self>()];
+                    let bytes_read = reader.read(&mut tmp[..])?;
+                    if bytes_read != size {
                         return Err($crate::io::Error::ReaderOutOfData);
+                    }
+                    let mut ret = core::mem::MaybeUninit::<Self>::uninit();
+                    let dst = ret.as_mut_ptr() as *mut u8;
+                    #[cfg(target_endian = "little")]
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(tmp.as_ptr(), dst, size);
+                    }
+                    #[cfg(target_endian = "big")]
+                    unsafe {
+                        for i in 0..size {
+                            *dst.add(i) = tmp[size - 1 - i];
+                        }
                     }
                     Ok(unsafe { ret.assume_init() })
                 }
