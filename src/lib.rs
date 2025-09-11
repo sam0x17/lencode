@@ -35,6 +35,33 @@ pub mod prelude {
 
 use prelude::*;
 
+#[inline(always)]
+pub fn encode<T: Encode>(value: &T, writer: &mut impl Write) -> Result<usize> {
+    value.encode_ext(writer, None)
+}
+
+#[inline(always)]
+pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
+    T::decode_ext(reader, None)
+}
+
+#[inline(always)]
+pub fn encode_ext(
+    value: &impl Encode,
+    writer: &mut impl Write,
+    dedupe_encoder: Option<&mut DedupeEncoder>,
+) -> Result<usize> {
+    value.encode_ext(writer, dedupe_encoder)
+}
+
+#[inline(always)]
+pub fn decode_ext<T: Decode>(
+    reader: &mut impl Read,
+    dedupe_decoder: Option<&mut DedupeDecoder>,
+) -> Result<T> {
+    T::decode_ext(reader, dedupe_decoder)
+}
+
 // Provide a Result alias that defaults to this crate's [`Error`] type while
 // still allowing callers (and macros) to specify a different error type when
 // needed. This avoids clashing with macros that expect the standard `Result`

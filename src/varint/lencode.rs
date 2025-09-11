@@ -18,16 +18,6 @@ use core::mem;
 /// used in practice.
 pub enum Lencode {}
 
-#[inline(always)]
-pub fn encode<T: Encode>(value: &T, writer: &mut impl Write) -> Result<usize> {
-    value.encode_ext(writer, None)
-}
-
-#[inline(always)]
-pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
-    T::decode_ext(reader, None)
-}
-
 impl VarintEncodingScheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
