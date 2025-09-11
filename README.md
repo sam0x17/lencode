@@ -75,7 +75,8 @@ assert_eq!(values, decoded_values);
 ### Solana Pubkey Deduplication
 
 ```rust
-#[cfg(feature = "solana")]
+#![cfg(feature = "solana")]
+
 use solana_sdk::pubkey::Pubkey;
 use lencode::prelude::*;
 
