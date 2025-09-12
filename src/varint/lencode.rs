@@ -48,7 +48,10 @@ impl VarintEncodingScheme for Lencode {
             // Fast path for little-endian: fill the value's LSB bytes directly.
             let mut val: I = I::ZERO;
             let val_bytes = unsafe {
-                core::slice::from_raw_parts_mut(&mut val as *mut I as *mut u8, core::mem::size_of::<I>())
+                core::slice::from_raw_parts_mut(
+                    &mut val as *mut I as *mut u8,
+                    core::mem::size_of::<I>(),
+                )
             };
             // Read first prefix byte directly into value storage
             reader.read(&mut val_bytes[..1])?;
