@@ -43,52 +43,63 @@ impl VarintEncodingScheme for Lencode {
 
     #[inline(always)]
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I> {
-        // Read first prefix byte
+        // Read first prefix byte into a local
         let mut first = 0u8;
         reader.read(core::slice::from_mut(&mut first))?;
 
-        // Buffer to hold the little-endian payload bytes
-        let mut buf = [0u8; 32];
-        let n: usize;
-        if first & 0x80 == 0 {
-            // Small integer: single byte payload in low 7 bits
-            buf[0] = first & 0x7F;
-            n = 1;
-        } else {
-            n = (first & 0x7F) as usize;
-            // if n == 0 || n > mem::size_of::<I>() { return Err(Error::InvalidData); }
-            reader.read(&mut buf[..n])?;
+        #[cfg(target_endian = "little")]
+        {
+            // Fast path for little-endian: fill the value's LSB bytes directly.
+            let mut val: I = I::ZERO;
+            let val_bytes = unsafe {
+                core::slice::from_raw_parts_mut(&mut val as *mut I as *mut u8, core::mem::size_of::<I>())
+            };
+            if first & 0x80 == 0 {
+                val_bytes[0] = first & 0x7F;
+                return Ok(val);
+            }
+            let n = (first & 0x7F) as usize;
+            reader.read(&mut val_bytes[..n])?;
+            return Ok(val);
         }
 
-        // Reconstruct value generically from little-endian bytes without
-        // assuming a particular in-memory layout. This works for custom
-        // big-integer types as long as they implement the arithmetic traits.
-        let mut val = I::ZERO;
-        let mut base = I::ONE; // 256^0
+        #[cfg(target_endian = "big")]
+        {
+            // Portable path for big-endian: build the value arithmetically from LE bytes.
+            let mut buf = [0u8; 32];
+            let n: usize;
+            if first & 0x80 == 0 {
+                buf[0] = first & 0x7F;
+                n = 1;
+            } else {
+                n = (first & 0x7F) as usize;
+                reader.read(&mut buf[..n])?;
+            }
 
-        // Multiply-accumulate: val += buf[i] * (256^i)
-        for i in 0..n {
-            let byte = buf[i];
-            if byte != 0 {
-                // Multiply base by small u8 via double-and-add
-                let mut part = I::ZERO;
-                let mut factor = base;
-                let mut c = byte;
-                while c != 0 {
-                    if (c & 1) != 0 {
-                        part += factor;
+            let mut val = I::ZERO;
+            let mut base = I::ONE; // 256^0
+            for i in 0..n {
+                let byte = buf[i];
+                if byte != 0 {
+                    // Multiply by small u8 via double-and-add
+                    let mut part = I::ZERO;
+                    let mut factor = base;
+                    let mut c = byte;
+                    while c != 0 {
+                        if (c & 1) != 0 {
+                            part += factor;
+                        }
+                        factor = factor << 1;
+                        c >>= 1;
                     }
-                    factor = factor << 1;
-                    c >>= 1;
+                    val += part;
                 }
-                val += part;
+                if i + 1 < n {
+                    base = base << 8; // next power of 256
+                }
             }
-            if i + 1 < n {
-                base = base << 8; // next power of 256
-            }
+            return Ok(val);
         }
-
-        Ok(val)
     }
 
     #[inline(always)]
