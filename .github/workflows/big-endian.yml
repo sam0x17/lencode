@@ -1,13 +1,13 @@
-name: Big Endian CI
+name: Big Endian
 
 on:
   pull_request:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
   be-tests:
-    name: cross test (${{ matrix.target }})
+    name: cross test --all-features (${{ matrix.target }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
