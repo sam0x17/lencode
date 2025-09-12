@@ -1,9 +1,11 @@
 [target.s390x-unknown-linux-gnu]
-# Use the standard cross image for s390x and install OpenSSL dev headers
+# Ensure target OpenSSL headers/libs are available for build scripts and linking
 image = "ghcr.io/cross-rs/s390x-unknown-linux-gnu:0.2.5"
 pre-build = [
+  # Add target arch and install target-specific OpenSSL dev package
+  "dpkg --add-architecture s390x",
   "apt-get update",
-  "apt-get install -y --no-install-recommends pkg-config libssl-dev",
+  "apt-get install -y --no-install-recommends pkg-config libssl-dev:s390x zlib1g-dev:s390x",
 ]
 
 [target.powerpc64-unknown-linux-gnu]
@@ -14,3 +16,21 @@ pre-build = [
   "apt-get install -y --no-install-recommends pkg-config libssl-dev",
 ]
 
+[target.powerpc-unknown-linux-gnu]
+# 32-bit PowerPC needs target OpenSSL dev packages as well
+image = "ghcr.io/cross-rs/powerpc-unknown-linux-gnu:0.2.5"
+pre-build = [
+  "dpkg --add-architecture powerpc",
+  "apt-get update",
+  "apt-get install -y --no-install-recommends pkg-config libssl-dev:powerpc zlib1g-dev:powerpc",
+]
+
+[target.mips64-unknown-linux-gnuabi64]
+# This target often lacks prebuilt rust-std; either drop from CI or build std on nightly.
+image = "ghcr.io/cross-rs/mips64-unknown-linux-gnuabi64:0.2.5"
+# Uncomment the following if you opt into nightly + build-std in your CI toolchain:
+# build-std = ["core", "alloc", "std", "proc_macro"]
+# pre-build = [
+#   "apt-get update",
+#   "apt-get install -y --no-install-recommends pkg-config libssl-dev",
+# ]
