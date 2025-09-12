@@ -1,0 +1,16 @@
+[target.s390x-unknown-linux-gnu]
+# Use the standard cross image for s390x and install OpenSSL dev headers
+image = "ghcr.io/cross-rs/s390x-unknown-linux-gnu:0.2.5"
+pre-build = [
+  "apt-get update",
+  "apt-get install -y --no-install-recommends pkg-config libssl-dev",
+]
+
+[target.powerpc64-unknown-linux-gnu]
+# Also cover ppc64 big-endian runs
+image = "ghcr.io/cross-rs/powerpc64-unknown-linux-gnu:0.2.5"
+pre-build = [
+  "apt-get update",
+  "apt-get install -y --no-install-recommends pkg-config libssl-dev",
+]
+
