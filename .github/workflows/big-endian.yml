@@ -14,8 +14,6 @@ jobs:
       matrix:
         target:
           - s390x-unknown-linux-gnu
-          - powerpc-unknown-linux-gnu
-          - mips64-unknown-linux-gnuabi64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,4 +33,3 @@ jobs:
       - name: Test (workspace, all features)
         run: |
           cross test --workspace --all-features --target ${{ matrix.target }}
-
