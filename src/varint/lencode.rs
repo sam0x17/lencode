@@ -1,4 +1,5 @@
 use crate::prelude::*;
+#[cfg(test)]
 use core::mem;
 
 /// The Lencode integer encoding scheme is designed to encode integers in a variable‑length
@@ -42,44 +43,52 @@ impl VarintEncodingScheme for Lencode {
 
     #[inline(always)]
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I> {
-        let mut val: I = I::ZERO;
-        let val_bytes = unsafe {
-            core::slice::from_raw_parts_mut(&mut val as *mut I as *mut u8, mem::size_of::<I>())
-        };
-        reader.read(&mut val_bytes[..1])?;
-        let first_byte = val_bytes[0];
+        // Read first prefix byte
+        let mut first = 0u8;
+        reader.read(core::slice::from_mut(&mut first))?;
 
-        if first_byte & 0x80 == 0 {
-            // Small integer: single byte. Place at LSB position depending on endianness.
-            let byte = first_byte & 0x7F;
-            #[cfg(target_endian = "little")]
-            {
-                val_bytes[0] = byte;
-            }
-            #[cfg(target_endian = "big")]
-            {
-                let size = mem::size_of::<I>();
-                val_bytes[size - 1] = byte;
-            }
-            Ok(val)
+        // Buffer to hold the little-endian payload bytes
+        let mut buf = [0u8; 32];
+        let n: usize;
+        if first & 0x80 == 0 {
+            // Small integer: single byte payload in low 7 bits
+            buf[0] = first & 0x7F;
+            n = 1;
         } else {
-            // Large integer: read n bytes representing the integer in little-endian order.
-            // Place bytes at the least-significant end of the native representation.
-            let n = (first_byte & 0x7F) as usize;
-            // if n == 0 || n > mem::size_of::<I>() {
-            //     return Err(Error::InvalidData);
-            // }
-            #[cfg(target_endian = "little")]
-            {
-                reader.read(&mut val_bytes[..n])?;
-            }
-            #[cfg(target_endian = "big")]
-            {
-                let size = mem::size_of::<I>();
-                reader.read(&mut val_bytes[size - n..size])?;
-            }
-            Ok(val)
+            n = (first & 0x7F) as usize;
+            // if n == 0 || n > mem::size_of::<I>() { return Err(Error::InvalidData); }
+            reader.read(&mut buf[..n])?;
         }
+
+        // Reconstruct value generically from little-endian bytes without
+        // assuming a particular in-memory layout. This works for custom
+        // big-integer types as long as they implement the arithmetic traits.
+        let mut val = I::ZERO;
+        let mut base = I::ONE; // 256^0
+
+        // Multiply-accumulate: val += buf[i] * (256^i)
+        for i in 0..n {
+            let byte = buf[i];
+            if byte != 0 {
+                // Multiply base by small u8 via double-and-add
+                let mut part = I::ZERO;
+                let mut factor = base;
+                let mut c = byte;
+                while c != 0 {
+                    if (c & 1) != 0 {
+                        part += factor;
+                    }
+                    factor = factor << 1;
+                    c >>= 1;
+                }
+                val += part;
+            }
+            if i + 1 < n {
+                base = base << 8; // next power of 256
+            }
+        }
+
+        Ok(val)
     }
 
     #[inline(always)]

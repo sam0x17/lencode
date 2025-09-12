@@ -6,6 +6,7 @@ use crate::prelude::*;
 
 use core::ops::{Shl, ShlAssign, Shr, ShrAssign};
 use endian_cast::Endianness;
+use generic_array::GenericArray;
 use ruint::aliases::U256 as U256Base;
 use ruint::uint;
 
@@ -36,6 +37,18 @@ impl ByteLength for U256 {
 
 impl Endianness for U256 {
     type N = generic_array::typenum::U32;
+
+    #[inline(always)]
+    fn le_bytes(&self) -> GenericArray<u8, Self::N> {
+        const BYTES: usize = 32;
+        GenericArray::from(self.0.to_le_bytes::<BYTES>())
+    }
+
+    #[inline(always)]
+    fn be_bytes(&self) -> GenericArray<u8, Self::N> {
+        const BYTES: usize = 32;
+        GenericArray::from(self.0.to_be_bytes::<BYTES>())
+    }
 }
 
 impl Shl<u8> for U256 {
@@ -112,4 +125,11 @@ fn test_u256() {
     let a = U256::new(uint!(3749384739874982798749827982479879287984798U256));
     let b = U256::new(uint!(38473878979879837598792422429889U256));
     assert_eq!(a + b - b, a);
+}
+
+#[test]
+fn test_u256_one_constant() {
+    // Basic sanity for ONE and ZERO
+    assert!(U256::ONE != U256::ZERO);
+    assert_eq!(U256::ONE + U256::ONE, U256::from(2u8));
 }
