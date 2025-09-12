@@ -43,10 +43,6 @@ impl VarintEncodingScheme for Lencode {
 
     #[inline(always)]
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I> {
-        // Read first prefix byte into a local
-        let mut first = 0u8;
-        reader.read(core::slice::from_mut(&mut first))?;
-
         #[cfg(target_endian = "little")]
         {
             // Fast path for little-endian: fill the value's LSB bytes directly.
@@ -54,8 +50,11 @@ impl VarintEncodingScheme for Lencode {
             let val_bytes = unsafe {
                 core::slice::from_raw_parts_mut(&mut val as *mut I as *mut u8, core::mem::size_of::<I>())
             };
+            // Read first prefix byte directly into value storage
+            reader.read(&mut val_bytes[..1])?;
+            let first = val_bytes[0];
             if first & 0x80 == 0 {
-                val_bytes[0] = first & 0x7F;
+                // Small integer already in place
                 return Ok(val);
             }
             let n = (first & 0x7F) as usize;
@@ -65,6 +64,9 @@ impl VarintEncodingScheme for Lencode {
 
         #[cfg(target_endian = "big")]
         {
+            // Read first prefix byte into a local
+            let mut first = 0u8;
+            reader.read(core::slice::from_mut(&mut first))?;
             // Portable path for big-endian: build the value arithmetically from LE bytes.
             let mut buf = [0u8; 32];
             let n: usize;
