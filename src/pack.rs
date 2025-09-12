@@ -570,9 +570,27 @@ fn test_round_trip_consistency() {
     test_round_trip(f64::MAX);
 }
 
+#[cfg(target_pointer_width = "64")]
 #[test]
 fn test_pack_unpack_usize() {
-    let original: usize = 0x123456789abcdef0 as usize;
+    let original: usize = 0x123456789abcdef0usize;
+    let mut buffer = vec![0u8; 20];
+    let mut cursor = Cursor::new(&mut buffer[..]);
+
+    // Test packing
+    let bytes_written = original.pack(&mut cursor).unwrap();
+    assert_eq!(bytes_written, core::mem::size_of::<usize>());
+
+    // Test unpacking
+    let mut read_cursor = Cursor::new(&buffer[..]);
+    let unpacked: usize = usize::unpack(&mut read_cursor).unwrap();
+    assert_eq!(unpacked, original);
+}
+
+#[cfg(target_pointer_width = "32")]
+#[test]
+fn test_pack_unpack_usize() {
+    let original: usize = 0x12345678usize;
     let mut buffer = vec![0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
