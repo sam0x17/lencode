@@ -522,9 +522,7 @@ impl Encode for VersionedTransaction {
         total += self
             .signatures
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total += self
-            .message
-            .encode_ext(writer, dedupe_encoder)?;
+        total += self.message.encode_ext(writer, dedupe_encoder)?;
         Ok(total)
     }
 }
