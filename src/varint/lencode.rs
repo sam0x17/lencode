@@ -62,7 +62,7 @@ impl VarintEncodingScheme for Lencode {
             }
             let n = (first & 0x7F) as usize;
             reader.read(&mut val_bytes[..n])?;
-            return Ok(val);
+            Ok(val)
         }
 
         #[cfg(target_endian = "big")]

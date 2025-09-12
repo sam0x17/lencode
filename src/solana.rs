@@ -483,7 +483,7 @@ impl Encode for VersionedMessage {
             }
             VersionedMessage::V0(message) => {
                 total += <usize as Encode>::encode_discriminant(1, writer)?;
-                total += message.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+                total += message.encode_ext(writer, dedupe_encoder)?;
             }
         }
         Ok(total)
@@ -503,7 +503,7 @@ impl Decode for VersionedMessage {
                 Ok(VersionedMessage::Legacy(legacy))
             }
             1 => {
-                let v0msg = v0::Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+                let v0msg = v0::Message::decode_ext(reader, dedupe_decoder)?;
                 Ok(VersionedMessage::V0(v0msg))
             }
             _ => Err(Error::InvalidData),
@@ -524,7 +524,7 @@ impl Encode for VersionedTransaction {
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
         total += self
             .message
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, dedupe_encoder)?;
         Ok(total)
     }
 }
@@ -536,7 +536,7 @@ impl Decode for VersionedTransaction {
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
         let signatures = Vec::<Signature>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let message = VersionedMessage::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let message = VersionedMessage::decode_ext(reader, dedupe_decoder)?;
         Ok(VersionedTransaction {
             signatures,
             message,
