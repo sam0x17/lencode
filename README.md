@@ -42,11 +42,11 @@ use lencode::prelude::*;
 // Encode a value
 let value = 42u64;
 let mut buffer = Vec::new();
-let bytes_written = value.encode(&mut buffer)?;
+let bytes_written = encode(&value, &mut buffer)?;
 
 // Decode the value
 let mut cursor = Cursor::new(&buffer);
-let decoded: u64 = u64::decode(&mut cursor)?;
+let decoded: u64 = decode(&mut cursor)?;
 assert_eq!(value, decoded);
 ```
 
@@ -61,12 +61,12 @@ let values = vec![100u32, 200u32, 100u32, 300u32, 200u32];
 // Encode with deduplication
 let mut buffer = Vec::new();
 let mut encoder = DedupeEncoder::new();
-let bytes_written = values.encode_ext(&mut buffer, Some(&mut encoder))?;
+let bytes_written = encode_ext(&values, &mut buffer, Some(&mut encoder))?;
 
 // Decode with deduplication
 let mut cursor = Cursor::new(&buffer);
 let mut decoder = DedupeDecoder::new();
-let decoded_values: Vec<u32> = Vec::decode_ext(&mut cursor, Some(&mut decoder))?;
+let decoded_values: Vec<u32> = decode_ext(&mut cursor, Some(&mut decoder))?;
 
 assert_eq!(values, decoded_values);
 // With deduplication, repeated values only store a reference after first occurrence
@@ -88,7 +88,7 @@ let pubkeys = vec![pubkey1, pubkey2, pubkey1, pubkey1, pubkey2]; // Duplicates
 // Pubkeys REQUIRE deduplication - they will error without it
 let mut buffer = Vec::new();
 let mut encoder = DedupeEncoder::new();
-let bytes_written = pubkeys.encode_ext(&mut buffer, Some(&mut encoder))?;
+let bytes_written = encode_ext(&pubkeys, &mut buffer, Some(&mut encoder))?;
 
 // First occurrence: 33 bytes (1 + 32), subsequent: 1 byte each
 // Total: 69 bytes vs 160 bytes without deduplication (56% savings!)
@@ -96,7 +96,7 @@ let bytes_written = pubkeys.encode_ext(&mut buffer, Some(&mut encoder))?;
 // Decode with deduplication
 let mut cursor = Cursor::new(&buffer);
 let mut decoder = DedupeDecoder::new();
-let decoded_pubkeys: Vec<Pubkey> = Vec::decode_ext(&mut cursor, Some(&mut decoder))?;
+let decoded_pubkeys: Vec<Pubkey> = decode_ext(&mut cursor, Some(&mut decoder))?;
 
 assert_eq!(pubkeys, decoded_pubkeys);
 ```
@@ -189,18 +189,25 @@ struct Point {
 }
 
 impl Encode for Point {
-    fn encode_ext(&self, writer: &mut impl Write, dedupe_encoder: Option<&mut DedupeEncoder>) -> Result<usize> {
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
         let mut bytes = 0;
         bytes += self.x.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        bytes += self.y.encode_ext(writer, dedupe_encoder)?;
+        bytes += self.y.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
         Ok(bytes)
     }
 }
 
 impl Decode for Point {
-    fn decode_ext(reader: &mut impl Read, dedupe_decoder: Option<&mut DedupeDecoder>) -> Result<Self> {
+    fn decode_ext(
+        reader: &mut impl Read,
+        mut dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
         let x = f64::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let y = f64::decode_ext(reader, dedupe_decoder)?;
+        let y = f64::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
         Ok(Point { x, y })
     }
 }
@@ -246,9 +253,13 @@ let decoded = Lencode::decode_varint::<u64>(&mut cursor)?;
 Lencode provides comprehensive error handling:
 
 ```rust
+use lencode::prelude::*;
 use lencode::io::Error;
 
-match value.encode(&mut buffer) {
+let value = 42u64;
+let mut buffer = Vec::new();
+
+match encode(&value, &mut buffer) {
     Ok(bytes_written) => println!("Encoded {} bytes", bytes_written),
     Err(Error::WriterOutOfSpace) => println!("Buffer too small"),
     Err(Error::ReaderOutOfData) => println!("Unexpected end of data"),
