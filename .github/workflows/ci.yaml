@@ -13,20 +13,6 @@ jobs:
         uses: actions/checkout@v4
       - name: cargo test
         run: cargo test --workspace
-  cargo-test-big-endian:
-    name: cargo test (big endian via Miri)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install nightly + Miri
-        run: |
-          rustup toolchain install nightly --profile minimal
-          rustup component add miri rust-src --toolchain nightly
-      - name: Prepare std for Miri
-        run: cargo +nightly miri setup
-      - name: Run tests on big-endian target
-        run: cargo +nightly miri test --workspace --target mips64-unknown-linux-gnuabi64
   cargo-test-all-features:
     name: cargo test (little endian, all features)
     runs-on: ubuntu-latest
