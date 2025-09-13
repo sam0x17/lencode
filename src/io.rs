@@ -140,50 +140,6 @@ impl Write for Vec<u8> {
     }
 }
 
-#[cfg(not(feature = "std"))]
-impl<T: BitStore, O: BitOrder> Write for BitVec<T, O> {
-    #[inline(always)]
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let bits = buf
-            .iter()
-            .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1 != 0));
-        self.extend(bits);
-        Ok(buf.len())
-    }
-
-    #[inline(always)]
-    fn flush(&mut self) -> Result<()> {
-        // No-op for BitVec, as it doesn't have an underlying buffer to flush
-        Ok(())
-    }
-}
-
-#[cfg(not(feature = "std"))]
-impl<T: BitStore, O: BitOrder> Read for BitVec<T, O> {
-    #[inline(always)]
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        if self.is_empty() {
-            return Err(Error::ReaderOutOfData);
-        }
-
-        let mut bytes_read = 0;
-        for byte in buf.iter_mut() {
-            *byte = 0;
-            for bit in 0..8 {
-                if let Some(bit_value) = self.get(bytes_read * 8 + bit) {
-                    if *bit_value {
-                        *byte |= 1 << bit;
-                    }
-                } else {
-                    return Ok(bytes_read);
-                }
-            }
-            bytes_read += 1;
-        }
-        Ok(bytes_read)
-    }
-}
-
 #[test]
 fn test_write_vec() {
     let mut my_vec = Vec::new();
