@@ -13,7 +13,6 @@ repository = "https://github.com/sam0x17/lencode"
 documentation = "https://docs.rs/lencode/latest/lencode/"
 
 [dependencies]
-bitvec = "1"
 endian-cast = "2"
 typenum = "1"
 generic-array = "1"

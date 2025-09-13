@@ -5,9 +5,6 @@ pub use cursor::*;
 
 use crate::*;
 
-#[allow(unused_imports)]
-use bitvec::prelude::*;
-
 #[derive(Debug)]
 /// Error type returned by encoding/decoding and I/O adapters.
 pub enum Error {
@@ -197,20 +194,4 @@ fn test_write_vec() {
     assert_eq!(my_vec, data);
 
     assert_eq!(my_vec, b"Hello, world!".to_vec());
-}
-
-#[test]
-fn test_write_bitvec() {
-    let mut my_bitvec = BitVec::<usize>::new();
-    let data = b"Hello, world!";
-
-    // Test writing
-    assert_eq!(my_bitvec.write(data).unwrap(), data.len());
-
-    // Convert to BitVec and check contents
-    let expected_bits: Vec<bool> = data
-        .iter()
-        .flat_map(|&byte| (0..8).map(move |i| (byte >> i) & 1 != 0))
-        .collect();
-    assert_eq!(my_bitvec.into_iter().collect::<Vec<_>>(), expected_bits);
 }

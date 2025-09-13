@@ -1271,7 +1271,6 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "bincode 2.0.1",
- "bitvec",
  "borsh 1.5.7",
  "criterion",
  "critical-section",
