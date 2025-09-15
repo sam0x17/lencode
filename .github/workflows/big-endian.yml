@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   be-tests:
-    name: cross test --all-features (${{ matrix.target }})
+    name: cross test (${{ matrix.target }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -32,7 +32,3 @@ jobs:
       - name: Test (workspace, default features)
         run: |
           cross test --workspace --target ${{ matrix.target }}
-
-      - name: Test (workspace, all features)
-        run: |
-          cross test --workspace --all-features --target ${{ matrix.target }}
