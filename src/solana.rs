@@ -330,7 +330,6 @@ impl Encode for SanitizedMessage {
 // Implementations for Agave (v3) Geyser interface and its dependencies (inline)
 use agave_geyser_plugin_interface::geyser_plugin_interface as ifc;
 use solana_account_decoder_client_types as acct_dec_client;
-use solana_clock as clock;
 use solana_hash as hash3;
 use solana_message as msg3;
 use solana_pubkey as pubkey3;
@@ -1207,638 +1206,10 @@ impl Decode for txstatus3::TransactionStatusMeta {
 }
 
 // Geyser interface types
-impl Encode for ifc::ReplicaAccountInfo<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        _dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self.pubkey.encode_ext(writer, None)?; // &[u8] Encode for slices is not defined; use Vec
-        n += self.lamports.encode_ext(writer, None)?;
-        n += self.owner.encode_ext(writer, None)?;
-        n += self.executable.encode_ext(writer, None)?;
-        n += self.rent_epoch.encode_ext(writer, None)?;
-        n += self.data.encode_ext(writer, None)?;
-        n += self.write_version.encode_ext(writer, None)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaAccountInfo<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, _dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let pubkey: Vec<u8> = Decode::decode_ext(reader, None)?;
-        let lamports = Decode::decode_ext(reader, None)?;
-        let owner: Vec<u8> = Decode::decode_ext(reader, None)?;
-        let executable = Decode::decode_ext(reader, None)?;
-        let rent_epoch = Decode::decode_ext(reader, None)?;
-        let data: Vec<u8> = Decode::decode_ext(reader, None)?;
-        let write_version = Decode::decode_ext(reader, None)?;
-        Ok(Self {
-            pubkey: Box::leak(pubkey.into_boxed_slice()),
-            lamports,
-            owner: Box::leak(owner.into_boxed_slice()),
-            executable,
-            rent_epoch,
-            data: Box::leak(data.into_boxed_slice()),
-            write_version,
-        })
-    }
-}
-impl Encode for ifc::ReplicaAccountInfoV2<'_> {
-    #[inline]
-    fn encode_ext(&self, w: &mut impl Write, dedupe: Option<&mut DedupeEncoder>) -> Result<usize> {
-        let mut n = ifc::ReplicaAccountInfo {
-            pubkey: self.pubkey,
-            lamports: self.lamports,
-            owner: self.owner,
-            executable: self.executable,
-            rent_epoch: self.rent_epoch,
-            data: self.data,
-            write_version: self.write_version,
-        }
-        .encode_ext(w, None)?;
-        let sig_opt: Option<sig3::Signature> = self.txn_signature.copied();
-        n += sig_opt.encode_ext(w, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaAccountInfoV2<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let base: ifc::ReplicaAccountInfo<'static> = Decode::decode_ext(reader, None)?;
-        let txn_signature: Option<sig3::Signature> = Decode::decode_ext(reader, dedupe)?;
-        let sig_ref = txn_signature.map(|s| Box::leak(Box::new(s)) as &sig3::Signature);
-        Ok(Self {
-            pubkey: base.pubkey,
-            lamports: base.lamports,
-            owner: base.owner,
-            executable: base.executable,
-            rent_epoch: base.rent_epoch,
-            data: base.data,
-            write_version: base.write_version,
-            txn_signature: sig_ref,
-        })
-    }
-}
-impl Encode for ifc::ReplicaAccountInfoV3<'_> {
-    #[inline]
-    fn encode_ext(&self, w: &mut impl Write, dedupe: Option<&mut DedupeEncoder>) -> Result<usize> {
-        let mut n = ifc::ReplicaAccountInfo {
-            pubkey: self.pubkey,
-            lamports: self.lamports,
-            owner: self.owner,
-            executable: self.executable,
-            rent_epoch: self.rent_epoch,
-            data: self.data,
-            write_version: self.write_version,
-        }
-        .encode_ext(w, None)?;
-        let tx_opt: Option<tx3::sanitized::SanitizedTransaction> = self.txn.cloned();
-        n += tx_opt.encode_ext(w, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaAccountInfoV3<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let base: ifc::ReplicaAccountInfo<'static> = Decode::decode_ext(reader, None)?;
-        let txn: Option<tx3::sanitized::SanitizedTransaction> = Decode::decode_ext(reader, dedupe)?;
-        let txn_ref = txn.map(|t| Box::leak(Box::new(t)) as &tx3::sanitized::SanitizedTransaction);
-        Ok(Self {
-            pubkey: base.pubkey,
-            lamports: base.lamports,
-            owner: base.owner,
-            executable: base.executable,
-            rent_epoch: base.rent_epoch,
-            data: base.data,
-            write_version: base.write_version,
-            txn: txn_ref,
-        })
-    }
-}
-impl Encode for ifc::ReplicaAccountInfoVersions<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        match self {
-            ifc::ReplicaAccountInfoVersions::V0_0_1(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(0, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaAccountInfoVersions::V0_0_2(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(1, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaAccountInfoVersions::V0_0_3(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(2, w)?;
-                n += (*v).encode_ext(w, dedupe)?;
-                Ok(n)
-            }
-        }
-    }
-}
-impl Decode for ifc::ReplicaAccountInfoVersions<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        match <usize as Decode>::decode_discriminant(reader)? {
-            0 => Ok(Self::V0_0_1(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            1 => Ok(Self::V0_0_2(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            2 => Ok(Self::V0_0_3(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            _ => Err(Error::InvalidData),
-        }
-    }
-}
-
-impl Encode for ifc::ReplicaTransactionInfo<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += (*self.signature).encode_ext(w, dedupe.as_deref_mut())?;
-        n += self.is_vote.encode_ext(w, dedupe.as_deref_mut())?;
-        n += (*self.transaction).encode_ext(w, dedupe.as_deref_mut())?;
-        n += (*self.transaction_status_meta).encode_ext(w, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaTransactionInfo<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let signature: sig3::Signature = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let is_vote: bool = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let transaction: tx3::sanitized::SanitizedTransaction =
-            Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let transaction_status_meta: txstatus3::TransactionStatusMeta =
-            Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            signature: Box::leak(Box::new(signature)),
-            is_vote,
-            transaction: Box::leak(Box::new(transaction)),
-            transaction_status_meta: Box::leak(Box::new(transaction_status_meta)),
-        })
-    }
-}
-impl Encode for ifc::ReplicaTransactionInfoV2<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let base = ifc::ReplicaTransactionInfo {
-            signature: self.signature,
-            is_vote: self.is_vote,
-            transaction: self.transaction,
-            transaction_status_meta: self.transaction_status_meta,
-        };
-        let mut n = base.encode_ext(w, dedupe.as_deref_mut())?;
-        n += self.index.encode_ext(w, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaTransactionInfoV2<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let base: ifc::ReplicaTransactionInfo<'static> =
-            Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let index = Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            signature: base.signature,
-            is_vote: base.is_vote,
-            transaction: base.transaction,
-            transaction_status_meta: base.transaction_status_meta,
-            index,
-        })
-    }
-}
-impl Encode for ifc::ReplicaTransactionInfoV3<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += (*self.signature).encode_ext(w, dedupe.as_deref_mut())?;
-        n += (*self.message_hash).encode_ext(w, dedupe.as_deref_mut())?;
-        n += self.is_vote.encode_ext(w, dedupe.as_deref_mut())?;
-        n += (*self.transaction).encode_ext(w, dedupe.as_deref_mut())?;
-        n += (*self.transaction_status_meta).encode_ext(w, dedupe.as_deref_mut())?;
-        n += self.index.encode_ext(w, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaTransactionInfoV3<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let signature: sig3::Signature = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let message_hash: hash3::Hash = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let is_vote: bool = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let transaction: tx3::versioned::VersionedTransaction =
-            Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let transaction_status_meta: txstatus3::TransactionStatusMeta =
-            Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let index: usize = Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            signature: Box::leak(Box::new(signature)),
-            message_hash: Box::leak(Box::new(message_hash)),
-            is_vote,
-            transaction: Box::leak(Box::new(transaction)),
-            transaction_status_meta: Box::leak(Box::new(transaction_status_meta)),
-            index,
-        })
-    }
-}
-impl Encode for ifc::ReplicaTransactionInfoVersions<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        match self {
-            ifc::ReplicaTransactionInfoVersions::V0_0_1(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(0, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaTransactionInfoVersions::V0_0_2(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(1, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaTransactionInfoVersions::V0_0_3(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(2, w)?;
-                n += (*v).encode_ext(w, dedupe)?;
-                Ok(n)
-            }
-        }
-    }
-}
-impl Decode for ifc::ReplicaTransactionInfoVersions<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        match <usize as Decode>::decode_discriminant(reader)? {
-            0 => Ok(Self::V0_0_1(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            1 => Ok(Self::V0_0_2(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            2 => Ok(Self::V0_0_3(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            _ => Err(Error::InvalidData),
-        }
-    }
-}
-
-impl Encode for ifc::ReplicaEntryInfo<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self.slot.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.index.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.num_hashes.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.hash.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.executed_transaction_count.encode_ext(writer, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaEntryInfo<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        Ok(Self {
-            slot: Decode::decode_ext(reader, dedupe.as_deref_mut())?,
-            index: Decode::decode_ext(reader, dedupe.as_deref_mut())?,
-            num_hashes: Decode::decode_ext(reader, dedupe.as_deref_mut())?,
-            hash: Box::leak(
-                Vec::<u8>::decode_ext(reader, dedupe.as_deref_mut())?.into_boxed_slice(),
-            ),
-            executed_transaction_count: Decode::decode_ext(reader, dedupe)?,
-        })
-    }
-}
-impl Encode for ifc::ReplicaEntryInfoV2<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let base = ifc::ReplicaEntryInfo {
-            slot: self.slot,
-            index: self.index,
-            num_hashes: self.num_hashes,
-            hash: self.hash,
-            executed_transaction_count: self.executed_transaction_count,
-        };
-        let mut n = base.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.starting_transaction_index.encode_ext(writer, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaEntryInfoV2<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let base: ifc::ReplicaEntryInfo<'static> =
-            Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let starting_transaction_index = Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            slot: base.slot,
-            index: base.index,
-            num_hashes: base.num_hashes,
-            hash: base.hash,
-            executed_transaction_count: base.executed_transaction_count,
-            starting_transaction_index,
-        })
-    }
-}
-impl Encode for ifc::ReplicaEntryInfoVersions<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        match self {
-            ifc::ReplicaEntryInfoVersions::V0_0_1(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(0, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaEntryInfoVersions::V0_0_2(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(1, w)?;
-                n += (*v).encode_ext(w, dedupe)?;
-                Ok(n)
-            }
-        }
-    }
-}
-impl Decode for ifc::ReplicaEntryInfoVersions<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        match <usize as Decode>::decode_discriminant(reader)? {
-            0 => Ok(Self::V0_0_1(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            1 => Ok(Self::V0_0_2(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            _ => Err(Error::InvalidData),
-        }
-    }
-}
-
-impl Encode for ifc::ReplicaBlockInfo<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self.slot.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.blockhash.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .rewards
-            .to_vec()
-            .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.block_time.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.block_height.encode_ext(writer, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaBlockInfo<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let slot: clock::Slot = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let blockhash: String = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let rewards: Vec<txstatus3::Reward> = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let block_time: Option<i64> = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let block_height: Option<u64> = Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            slot,
-            blockhash: Box::leak(blockhash.into_boxed_str()),
-            rewards: Box::leak(rewards.into_boxed_slice()),
-            block_time,
-            block_height,
-        })
-    }
-}
-impl Encode for ifc::ReplicaBlockInfoV2<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self.parent_slot.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .parent_blockhash
-            .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.slot.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.blockhash.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .rewards
-            .to_vec()
-            .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.block_time.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .block_height
-            .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.executed_transaction_count.encode_ext(writer, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaBlockInfoV2<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let parent_slot = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let parent_blockhash: String = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let slot = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let blockhash: String = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let rewards: Vec<txstatus3::Reward> = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let block_time = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let block_height = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let executed_transaction_count = Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            parent_slot,
-            parent_blockhash: Box::leak(parent_blockhash.into_boxed_str()),
-            slot,
-            blockhash: Box::leak(blockhash.into_boxed_str()),
-            rewards: Box::leak(rewards.into_boxed_slice()),
-            block_time,
-            block_height,
-            executed_transaction_count,
-        })
-    }
-}
-impl Encode for ifc::ReplicaBlockInfoV3<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = ifc::ReplicaBlockInfoV2 {
-            parent_slot: self.parent_slot,
-            parent_blockhash: self.parent_blockhash,
-            slot: self.slot,
-            blockhash: self.blockhash,
-            rewards: self.rewards,
-            block_time: self.block_time,
-            block_height: self.block_height,
-            executed_transaction_count: self.executed_transaction_count,
-        }
-        .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.entry_count.encode_ext(writer, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaBlockInfoV3<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let v2: ifc::ReplicaBlockInfoV2<'static> =
-            Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let entry_count = Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            parent_slot: v2.parent_slot,
-            parent_blockhash: v2.parent_blockhash,
-            slot: v2.slot,
-            blockhash: v2.blockhash,
-            rewards: v2.rewards,
-            block_time: v2.block_time,
-            block_height: v2.block_height,
-            executed_transaction_count: v2.executed_transaction_count,
-            entry_count,
-        })
-    }
-}
-impl Encode for ifc::ReplicaBlockInfoV4<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self.parent_slot.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .parent_blockhash
-            .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.slot.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.blockhash.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += (*self.rewards).encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.block_time.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .block_height
-            .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .executed_transaction_count
-            .encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self.entry_count.encode_ext(writer, dedupe)?;
-        Ok(n)
-    }
-}
-impl Decode for ifc::ReplicaBlockInfoV4<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        let parent_slot = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let parent_blockhash: String = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let slot = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let blockhash: String = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let rewards: txstatus3::RewardsAndNumPartitions =
-            Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let block_time = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let block_height = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let executed_transaction_count = Decode::decode_ext(reader, dedupe.as_deref_mut())?;
-        let entry_count = Decode::decode_ext(reader, dedupe)?;
-        Ok(Self {
-            parent_slot,
-            parent_blockhash: Box::leak(parent_blockhash.into_boxed_str()),
-            slot,
-            blockhash: Box::leak(blockhash.into_boxed_str()),
-            rewards: Box::leak(Box::new(rewards)),
-            block_time,
-            block_height,
-            executed_transaction_count,
-            entry_count,
-        })
-    }
-}
-impl Encode for ifc::ReplicaBlockInfoVersions<'_> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        match self {
-            ifc::ReplicaBlockInfoVersions::V0_0_1(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(0, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaBlockInfoVersions::V0_0_2(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(1, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaBlockInfoVersions::V0_0_3(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(2, w)?;
-                n += (*v).encode_ext(w, dedupe.as_deref_mut())?;
-                Ok(n)
-            }
-            ifc::ReplicaBlockInfoVersions::V0_0_4(v) => {
-                let mut n = <usize as Encode>::encode_discriminant(3, w)?;
-                n += (*v).encode_ext(w, dedupe)?;
-                Ok(n)
-            }
-        }
-    }
-}
-impl Decode for ifc::ReplicaBlockInfoVersions<'static> {
-    #[inline]
-    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
-        match <usize as Decode>::decode_discriminant(reader)? {
-            0 => Ok(Self::V0_0_1(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            1 => Ok(Self::V0_0_2(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            2 => Ok(Self::V0_0_3(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            3 => Ok(Self::V0_0_4(Box::leak(Box::new(Decode::decode_ext(
-                reader, dedupe,
-            )?)))),
-            _ => Err(Error::InvalidData),
-        }
-    }
-}
+// Note: We intentionally do not implement Encode/Decode for agave-geyser
+// interface wrappers that carry reference fields, to avoid requiring leaked
+// allocations for decoding. These values can be reconstructed from their
+// underlying owned types when needed.
 
 // SlotStatus and GeyserPluginError
 impl Encode for ifc::SlotStatus {
@@ -1958,352 +1329,6 @@ impl Decode for ifc::GeyserPluginError {
     }
 }
 
-#[test]
-fn test_agave_replica_transaction_info_versions_roundtrip() {
-    use crate::prelude::*;
-
-    // Build a minimal sanitized transaction (legacy) for v1/v2
-    let header = msg3::MessageHeader {
-        num_required_signatures: 1,
-        num_readonly_signed_accounts: 0,
-        num_readonly_unsigned_accounts: 1,
-    };
-    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
-    let recent_blockhash = hash3::Hash::new_unique();
-    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
-        program_id_index: 1,
-        accounts: vec![0],
-        data: vec![1, 2, 3],
-    }];
-    let legacy = msg3::legacy::Message {
-        header,
-        account_keys,
-        recent_blockhash,
-        instructions,
-    };
-    let reserved = std::collections::HashSet::default();
-    let legacy_msg = msg3::LegacyMessage::new(legacy, &reserved);
-    let sanitized_msg = msg3::SanitizedMessage::Legacy(legacy_msg.clone());
-
-    let signatures = vec![sig3::Signature::default()];
-    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
-        sanitized_msg,
-        hash3::Hash::new_unique(),
-        false,
-        signatures,
-    )
-    .unwrap();
-    let meta = txstatus3::TransactionStatusMeta::default();
-
-    // V0_0_1
-    let info1 = ifc::ReplicaTransactionInfo {
-        signature: &tx.signatures()[0],
-        is_vote: false,
-        transaction: &tx,
-        transaction_status_meta: &meta,
-    };
-    let v1 = ifc::ReplicaTransactionInfoVersions::V0_0_1(&info1);
-    let mut buf = Vec::new();
-    v1.encode(&mut buf).unwrap();
-    let d1: ifc::ReplicaTransactionInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d1 {
-        ifc::ReplicaTransactionInfoVersions::V0_0_1(di) => {
-            assert_eq!(di.is_vote, false);
-        }
-        _ => panic!("wrong variant for V0_0_1"),
-    }
-
-    // V0_0_2
-    let info2 = ifc::ReplicaTransactionInfoV2 {
-        signature: &tx.signatures()[0],
-        is_vote: false,
-        transaction: &tx,
-        transaction_status_meta: &meta,
-        index: 7,
-    };
-    let v2 = ifc::ReplicaTransactionInfoVersions::V0_0_2(&info2);
-    buf.clear();
-    v2.encode(&mut buf).unwrap();
-    let d2: ifc::ReplicaTransactionInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d2 {
-        ifc::ReplicaTransactionInfoVersions::V0_0_2(di) => {
-            assert_eq!(di.index, 7);
-        }
-        _ => panic!("wrong variant for V0_0_2"),
-    }
-
-    // V0_0_3 requires a VersionedTransaction and message_hash
-    let versioned = tx3::versioned::VersionedTransaction {
-        signatures: tx.signatures().to_vec(),
-        message: msg3::VersionedMessage::Legacy(legacy_msg.message.as_ref().clone()),
-    };
-    let mh = hash3::Hash::new_unique();
-    let info3 = ifc::ReplicaTransactionInfoV3 {
-        signature: &versioned.signatures[0],
-        message_hash: &mh,
-        is_vote: false,
-        transaction: &versioned,
-        transaction_status_meta: &meta,
-        index: 9,
-    };
-    let v3 = ifc::ReplicaTransactionInfoVersions::V0_0_3(&info3);
-    buf.clear();
-    v3.encode(&mut buf).unwrap();
-    let d3: ifc::ReplicaTransactionInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d3 {
-        ifc::ReplicaTransactionInfoVersions::V0_0_3(di) => {
-            assert_eq!(di.index, 9);
-            assert_eq!(di.is_vote, false);
-        }
-        _ => panic!("wrong variant for V0_0_3"),
-    }
-}
-
-#[test]
-fn test_agave_replica_account_info_versions_roundtrip() {
-    use crate::prelude::*;
-    let pubkey = [1u8; 32];
-    let owner = [2u8; 32];
-    let data = vec![3u8, 4, 5];
-    let sig = sig3::Signature::default();
-
-    // Base
-    let base = ifc::ReplicaAccountInfo {
-        pubkey: &pubkey,
-        lamports: 123,
-        owner: &owner,
-        executable: false,
-        rent_epoch: 99,
-        data: &data,
-        write_version: 42,
-    };
-    let v1 = ifc::ReplicaAccountInfoVersions::V0_0_1(&base);
-    let mut buf = Vec::new();
-    v1.encode(&mut buf).unwrap();
-    let d1: ifc::ReplicaAccountInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d1 {
-        ifc::ReplicaAccountInfoVersions::V0_0_1(info) => {
-            assert_eq!(info.lamports, 123);
-            assert_eq!(info.pubkey, &pubkey);
-            assert_eq!(info.data, &data[..]);
-        }
-        _ => panic!("wrong variant v1"),
-    }
-
-    // V2 with txn_signature
-    let v2info = ifc::ReplicaAccountInfoV2 {
-        pubkey: base.pubkey,
-        lamports: base.lamports,
-        owner: base.owner,
-        executable: base.executable,
-        rent_epoch: base.rent_epoch,
-        data: base.data,
-        write_version: base.write_version,
-        txn_signature: Some(&sig),
-    };
-    let v2 = ifc::ReplicaAccountInfoVersions::V0_0_2(&v2info);
-    buf.clear();
-    v2.encode(&mut buf).unwrap();
-    let d2: ifc::ReplicaAccountInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d2 {
-        ifc::ReplicaAccountInfoVersions::V0_0_2(info) => {
-            assert!(info.txn_signature.is_some());
-        }
-        _ => panic!("wrong variant v2"),
-    }
-
-    // V3 with txn
-    // Build a tiny sanitized tx for reference
-    let header = msg3::MessageHeader {
-        num_required_signatures: 1,
-        num_readonly_signed_accounts: 0,
-        num_readonly_unsigned_accounts: 1,
-    };
-    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
-    let recent_blockhash = hash3::Hash::new_unique();
-    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
-        program_id_index: 1,
-        accounts: vec![0],
-        data: vec![],
-    }];
-    let legacy = msg3::legacy::Message {
-        header,
-        account_keys,
-        recent_blockhash,
-        instructions,
-    };
-    let reserved = std::collections::HashSet::default();
-    let legacy_msg = msg3::LegacyMessage::new(legacy, &reserved);
-    let sanitized_msg = msg3::SanitizedMessage::Legacy(legacy_msg);
-    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
-        sanitized_msg,
-        hash3::Hash::new_unique(),
-        false,
-        vec![sig3::Signature::default()],
-    )
-    .unwrap();
-
-    let v3info = ifc::ReplicaAccountInfoV3 {
-        pubkey: base.pubkey,
-        lamports: base.lamports,
-        owner: base.owner,
-        executable: base.executable,
-        rent_epoch: base.rent_epoch,
-        data: base.data,
-        write_version: base.write_version,
-        txn: Some(&tx),
-    };
-    let v3 = ifc::ReplicaAccountInfoVersions::V0_0_3(&v3info);
-    buf.clear();
-    v3.encode(&mut buf).unwrap();
-    let d3: ifc::ReplicaAccountInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d3 {
-        ifc::ReplicaAccountInfoVersions::V0_0_3(info) => {
-            assert!(info.txn.is_some());
-            assert_eq!(info.write_version, 42);
-        }
-        _ => panic!("wrong variant v3"),
-    }
-}
-
-#[test]
-fn test_agave_replica_entry_info_versions_roundtrip() {
-    use crate::prelude::*;
-    let hash = vec![9u8, 8, 7, 6];
-    let e1 = ifc::ReplicaEntryInfo {
-        slot: 10,
-        index: 2,
-        num_hashes: 5,
-        hash: &hash,
-        executed_transaction_count: 3,
-    };
-    let v1 = ifc::ReplicaEntryInfoVersions::V0_0_1(&e1);
-    let mut buf = Vec::new();
-    v1.encode(&mut buf).unwrap();
-    let d1: ifc::ReplicaEntryInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d1 {
-        ifc::ReplicaEntryInfoVersions::V0_0_1(x) => assert_eq!(x.slot, 10),
-        _ => panic!(),
-    }
-
-    let e2 = ifc::ReplicaEntryInfoV2 {
-        slot: e1.slot,
-        index: e1.index,
-        num_hashes: e1.num_hashes,
-        hash: e1.hash,
-        executed_transaction_count: e1.executed_transaction_count,
-        starting_transaction_index: 77,
-    };
-    let v2 = ifc::ReplicaEntryInfoVersions::V0_0_2(&e2);
-    buf.clear();
-    v2.encode(&mut buf).unwrap();
-    let d2: ifc::ReplicaEntryInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d2 {
-        ifc::ReplicaEntryInfoVersions::V0_0_2(x) => assert_eq!(x.starting_transaction_index, 77),
-        _ => panic!(),
-    }
-}
-
-#[test]
-fn test_agave_replica_block_info_versions_roundtrip() {
-    use crate::prelude::*;
-    let rewards = vec![txstatus3::Reward {
-        pubkey: "pk".into(),
-        lamports: 1,
-        post_balance: 2,
-        reward_type: Some(reward_info::RewardType::Fee),
-        commission: Some(1),
-    }];
-    let blockhash = String::from("bh");
-    let r1 = ifc::ReplicaBlockInfo {
-        slot: 5,
-        blockhash: &blockhash,
-        rewards: &rewards,
-        block_time: Some(123),
-        block_height: Some(7),
-    };
-    let v1 = ifc::ReplicaBlockInfoVersions::V0_0_1(&r1);
-    let mut buf = Vec::new();
-    v1.encode(&mut buf).unwrap();
-    let d1: ifc::ReplicaBlockInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d1 {
-        ifc::ReplicaBlockInfoVersions::V0_0_1(b) => {
-            assert_eq!(b.slot, 5);
-            assert_eq!(b.blockhash, "bh");
-        }
-        _ => panic!(),
-    }
-
-    let parent_blockhash = String::from("pbh");
-    let r2 = ifc::ReplicaBlockInfoV2 {
-        parent_slot: 4,
-        parent_blockhash: &parent_blockhash,
-        slot: 6,
-        blockhash: &blockhash,
-        rewards: &rewards,
-        block_time: Some(321),
-        block_height: Some(8),
-        executed_transaction_count: 11,
-    };
-    let v2 = ifc::ReplicaBlockInfoVersions::V0_0_2(&r2);
-    buf.clear();
-    v2.encode(&mut buf).unwrap();
-    let d2: ifc::ReplicaBlockInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d2 {
-        ifc::ReplicaBlockInfoVersions::V0_0_2(b) => {
-            assert_eq!(b.parent_slot, 4);
-            assert_eq!(b.executed_transaction_count, 11);
-        }
-        _ => panic!(),
-    }
-
-    let r3 = ifc::ReplicaBlockInfoV3 {
-        parent_slot: r2.parent_slot,
-        parent_blockhash: r2.parent_blockhash,
-        slot: r2.slot,
-        blockhash: r2.blockhash,
-        rewards: r2.rewards,
-        block_time: r2.block_time,
-        block_height: r2.block_height,
-        executed_transaction_count: r2.executed_transaction_count,
-        entry_count: 99,
-    };
-    let v3 = ifc::ReplicaBlockInfoVersions::V0_0_3(&r3);
-    buf.clear();
-    v3.encode(&mut buf).unwrap();
-    let d3: ifc::ReplicaBlockInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d3 {
-        ifc::ReplicaBlockInfoVersions::V0_0_3(b) => assert_eq!(b.entry_count, 99),
-        _ => panic!(),
-    }
-
-    let rap = txstatus3::RewardsAndNumPartitions {
-        rewards: rewards.clone(),
-        num_partitions: Some(2),
-    };
-    let r4 = ifc::ReplicaBlockInfoV4 {
-        parent_slot: 3,
-        parent_blockhash: &parent_blockhash,
-        slot: 7,
-        blockhash: &blockhash,
-        rewards: &rap,
-        block_time: None,
-        block_height: None,
-        executed_transaction_count: 1,
-        entry_count: 2,
-    };
-    let v4 = ifc::ReplicaBlockInfoVersions::V0_0_4(&r4);
-    buf.clear();
-    v4.encode(&mut buf).unwrap();
-    let d4: ifc::ReplicaBlockInfoVersions<'static> = decode(&mut Cursor::new(&buf)).unwrap();
-    match d4 {
-        ifc::ReplicaBlockInfoVersions::V0_0_4(b) => {
-            assert_eq!(b.rewards.num_partitions, Some(2));
-            assert_eq!(b.entry_count, 2);
-        }
-        _ => panic!(),
-    }
-}
 
 #[test]
 fn test_agave_slot_status_roundtrip() {
@@ -2580,6 +1605,8 @@ impl Decode for VersionedTransaction {
     }
 }
 
+// ===== Tests for Solana (v2) and Agave (v3) types =====
+
 #[test]
 fn test_versioned_message_encode_decode_legacy() {
     let header = MessageHeader {
@@ -2681,6 +1708,317 @@ fn test_versioned_transaction_roundtrip_and_dedupe() {
         VersionedTransaction::decode_ext(&mut std::io::Cursor::new(&buf_dedupe), Some(&mut dec))
             .unwrap();
     assert_eq!(tx, tx_dec);
+}
+
+// ---- Agave (v3) message primitives ----
+
+#[test]
+fn test_msg3_message_header_roundtrip() {
+    use crate::prelude::*;
+    let header = msg3::MessageHeader {
+        num_required_signatures: 2,
+        num_readonly_signed_accounts: 1,
+        num_readonly_unsigned_accounts: 3,
+    };
+    let mut buf = Vec::new();
+    header.encode(&mut buf).unwrap();
+    let decoded: msg3::MessageHeader = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(header, decoded);
+}
+
+#[test]
+fn test_msg3_compiled_instruction_roundtrip() {
+    use crate::prelude::*;
+    let ci = msg3::compiled_instruction::CompiledInstruction {
+        program_id_index: 7,
+        accounts: vec![0, 2, 4],
+        data: vec![1, 2, 3, 5, 8],
+    };
+    let mut buf = Vec::new();
+    ci.encode(&mut buf).unwrap();
+    let decoded: msg3::compiled_instruction::CompiledInstruction =
+        decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(ci, decoded);
+}
+
+#[test]
+fn test_msg3_legacy_message_roundtrip() {
+    use crate::prelude::*;
+    let header = msg3::MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
+    let recent_blockhash = hash3::Hash::new_unique();
+    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+        program_id_index: 1,
+        accounts: vec![0],
+        data: vec![9, 9, 9],
+    }];
+    let msg = msg3::legacy::Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+    };
+    let mut buf = Vec::new();
+    msg.encode(&mut buf).unwrap();
+    let decoded: msg3::legacy::Message = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(msg, decoded);
+}
+
+#[test]
+fn test_msg3_v0_lookup_and_message_roundtrip() {
+    use crate::prelude::*;
+    let header = msg3::MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
+    let recent_blockhash = hash3::Hash::new_unique();
+    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+        program_id_index: 1,
+        accounts: vec![0],
+        data: vec![1, 2, 3],
+    }];
+    let lookup = msg3::v0::MessageAddressTableLookup {
+        account_key: pubkey3::Pubkey::new_unique(),
+        writable_indexes: vec![0, 2],
+        readonly_indexes: vec![1],
+    };
+    let v0msg = msg3::v0::Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+        address_table_lookups: vec![lookup],
+    };
+
+    // Lookup alone
+    let mut buf = Vec::new();
+    v0msg.address_table_lookups[0].encode(&mut buf).unwrap();
+    let dec_lookup: msg3::v0::MessageAddressTableLookup =
+        decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(v0msg.address_table_lookups[0], dec_lookup);
+
+    // Entire v0 message
+    buf.clear();
+    v0msg.encode(&mut buf).unwrap();
+    let decoded: msg3::v0::Message = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(v0msg, decoded);
+}
+
+#[test]
+fn test_msg3_sanitized_message_roundtrip_both_variants() {
+    use crate::prelude::*;
+    // Legacy variant
+    let header = msg3::MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
+    let recent_blockhash = hash3::Hash::new_unique();
+    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+        program_id_index: 1,
+        accounts: vec![0],
+        data: vec![1],
+    }];
+    let legacy = msg3::legacy::Message {
+        header,
+        account_keys,
+        recent_blockhash,
+        instructions,
+    };
+    let reserved = std::collections::HashSet::default();
+    let legacy_msg = msg3::LegacyMessage::new(legacy, &reserved);
+    let s_legacy = msg3::SanitizedMessage::Legacy(legacy_msg);
+
+    let mut buf = Vec::new();
+    s_legacy.encode(&mut buf).unwrap();
+    let dec_legacy: msg3::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
+    match dec_legacy { msg3::SanitizedMessage::Legacy(_) => {}, _ => panic!("wrong variant") }
+
+    // V0 variant with loaded addresses
+    let v0msg = msg3::v0::Message {
+        header,
+        account_keys: vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()],
+        recent_blockhash: hash3::Hash::new_unique(),
+        instructions: vec![],
+        address_table_lookups: vec![],
+    };
+    let addrs = msg3::v0::LoadedAddresses {
+        writable: vec![pubkey3::Pubkey::new_unique()],
+        readonly: vec![pubkey3::Pubkey::new_unique()],
+    };
+    let loaded = msg3::v0::LoadedMessage::new(v0msg, addrs, &reserved);
+    let s_v0 = msg3::SanitizedMessage::V0(loaded);
+    buf.clear();
+    s_v0.encode(&mut buf).unwrap();
+    let dec_v0: msg3::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
+    match dec_v0 { msg3::SanitizedMessage::V0(_) => {}, _ => panic!("wrong variant") }
+}
+
+#[test]
+fn test_msg3_loaded_addresses_and_message_roundtrip() {
+    use crate::prelude::*;
+    let addrs = msg3::v0::LoadedAddresses {
+        writable: vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()],
+        readonly: vec![pubkey3::Pubkey::new_unique()],
+    };
+    let mut buf = Vec::new();
+    addrs.encode(&mut buf).unwrap();
+    let dec_addrs: msg3::v0::LoadedAddresses = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(addrs, dec_addrs);
+}
+
+#[test]
+fn test_tx3_sanitized_transaction_roundtrips() {
+    use crate::prelude::*;
+    // Legacy
+    let header = msg3::MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 1,
+    };
+    let legacy_msg = {
+        let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
+        let recent_blockhash = hash3::Hash::new_unique();
+        let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+            program_id_index: 1,
+            accounts: vec![0],
+            data: vec![1, 2],
+        }];
+        let legacy = msg3::legacy::Message { header, account_keys, recent_blockhash, instructions };
+        let reserved = std::collections::HashSet::default();
+        msg3::LegacyMessage::new(legacy, &reserved)
+    };
+    let s_legacy = msg3::SanitizedMessage::Legacy(legacy_msg);
+    let tx_legacy = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+        s_legacy,
+        hash3::Hash::new_unique(),
+        false,
+        vec![sig3::Signature::default()],
+    )
+    .unwrap();
+    let mut buf = Vec::new();
+    tx_legacy.encode(&mut buf).unwrap();
+    let dec_legacy = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(tx_legacy, dec_legacy);
+
+    // V0
+    let v0msg = msg3::v0::Message {
+        header,
+        account_keys: vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()],
+        recent_blockhash: hash3::Hash::new_unique(),
+        instructions: vec![],
+        address_table_lookups: vec![],
+    };
+    let loaded = msg3::v0::LoadedMessage::new(
+        v0msg,
+        msg3::v0::LoadedAddresses { writable: vec![], readonly: vec![] },
+        &std::collections::HashSet::default(),
+    );
+    let s_v0 = msg3::SanitizedMessage::V0(loaded);
+    let tx_v0 = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+        s_v0,
+        hash3::Hash::new_unique(),
+        false,
+        vec![sig3::Signature::default()],
+    )
+    .unwrap();
+    buf.clear();
+    tx_v0.encode(&mut buf).unwrap();
+    let dec_v0 = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(tx_v0, dec_v0);
+}
+
+#[test]
+fn test_tx3_versioned_transaction_roundtrip_and_dedupe() {
+    use crate::prelude::*;
+    let header = msg3::MessageHeader {
+        num_required_signatures: 1,
+        num_readonly_signed_accounts: 0,
+        num_readonly_unsigned_accounts: 2,
+    };
+    let k = pubkey3::Pubkey::new_unique();
+    let message = msg3::VersionedMessage::Legacy(msg3::legacy::Message {
+        header,
+        account_keys: vec![k, k, k], // duplicates to benefit dedupe
+        recent_blockhash: hash3::Hash::new_unique(),
+        instructions: vec![msg3::compiled_instruction::CompiledInstruction {
+            program_id_index: 2,
+            accounts: vec![0, 1],
+            data: vec![0xEE],
+        }],
+    });
+    let tx = tx3::versioned::VersionedTransaction { signatures: vec![sig3::Signature::default()], message };
+
+    let mut buf_plain = Vec::new();
+    tx.encode_ext(&mut buf_plain, None).unwrap();
+    let mut enc = DedupeEncoder::new();
+    let mut buf_dedupe = Vec::new();
+    tx.encode_ext(&mut buf_dedupe, Some(&mut enc)).unwrap();
+    assert!(buf_dedupe.len() < buf_plain.len());
+    let mut dec = DedupeDecoder::new();
+    let rt = tx3::versioned::VersionedTransaction::decode_ext(&mut Cursor::new(&buf_dedupe), Some(&mut dec)).unwrap();
+    assert_eq!(tx, rt);
+}
+
+// ---- Selected client/status types ----
+
+#[test]
+fn test_ui_token_amount_roundtrip() {
+    use crate::prelude::*;
+    let v = acct_dec_client::token::UiTokenAmount {
+        ui_amount: Some(42.5),
+        decimals: 6,
+        amount: "42500000".into(),
+        ui_amount_string: "42.5".into(),
+    };
+    let mut buf = Vec::new();
+    v.encode(&mut buf).unwrap();
+    let d: acct_dec_client::token::UiTokenAmount = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(v, d);
+}
+
+#[test]
+fn test_rewards_and_partitions_roundtrip() {
+    use crate::prelude::*;
+    let r = txstatus3::Reward {
+        pubkey: "pk".into(),
+        lamports: 1,
+        post_balance: 2,
+        reward_type: Some(reward_info::RewardType::Fee),
+        commission: Some(3),
+    };
+    let rap = txstatus3::RewardsAndNumPartitions { rewards: vec![r], num_partitions: Some(2) };
+    let mut buf = Vec::new();
+    rap.encode(&mut buf).unwrap();
+    let d: txstatus3::RewardsAndNumPartitions = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rap, d);
+}
+
+#[test]
+fn test_txctx_return_data_roundtrip() {
+    use crate::prelude::*;
+    let v = txctx3::TransactionReturnData { program_id: pubkey3::Pubkey::new_unique(), data: vec![1, 2, 3] };
+    let mut buf = Vec::new();
+    v.encode(&mut buf).unwrap();
+    let d: txctx3::TransactionReturnData = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(v, d);
+}
+
+#[test]
+fn test_txstatus_meta_default_roundtrip() {
+    use crate::prelude::*;
+    let meta = txstatus3::TransactionStatusMeta::default();
+    let mut buf = Vec::new();
+    meta.encode(&mut buf).unwrap();
+    let d: txstatus3::TransactionStatusMeta = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(meta, d);
 }
 
 // removed obsolete placeholder impl for SanitizedTransaction
