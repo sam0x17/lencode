@@ -330,6 +330,7 @@ impl Encode for SanitizedMessage {
 // Implementations for Agave (v3) Geyser interface and its dependencies (inline)
 use agave_geyser_plugin_interface::geyser_plugin_interface as ifc;
 use solana_account_decoder_client_types as acct_dec_client;
+use solana_instruction_error as ixerr;
 use solana_hash as hash3;
 use solana_message as msg3;
 use solana_pubkey as pubkey3;
@@ -340,28 +341,7 @@ use solana_transaction_context as txctx3;
 use solana_transaction_error as txerr3;
 use solana_transaction_status as txstatus3;
 
-// Small serde helpers when beneficial
-#[inline(always)]
-fn encode_serde_blob<T: serde::Serialize>(value: &T, writer: &mut impl Write) -> Result<usize> {
-    let data = bincode::serde::encode_to_vec(value, bincode::config::standard())
-        .map_err(|_| Error::InvalidData)?;
-    let mut written = 0;
-    written += <usize as Encode>::encode_len(data.len(), writer)?;
-    written += writer.write(&data)?;
-    Ok(written)
-}
-
-#[inline(always)]
-fn decode_serde_blob<T: serde::de::DeserializeOwned>(reader: &mut impl Read) -> Result<T> {
-    let len = <usize as Decode>::decode_len(reader)?;
-    let mut buf = vec![0u8; len];
-    if reader.read(&mut buf)? != len {
-        return Err(Error::ReaderOutOfData);
-    }
-    let (v, _): (T, usize) = bincode::serde::decode_from_slice(&buf, bincode::config::standard())
-        .map_err(|_| Error::InvalidData)?;
-    Ok(v)
-}
+// No serde/bincode usage in this module; all types implement Encode/Decode directly.
 
 // Pubkey/Hash/Signature for v3 crates
 impl Pack for pubkey3::Pubkey {
@@ -1115,7 +1095,147 @@ impl Decode for txctx3::TransactionReturnData {
         })
     }
 }
-// TransactionError — use serde blob to avoid duplicating variants here
+// InstructionError encoding (direct, no serde)
+impl Encode for ixerr::InstructionError {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        use ixerr::InstructionError as E;
+        let disc: usize = match self {
+            E::GenericError => 0,
+            E::InvalidArgument => 1,
+            E::InvalidInstructionData => 2,
+            E::InvalidAccountData => 3,
+            E::AccountDataTooSmall => 4,
+            E::InsufficientFunds => 5,
+            E::IncorrectProgramId => 6,
+            E::MissingRequiredSignature => 7,
+            E::AccountAlreadyInitialized => 8,
+            E::UninitializedAccount => 9,
+            E::UnbalancedInstruction => 10,
+            E::ModifiedProgramId => 11,
+            E::ExternalAccountLamportSpend => 12,
+            E::ExternalAccountDataModified => 13,
+            E::ReadonlyLamportChange => 14,
+            E::ReadonlyDataModified => 15,
+            E::DuplicateAccountIndex => 16,
+            E::ExecutableModified => 17,
+            E::RentEpochModified => 18,
+            E::NotEnoughAccountKeys => 19,
+            E::AccountDataSizeChanged => 20,
+            E::AccountNotExecutable => 21,
+            E::AccountBorrowFailed => 22,
+            E::AccountBorrowOutstanding => 23,
+            E::DuplicateAccountOutOfSync => 24,
+            E::Custom(_) => 25,
+            E::InvalidError => 26,
+            E::ExecutableDataModified => 27,
+            E::ExecutableLamportChange => 28,
+            E::ExecutableAccountNotRentExempt => 29,
+            E::UnsupportedProgramId => 30,
+            E::CallDepth => 31,
+            E::MissingAccount => 32,
+            E::ReentrancyNotAllowed => 33,
+            E::MaxSeedLengthExceeded => 34,
+            E::InvalidSeeds => 35,
+            E::InvalidRealloc => 36,
+            E::ComputationalBudgetExceeded => 37,
+            E::PrivilegeEscalation => 38,
+            E::ProgramEnvironmentSetupFailure => 39,
+            E::ProgramFailedToComplete => 40,
+            E::ProgramFailedToCompile => 41,
+            E::Immutable => 42,
+            E::IncorrectAuthority => 43,
+            E::BorshIoError => 44,
+            E::AccountNotRentExempt => 45,
+            E::InvalidAccountOwner => 46,
+            E::ArithmeticOverflow => 47,
+            E::UnsupportedSysvar => 48,
+            E::IllegalOwner => 49,
+            E::MaxAccountsDataAllocationsExceeded => 50,
+            E::MaxAccountsExceeded => 51,
+            E::MaxInstructionTraceLengthExceeded => 52,
+            E::BuiltinProgramsMustConsumeComputeUnits => 53,
+        };
+        let mut n = <usize as Encode>::encode_discriminant(disc, writer)?;
+        if let E::Custom(code) = self {
+            n += code.encode_ext(writer, None)?;
+        }
+        Ok(n)
+    }
+}
+
+impl Decode for ixerr::InstructionError {
+    #[inline]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        use ixerr::InstructionError as E;
+        Ok(match <usize as Decode>::decode_discriminant(reader)? {
+            0 => E::GenericError,
+            1 => E::InvalidArgument,
+            2 => E::InvalidInstructionData,
+            3 => E::InvalidAccountData,
+            4 => E::AccountDataTooSmall,
+            5 => E::InsufficientFunds,
+            6 => E::IncorrectProgramId,
+            7 => E::MissingRequiredSignature,
+            8 => E::AccountAlreadyInitialized,
+            9 => E::UninitializedAccount,
+            10 => E::UnbalancedInstruction,
+            11 => E::ModifiedProgramId,
+            12 => E::ExternalAccountLamportSpend,
+            13 => E::ExternalAccountDataModified,
+            14 => E::ReadonlyLamportChange,
+            15 => E::ReadonlyDataModified,
+            16 => E::DuplicateAccountIndex,
+            17 => E::ExecutableModified,
+            18 => E::RentEpochModified,
+            19 => E::NotEnoughAccountKeys,
+            20 => E::AccountDataSizeChanged,
+            21 => E::AccountNotExecutable,
+            22 => E::AccountBorrowFailed,
+            23 => E::AccountBorrowOutstanding,
+            24 => E::DuplicateAccountOutOfSync,
+            25 => E::Custom(Decode::decode_ext(reader, None)?),
+            26 => E::InvalidError,
+            27 => E::ExecutableDataModified,
+            28 => E::ExecutableLamportChange,
+            29 => E::ExecutableAccountNotRentExempt,
+            30 => E::UnsupportedProgramId,
+            31 => E::CallDepth,
+            32 => E::MissingAccount,
+            33 => E::ReentrancyNotAllowed,
+            34 => E::MaxSeedLengthExceeded,
+            35 => E::InvalidSeeds,
+            36 => E::InvalidRealloc,
+            37 => E::ComputationalBudgetExceeded,
+            38 => E::PrivilegeEscalation,
+            39 => E::ProgramEnvironmentSetupFailure,
+            40 => E::ProgramFailedToComplete,
+            41 => E::ProgramFailedToCompile,
+            42 => E::Immutable,
+            43 => E::IncorrectAuthority,
+            44 => E::BorshIoError,
+            45 => E::AccountNotRentExempt,
+            46 => E::InvalidAccountOwner,
+            47 => E::ArithmeticOverflow,
+            48 => E::UnsupportedSysvar,
+            49 => E::IllegalOwner,
+            50 => E::MaxAccountsDataAllocationsExceeded,
+            51 => E::MaxAccountsExceeded,
+            52 => E::MaxInstructionTraceLengthExceeded,
+            53 => E::BuiltinProgramsMustConsumeComputeUnits,
+            _ => return Err(Error::InvalidData),
+        })
+    }
+}
+
+// TransactionError encoding (direct, no serde)
 impl Encode for txerr3::TransactionError {
     #[inline]
     fn encode_ext(
@@ -1123,16 +1243,118 @@ impl Encode for txerr3::TransactionError {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        encode_serde_blob(self, writer)
+        use txerr3::TransactionError as E;
+        let disc: usize = match self {
+            E::AccountInUse => 0,
+            E::AccountLoadedTwice => 1,
+            E::AccountNotFound => 2,
+            E::ProgramAccountNotFound => 3,
+            E::InsufficientFundsForFee => 4,
+            E::InvalidAccountForFee => 5,
+            E::AlreadyProcessed => 6,
+            E::BlockhashNotFound => 7,
+            E::InstructionError(_, _) => 8,
+            E::CallChainTooDeep => 9,
+            E::MissingSignatureForFee => 10,
+            E::InvalidAccountIndex => 11,
+            E::SignatureFailure => 12,
+            E::InvalidProgramForExecution => 13,
+            E::SanitizeFailure => 14,
+            E::ClusterMaintenance => 15,
+            E::AccountBorrowOutstanding => 16,
+            E::WouldExceedMaxBlockCostLimit => 17,
+            E::UnsupportedVersion => 18,
+            E::InvalidWritableAccount => 19,
+            E::WouldExceedMaxAccountCostLimit => 20,
+            E::WouldExceedAccountDataBlockLimit => 21,
+            E::TooManyAccountLocks => 22,
+            E::AddressLookupTableNotFound => 23,
+            E::InvalidAddressLookupTableOwner => 24,
+            E::InvalidAddressLookupTableData => 25,
+            E::InvalidAddressLookupTableIndex => 26,
+            E::InvalidRentPayingAccount => 27,
+            E::WouldExceedMaxVoteCostLimit => 28,
+            E::WouldExceedAccountDataTotalLimit => 29,
+            E::DuplicateInstruction(_) => 30,
+            E::InsufficientFundsForRent { .. } => 31,
+            E::MaxLoadedAccountsDataSizeExceeded => 32,
+            E::InvalidLoadedAccountsDataSizeLimit => 33,
+            E::ResanitizationNeeded => 34,
+            E::ProgramExecutionTemporarilyRestricted { .. } => 35,
+            E::UnbalancedTransaction => 36,
+            E::ProgramCacheHitMaxLimit => 37,
+            E::CommitCancelled => 38,
+        };
+        let mut n = <usize as Encode>::encode_discriminant(disc, writer)?;
+        match self {
+            E::InstructionError(idx, err) => {
+                n += idx.encode_ext(writer, None)?;
+                n += err.encode_ext(writer, None)?;
+            }
+            E::DuplicateInstruction(idx) => {
+                n += idx.encode_ext(writer, None)?;
+            }
+            E::InsufficientFundsForRent { account_index } => {
+                n += account_index.encode_ext(writer, None)?;
+            }
+            E::ProgramExecutionTemporarilyRestricted { account_index } => {
+                n += account_index.encode_ext(writer, None)?;
+            }
+            _ => {}
+        }
+        Ok(n)
     }
 }
+
 impl Decode for txerr3::TransactionError {
     #[inline]
     fn decode_ext(
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        decode_serde_blob(reader)
+        use txerr3::TransactionError as E;
+        Ok(match <usize as Decode>::decode_discriminant(reader)? {
+            0 => E::AccountInUse,
+            1 => E::AccountLoadedTwice,
+            2 => E::AccountNotFound,
+            3 => E::ProgramAccountNotFound,
+            4 => E::InsufficientFundsForFee,
+            5 => E::InvalidAccountForFee,
+            6 => E::AlreadyProcessed,
+            7 => E::BlockhashNotFound,
+            8 => E::InstructionError(Decode::decode_ext(reader, None)?, Decode::decode_ext(reader, None)?),
+            9 => E::CallChainTooDeep,
+            10 => E::MissingSignatureForFee,
+            11 => E::InvalidAccountIndex,
+            12 => E::SignatureFailure,
+            13 => E::InvalidProgramForExecution,
+            14 => E::SanitizeFailure,
+            15 => E::ClusterMaintenance,
+            16 => E::AccountBorrowOutstanding,
+            17 => E::WouldExceedMaxBlockCostLimit,
+            18 => E::UnsupportedVersion,
+            19 => E::InvalidWritableAccount,
+            20 => E::WouldExceedMaxAccountCostLimit,
+            21 => E::WouldExceedAccountDataBlockLimit,
+            22 => E::TooManyAccountLocks,
+            23 => E::AddressLookupTableNotFound,
+            24 => E::InvalidAddressLookupTableOwner,
+            25 => E::InvalidAddressLookupTableData,
+            26 => E::InvalidAddressLookupTableIndex,
+            27 => E::InvalidRentPayingAccount,
+            28 => E::WouldExceedMaxVoteCostLimit,
+            29 => E::WouldExceedAccountDataTotalLimit,
+            30 => E::DuplicateInstruction(Decode::decode_ext(reader, None)?),
+            31 => E::InsufficientFundsForRent { account_index: Decode::decode_ext(reader, None)? },
+            32 => E::MaxLoadedAccountsDataSizeExceeded,
+            33 => E::InvalidLoadedAccountsDataSizeLimit,
+            34 => E::ResanitizationNeeded,
+            35 => E::ProgramExecutionTemporarilyRestricted { account_index: Decode::decode_ext(reader, None)? },
+            36 => E::UnbalancedTransaction,
+            37 => E::ProgramCacheHitMaxLimit,
+            38 => E::CommitCancelled,
+            _ => return Err(Error::InvalidData),
+        })
     }
 }
 impl Encode for txstatus3::TransactionStatusMeta {
@@ -2019,6 +2241,24 @@ fn test_txstatus_meta_default_roundtrip() {
     meta.encode(&mut buf).unwrap();
     let d: txstatus3::TransactionStatusMeta = decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(meta, d);
+}
+
+#[test]
+fn test_transaction_error_roundtrip() {
+    use crate::prelude::*;
+    let cases = vec![
+        txerr3::TransactionError::AccountInUse,
+        txerr3::TransactionError::InstructionError(5, ixerr::InstructionError::Custom(42)),
+        txerr3::TransactionError::DuplicateInstruction(9),
+        txerr3::TransactionError::InsufficientFundsForRent { account_index: 7 },
+        txerr3::TransactionError::ProgramExecutionTemporarilyRestricted { account_index: 3 },
+    ];
+    for e in cases {
+        let mut buf = Vec::new();
+        e.encode(&mut buf).unwrap();
+        let d: txerr3::TransactionError = decode(&mut Cursor::new(&buf)).unwrap();
+        assert_eq!(e, d);
+    }
 }
 
 // removed obsolete placeholder impl for SanitizedTransaction
