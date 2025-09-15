@@ -85,7 +85,6 @@ let pubkey1 = Pubkey::new_unique();
 let pubkey2 = Pubkey::new_unique();
 let pubkeys = vec![pubkey1, pubkey2, pubkey1, pubkey1, pubkey2]; // Duplicates
 
-// Pubkeys REQUIRE deduplication - they will error without it
 let mut buffer = Vec::new();
 let mut encoder = DedupeEncoder::new();
 let bytes_written = encode_ext(&pubkeys, &mut buffer, Some(&mut encoder))?;
