@@ -17,6 +17,7 @@ endian-cast = "2"
 typenum = "1"
 generic-array = "1"
 solana-sdk = { version = "2", optional = true }
+agave-geyser-plugin-interface = { version = "2", optional = true }
 ruint = { version = "1" }
 newt-hype = { version = "0.2", default-features = false }
 hashbrown = "0.15"
@@ -35,7 +36,7 @@ bincode = { version = "2", features = ["serde"] }
 [features]
 default = []
 std = []
-solana = ["std", "dep:solana-sdk"]
+solana = ["std", "dep:solana-sdk", "dep:agave-geyser-plugin-interface"]
 
 [profile.test]
 opt-level = 3
