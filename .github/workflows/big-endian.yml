@@ -32,3 +32,7 @@ jobs:
       - name: Test (workspace, default features)
         run: |
           cross test --workspace --target ${{ matrix.target }}
+
+      - name: Test (workspace, std feature)
+        run: |
+          cross test --workspace --features std --target ${{ matrix.target }}
