@@ -358,6 +358,67 @@ impl Decode for bool {
     }
 }
 
+// Floating point support for convenience in client types (e.g., UiTokenAmount)
+impl Encode for f32 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let bytes = self.to_le_bytes();
+        writer.write(&bytes)
+    }
+}
+
+impl Decode for f32 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let mut buf = [0u8; 4];
+        if reader.read(&mut buf)? != 4 {
+            return Err(Error::ReaderOutOfData);
+        }
+        Ok(f32::from_le_bytes(buf))
+    }
+
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
+impl Encode for f64 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        let bytes = self.to_le_bytes();
+        writer.write(&bytes)
+    }
+}
+
+impl Decode for f64 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        let mut buf = [0u8; 8];
+        if reader.read(&mut buf)? != 8 {
+            return Err(Error::ReaderOutOfData);
+        }
+        Ok(f64::from_le_bytes(buf))
+    }
+
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
 impl Encode for &[u8] {
     #[inline(always)]
     fn encode_ext(

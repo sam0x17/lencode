@@ -17,7 +17,18 @@ endian-cast = "2"
 typenum = "1"
 generic-array = "1"
 solana-sdk = { version = "2", optional = true }
-agave-geyser-plugin-interface = { version = "2", optional = true }
+agave-geyser-plugin-interface = { version = "3.0.2", optional = true }
+solana-message = { version = "3.0.0", optional = true }
+solana-transaction = { version = "3.0.0", optional = true }
+solana-transaction-status = { version = "3.0.2", optional = true }
+solana-transaction-context = { version = "3.0.0", optional = true }
+solana-transaction-error = { version = "3.0.0", features = ["serde"], optional = true }
+solana-hash = { version = "3.0.0", optional = true }
+solana-signature = { version = "3.1.0", optional = true }
+solana-pubkey = { version = "3.0.0", optional = true }
+solana-clock = { version = "3.0.0", optional = true }
+solana-reward-info = { version = "3.0.0", optional = true }
+solana-account-decoder-client-types = { version = "3.0.2", optional = true }
 ruint = { version = "1" }
 newt-hype = { version = "0.2", default-features = false }
 hashbrown = "0.15"
@@ -25,6 +36,10 @@ critical-section = "1"
 ahash = { version = "0", default-features = false }
 
 lencode-macros = { path = "macros", version = "0.1.0" }
+
+# Serialization helpers used for some complex external enums in agave types
+serde = { version = "1", features = ["derive"], optional = true }
+bincode = { version = "2", features = ["serde"], optional = true }
 
 [dev-dependencies]
 rayon = "1"
@@ -36,7 +51,25 @@ bincode = { version = "2", features = ["serde"] }
 [features]
 default = []
 std = []
-solana = ["std", "dep:solana-sdk", "dep:agave-geyser-plugin-interface"]
+solana = [
+    "std",
+    "dep:solana-sdk",
+    # Agave/geyser and supporting crates
+    "dep:agave-geyser-plugin-interface",
+    "dep:solana-message",
+    "dep:solana-transaction",
+    "dep:solana-transaction-status",
+    "dep:solana-transaction-context",
+    "dep:solana-transaction-error",
+    "dep:solana-hash",
+    "dep:solana-signature",
+    "dep:solana-pubkey",
+    "dep:solana-clock",
+    "dep:solana-reward-info",
+    "dep:solana-account-decoder-client-types",
+    "dep:serde",
+    "dep:bincode",
+]
 
 [profile.test]
 opt-level = 3
