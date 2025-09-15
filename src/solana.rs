@@ -694,9 +694,7 @@ impl Encode for msg3::v0::LoadedAddresses {
         n += self
             .writable
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .readonly
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.readonly.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -799,9 +797,7 @@ impl Encode for tx3::versioned::VersionedTransaction {
         n += self
             .signatures
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .message
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.message.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -873,9 +869,7 @@ impl Encode for txstatus3::InnerInstruction {
         n += self
             .instruction
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .stack_height
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.stack_height.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -904,9 +898,7 @@ impl Encode for txstatus3::InnerInstructions {
         n += self
             .index
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .instructions
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.instructions.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -941,9 +933,7 @@ impl Encode for acct_dec_client::token::UiTokenAmount {
         n += self
             .amount
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .ui_amount_string
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.ui_amount_string.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -982,9 +972,7 @@ impl Encode for txstatus3::TransactionTokenBalance {
         n += self
             .owner
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .program_id
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.program_id.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -1055,9 +1043,7 @@ impl Encode for txstatus3::Reward {
         n += self
             .reward_type
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .commission
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.commission.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -1087,9 +1073,7 @@ impl Encode for txstatus3::RewardsAndNumPartitions {
         n += self
             .rewards
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .num_partitions
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.num_partitions.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -1116,9 +1100,7 @@ impl Encode for txctx3::TransactionReturnData {
         n += self
             .program_id
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .data
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.data.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -1196,9 +1178,7 @@ impl Encode for txstatus3::TransactionStatusMeta {
         n += self
             .compute_units_consumed
             .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .cost_units
-            .encode_ext(writer, dedupe_encoder)?;
+        n += self.cost_units.encode_ext(writer, dedupe_encoder)?;
         Ok(n)
     }
 }
@@ -1268,11 +1248,7 @@ impl Decode for ifc::ReplicaAccountInfo<'static> {
 }
 impl Encode for ifc::ReplicaAccountInfoV2<'_> {
     #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
+    fn encode_ext(&self, w: &mut impl Write, dedupe: Option<&mut DedupeEncoder>) -> Result<usize> {
         let mut n = ifc::ReplicaAccountInfo {
             pubkey: self.pubkey,
             lamports: self.lamports,
@@ -1292,8 +1268,7 @@ impl Decode for ifc::ReplicaAccountInfoV2<'static> {
     #[inline]
     fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
         let base: ifc::ReplicaAccountInfo<'static> = Decode::decode_ext(reader, None)?;
-        let txn_signature: Option<sig3::Signature> =
-            Decode::decode_ext(reader, dedupe)?;
+        let txn_signature: Option<sig3::Signature> = Decode::decode_ext(reader, dedupe)?;
         let sig_ref = txn_signature.map(|s| Box::leak(Box::new(s)) as &sig3::Signature);
         Ok(Self {
             pubkey: base.pubkey,
@@ -1309,11 +1284,7 @@ impl Decode for ifc::ReplicaAccountInfoV2<'static> {
 }
 impl Encode for ifc::ReplicaAccountInfoV3<'_> {
     #[inline]
-    fn encode_ext(
-        &self,
-        w: &mut impl Write,
-        dedupe: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
+    fn encode_ext(&self, w: &mut impl Write, dedupe: Option<&mut DedupeEncoder>) -> Result<usize> {
         let mut n = ifc::ReplicaAccountInfo {
             pubkey: self.pubkey,
             lamports: self.lamports,
@@ -1333,8 +1304,7 @@ impl Decode for ifc::ReplicaAccountInfoV3<'static> {
     #[inline]
     fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
         let base: ifc::ReplicaAccountInfo<'static> = Decode::decode_ext(reader, None)?;
-        let txn: Option<tx3::sanitized::SanitizedTransaction> =
-            Decode::decode_ext(reader, dedupe)?;
+        let txn: Option<tx3::sanitized::SanitizedTransaction> = Decode::decode_ext(reader, dedupe)?;
         let txn_ref = txn.map(|t| Box::leak(Box::new(t)) as &tx3::sanitized::SanitizedTransaction);
         Ok(Self {
             pubkey: base.pubkey,
@@ -1551,9 +1521,7 @@ impl Encode for ifc::ReplicaEntryInfo<'_> {
         n += self.index.encode_ext(writer, dedupe.as_deref_mut())?;
         n += self.num_hashes.encode_ext(writer, dedupe.as_deref_mut())?;
         n += self.hash.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .executed_transaction_count
-            .encode_ext(writer, dedupe)?;
+        n += self.executed_transaction_count.encode_ext(writer, dedupe)?;
         Ok(n)
     }
 }
@@ -1586,9 +1554,7 @@ impl Encode for ifc::ReplicaEntryInfoV2<'_> {
             executed_transaction_count: self.executed_transaction_count,
         };
         let mut n = base.encode_ext(writer, dedupe.as_deref_mut())?;
-        n += self
-            .starting_transaction_index
-            .encode_ext(writer, dedupe)?;
+        n += self.starting_transaction_index.encode_ext(writer, dedupe)?;
         Ok(n)
     }
 }
