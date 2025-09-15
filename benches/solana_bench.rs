@@ -1,4 +1,4 @@
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lencode::{
     dedupe::{DedupeDecoder, DedupeEncoder},
     prelude::*,
@@ -6,6 +6,7 @@ use lencode::{
 use rand::Rng;
 use rand::seq::SliceRandom;
 use solana_sdk::pubkey::Pubkey;
+use std::hint::black_box;
 use std::io::Cursor;
 
 use borsh::BorshDeserialize;

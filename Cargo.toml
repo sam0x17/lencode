@@ -16,22 +16,22 @@ documentation = "https://docs.rs/lencode/latest/lencode/"
 endian-cast = "2"
 generic-array = "1"
 solana-sdk = { version = "2", optional = true }
-agave-geyser-plugin-interface = { version = "3.0.2", optional = true }
-solana-message = { version = "3.0.0", optional = true }
-solana-transaction = { version = "3.0.0", optional = true }
-solana-transaction-status = { version = "3.0.2", optional = true }
-solana-transaction-context = { version = "3.0.0", optional = true }
-solana-transaction-error = { version = "3.0.0", optional = true }
-solana-instruction-error = { version = "2.0.0", optional = true }
-solana-hash = { version = "3.0.0", optional = true }
-solana-signature = { version = "3.1.0", optional = true }
-solana-pubkey = { version = "3.0.0", optional = true }
-solana-clock = { version = "3.0.0", optional = true }
-solana-reward-info = { version = "3.0.0", optional = true }
-solana-account-decoder-client-types = { version = "3.0.2", optional = true }
+agave-geyser-plugin-interface = { version = "3", optional = true }
+solana-message = { version = "3", optional = true }
+solana-transaction = { version = "3", optional = true }
+solana-transaction-status = { version = "3", optional = true }
+solana-transaction-context = { version = "3", optional = true }
+solana-transaction-error = { version = "3", optional = true }
+solana-instruction-error = { version = "2", optional = true }
+solana-hash = { version = "3", optional = true }
+solana-signature = { version = "3", optional = true }
+solana-pubkey = { version = "3", optional = true }
+solana-clock = { version = "3", optional = true }
+solana-reward-info = { version = "3", optional = true }
+solana-account-decoder-client-types = { version = "3", optional = true }
 ruint = { version = "1" }
-newt-hype = { version = "0.2", default-features = false }
-hashbrown = "0.15"
+newt-hype = { version = "0", default-features = false }
+hashbrown = "0"
 
 lencode-macros = { path = "macros", version = "0.1.0" }
 
@@ -40,9 +40,9 @@ bincode = { version = "2", features = ["serde"], optional = true }
 
 [dev-dependencies]
 rayon = "1"
-rand = "0.9"
-criterion = { version = "0.5", features = ["html_reports"] }
-borsh = "1.5"
+rand = ">= 0.9"
+criterion = { version = ">= 0.5", features = ["html_reports"] }
+borsh = ">= 1.5"
 bincode = { version = "2", features = ["serde"] }
 
 [features]
