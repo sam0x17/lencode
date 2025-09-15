@@ -1271,7 +1271,7 @@ impl Encode for ifc::ReplicaAccountInfoV2<'_> {
     fn encode_ext(
         &self,
         w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
+        dedupe: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut n = ifc::ReplicaAccountInfo {
             pubkey: self.pubkey,
@@ -1290,7 +1290,7 @@ impl Encode for ifc::ReplicaAccountInfoV2<'_> {
 }
 impl Decode for ifc::ReplicaAccountInfoV2<'static> {
     #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
         let base: ifc::ReplicaAccountInfo<'static> = Decode::decode_ext(reader, None)?;
         let txn_signature: Option<sig3::Signature> =
             Decode::decode_ext(reader, dedupe)?;
@@ -1312,7 +1312,7 @@ impl Encode for ifc::ReplicaAccountInfoV3<'_> {
     fn encode_ext(
         &self,
         w: &mut impl Write,
-        mut dedupe: Option<&mut DedupeEncoder>,
+        dedupe: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
         let mut n = ifc::ReplicaAccountInfo {
             pubkey: self.pubkey,
@@ -1331,7 +1331,7 @@ impl Encode for ifc::ReplicaAccountInfoV3<'_> {
 }
 impl Decode for ifc::ReplicaAccountInfoV3<'static> {
     #[inline]
-    fn decode_ext(reader: &mut impl Read, mut dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
         let base: ifc::ReplicaAccountInfo<'static> = Decode::decode_ext(reader, None)?;
         let txn: Option<tx3::sanitized::SanitizedTransaction> =
             Decode::decode_ext(reader, dedupe)?;
