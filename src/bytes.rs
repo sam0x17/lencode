@@ -18,10 +18,7 @@ const ZSTD_LEVEL: i32 = 3;
 pub fn zstd_compress(input: &[u8]) -> Result<Vec<u8>> {
     // Upper bound for compressed size
     let bound = zstd_safe::compress_bound(input.len());
-    let mut out = Vec::with_capacity(bound);
-    // SAFETY: we immediately set_len to bound to get a full slice, then shrink
-    // back to actual size after compression succeeds.
-    unsafe { out.set_len(bound) };
+    let mut out = vec![0u8; bound];
     let written = match zstd_safe::compress(&mut out[..], input, ZSTD_LEVEL) {
         Ok(n) => n,
         Err(_) => return Err(Error::InvalidData),
@@ -33,10 +30,7 @@ pub fn zstd_compress(input: &[u8]) -> Result<Vec<u8>> {
 /// Decompresses `compressed` into a new Vec<u8> with expected `original_len`.
 #[inline(always)]
 pub fn zstd_decompress(compressed: &[u8], original_len: usize) -> Result<Vec<u8>> {
-    let mut out = Vec::with_capacity(original_len);
-    // SAFETY: we set_len to provide a fully-addressable buffer for zstd, then
-    // validate that the decompressed size matches the expected original_len.
-    unsafe { out.set_len(original_len) };
+    let mut out = vec![0u8; original_len];
     let written = match zstd_safe::decompress(&mut out[..], compressed) {
         Ok(n) => n,
         Err(_) => return Err(Error::InvalidData),
