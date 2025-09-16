@@ -13,6 +13,17 @@
 //! Derive macros for [`Encode`] and [`Decode`] are available from the companion crate
 //! [`lencode_macros`] and re‑exported in [`prelude`].
 //!
+//! Bytes and strings are compacted using a flagged header with opportunistic zstd compression:
+//!
+//! - Formats: `&[u8]`, `Vec<u8>`, `VecDeque<u8>`, `&str`, `String`
+//! - Wire: `varint((payload_len << 1) | flag) + payload`
+//!   - `flag = 1` → `payload` is a zstd frame (original size is stored in the frame)
+//!   - `flag = 0` → `payload` is raw bytes/UTF‑8
+//! - The encoder picks whichever is smaller per value.
+//!
+//! This keeps headers minimal while improving size significantly for repetitive content, and
+//! is `no_std` compatible via `zstd-safe`.
+//!
 //! Quick start:
 //!
 //! ```rust
