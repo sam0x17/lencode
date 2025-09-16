@@ -4,8 +4,8 @@ cargo check --workspace
 cargo check --workspace --all-features
 cargo test --workspace
 cargo test --workspace --all-features
-cargo bench
-cargo bench --all-features
+cargo bench --check
+cargo bench --all-features --check
 cargo doc --workspace
 cargo doc --workspace --all-features
 cd macros
