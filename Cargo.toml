@@ -32,6 +32,7 @@ solana-account-decoder-client-types = { version = "3", optional = true }
 ruint = { version = "1" }
 newt-hype = { version = "0", default-features = false }
 hashbrown = "0"
+zstd-safe = { version = "7", default-features = false }
 
 lencode-macros = { path = "macros", version = "0.1.0" }
 
@@ -98,3 +99,8 @@ harness = false
 name = "solana_bench"
 required-features = ["solana"]
 harness = false
+
+[[bench]]
+name = "bytes_bench"
+harness = false
+required-features = ["std"]

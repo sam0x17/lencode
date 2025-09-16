@@ -152,10 +152,78 @@ fn benchmark_pubkey_vec_with_duplicates(c: &mut Criterion) {
     group.finish();
 }
 
+fn benchmark_compiled_instruction_data(c: &mut Criterion) {
+    // Prepare two datasets: compressible and random data inside CompiledInstruction
+    let mut rng = rand::rng();
+    let compressible_data: Vec<u8> = vec![0; 64 * 1024];
+    let random_data: Vec<u8> = (0..64 * 1024).map(|_| rng.random()).collect();
+
+    let mk_ixs = |data: &Vec<u8>| -> Vec<solana_sdk::instruction::CompiledInstruction> {
+        (0..64)
+            .map(|i| solana_sdk::instruction::CompiledInstruction {
+                program_id_index: (i % 5) as u8,
+                accounts: vec![0, 1, 2, 3, 4],
+                data: data.clone(),
+            })
+            .collect()
+    };
+
+    let ixs_compressible = mk_ixs(&compressible_data);
+    let ixs_random = mk_ixs(&random_data);
+
+    let mut group = c.benchmark_group("solana_compiled_instruction_data");
+
+    group.bench_function("lencode_encode_compressible", |b| {
+        b.iter(|| {
+            let mut cursor = Cursor::new(Vec::new());
+            black_box(ixs_compressible.encode(&mut cursor).unwrap());
+            cursor.into_inner()
+        })
+    });
+
+    group.bench_function("lencode_encode_random", |b| {
+        b.iter(|| {
+            let mut cursor = Cursor::new(Vec::new());
+            black_box(ixs_random.encode(&mut cursor).unwrap());
+            cursor.into_inner()
+        })
+    });
+
+    let enc_compressible = {
+        let mut cursor = Cursor::new(Vec::new());
+        ixs_compressible.encode(&mut cursor).unwrap();
+        cursor.into_inner()
+    };
+    let enc_random = {
+        let mut cursor = Cursor::new(Vec::new());
+        ixs_random.encode(&mut cursor).unwrap();
+        cursor.into_inner()
+    };
+
+    group.bench_function("lencode_decode_compressible", |b| {
+        b.iter_batched(
+            || Cursor::new(enc_compressible.clone()),
+            |mut cursor| black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(&mut cursor)).unwrap(),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("lencode_decode_random", |b| {
+        b.iter_batched(
+            || Cursor::new(enc_random.clone()),
+            |mut cursor| black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(&mut cursor)).unwrap(),
+            criterion::BatchSize::SmallInput,
+        )
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_encode_pubkey,
     bench_decode_pubkey,
-    benchmark_pubkey_vec_with_duplicates
+    benchmark_pubkey_vec_with_duplicates,
+    benchmark_compiled_instruction_data
 );
 criterion_main!(benches);

@@ -1448,6 +1448,7 @@ dependencies = [
  "solana-transaction-context 3.0.2",
  "solana-transaction-error 3.0.0",
  "solana-transaction-status",
+ "zstd-safe",
 ]
 
 [[package]]

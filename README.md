@@ -12,6 +12,8 @@ performance varint encoding scheme with built-in deduplication support.
 - 🚀 **High Performance**: Optimized variable-length integer encoding with minimal overhead
 - 🔄 **Deduplication**: Built-in value deduplication to reduce data size for repeated values
 - 🌐 **No-std Compatible**: Works in `no_std` environments for embedded and blockchain applications
+- 🗜️ **Compressed Bytes**: `&[u8]`, `Vec<u8>`, and `VecDeque<u8>` are zstd-compressed for
+  compact storage (no_std via zstd-safe)
 - 📦 **Comprehensive Types**: Support for primitives, collections, tuples, and custom types
 - ⛓️ **Solana Integration**: Optional Solana blockchain types support with efficient pubkey deduplication
 - 🎯 **Zero-copy**: Efficient cursor-based I/O operations
@@ -173,6 +175,10 @@ Typical performance characteristics:
 - **Decoding**: Optimized cursor-based reading with minimal allocations
 - **Deduplication**: Significant space savings (30-70%) for data with repeated values
 - **Memory**: Low memory overhead, configurable buffer sizes
+
+Note: Byte sequences (`&[u8]`, `Vec<u8>`, `VecDeque<u8>`) use a flagged header:
+`varint((payload_len << 1) | flag) + payload`, where `flag=1` means `payload` is a zstd frame
+and `flag=0` means raw bytes. The encoder chooses whichever is smaller.
 
 ## Advanced Usage
 

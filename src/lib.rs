@@ -90,6 +90,7 @@ use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::collections;
 
+mod bytes;
 pub mod dedupe;
 pub mod io;
 pub mod pack;
@@ -426,10 +427,24 @@ impl Encode for &[u8] {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        let mut total_written = 0;
-        total_written += Self::encode_len(self.len(), writer)?;
-        total_written += writer.write(self)?;
-        Ok(total_written)
+        // Encode as either raw or compressed with a 1-bit flag in the header:
+        // header = varint((payload_len << 1) | (is_compressed as usize))
+        let compressed = bytes::zstd_compress(self)?;
+        let raw_len = self.len();
+        let comp_len = compressed.len();
+        let raw_hdr = bytes::flagged_header_len(raw_len, false);
+        let comp_hdr = bytes::flagged_header_len(comp_len, true);
+        if comp_len + comp_hdr < raw_len + raw_hdr {
+            let mut total = 0;
+            total += Self::encode_len((comp_len << 1) | 1, writer)?;
+            total += writer.write(&compressed)?;
+            Ok(total)
+        } else {
+            let mut total = 0;
+            total += Self::encode_len((raw_len << 1) | 0, writer)?;
+            total += writer.write(self)?;
+            Ok(total)
+        }
     }
 }
 
@@ -586,12 +601,38 @@ impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
     }
 }
 
-impl<T: Decode> Decode for Vec<T> {
+impl<T: Decode + 'static> Decode for Vec<T> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
+        // If T is u8, decode flagged header + payload without a leading element count.
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let flagged = Self::decode_len(reader)?;
+            let is_compressed = (flagged & 1) == 1;
+            let payload_len = flagged >> 1;
+            if is_compressed {
+                let mut comp = vec![0u8; payload_len];
+                let mut read = 0usize;
+                while read < payload_len {
+                    read += reader.read(&mut comp[read..])?;
+                }
+                let orig_len = bytes::zstd_content_size(&comp)?;
+                let out = bytes::zstd_decompress(&comp, orig_len)?;
+                let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
+                return Ok(vec_t);
+            } else {
+                let mut out = vec![0u8; payload_len];
+                let mut read = 0usize;
+                while read < payload_len {
+                    read += reader.read(&mut out[read..])?;
+                }
+                let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
+                return Ok(vec_t);
+            }
+        }
+
         let len = Self::decode_len(reader)?;
         let mut vec = Vec::with_capacity(len);
         for _ in 0..len {
@@ -601,13 +642,36 @@ impl<T: Decode> Decode for Vec<T> {
     }
 }
 
-impl<T: Encode> Encode for Vec<T> {
+impl<T: Encode + 'static> Encode for Vec<T> {
     #[inline(always)]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
         mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
+        // If element type is u8, write as raw-or-compressed with flagged header, no element count:
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            // SAFETY: when T == u8, we can view the slice as &[u8]
+            let bytes: &[u8] =
+                unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, self.len()) };
+            let compressed = bytes::zstd_compress(bytes)?;
+            let raw_len = bytes.len();
+            let comp_len = compressed.len();
+            let raw_hdr = bytes::flagged_header_len(raw_len, false);
+            let comp_hdr = bytes::flagged_header_len(comp_len, true);
+            if comp_len + comp_hdr < raw_len + raw_hdr {
+                let mut total = 0;
+                total += Self::encode_len((comp_len << 1) | 1, writer)?;
+                total += writer.write(&compressed)?;
+                return Ok(total);
+            } else {
+                let mut total = 0;
+                total += Self::encode_len((raw_len << 1) | 0, writer)?;
+                total += writer.write(bytes)?;
+                return Ok(total);
+            }
+        }
+
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for item in self {
@@ -683,13 +747,42 @@ impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
     }
 }
 
-impl<V: Encode> Encode for collections::VecDeque<V> {
+impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
     #[inline(always)]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
         mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
+        if core::any::TypeId::of::<V>() == core::any::TypeId::of::<u8>() {
+            // Flatten to contiguous bytes first
+            let (a, b) = self.as_slices();
+            // Compress concatenated bytes into a temporary buffer
+            let mut tmp = Vec::with_capacity(a.len() + b.len());
+            let a_u8: &[u8] =
+                unsafe { core::slice::from_raw_parts(a.as_ptr() as *const u8, a.len()) };
+            let b_u8: &[u8] =
+                unsafe { core::slice::from_raw_parts(b.as_ptr() as *const u8, b.len()) };
+            tmp.extend_from_slice(a_u8);
+            tmp.extend_from_slice(b_u8);
+            let compressed = bytes::zstd_compress(&tmp)?;
+            let raw_len = tmp.len();
+            let comp_len = compressed.len();
+            let raw_hdr = bytes::flagged_header_len(raw_len, false);
+            let comp_hdr = bytes::flagged_header_len(comp_len, true);
+            if comp_len + comp_hdr < raw_len + raw_hdr {
+                let mut total_written = 0;
+                total_written += Self::encode_len((comp_len << 1) | 1, writer)?;
+                total_written += writer.write(&compressed)?;
+                return Ok(total_written);
+            } else {
+                let mut total_written = 0;
+                total_written += Self::encode_len((raw_len << 1) | 0, writer)?;
+                total_written += writer.write(&tmp)?;
+                return Ok(total_written);
+            }
+        }
+
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
@@ -699,12 +792,42 @@ impl<V: Encode> Encode for collections::VecDeque<V> {
     }
 }
 
-impl<V: Decode> Decode for collections::VecDeque<V> {
+impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
+        if core::any::TypeId::of::<V>() == core::any::TypeId::of::<u8>() {
+            let flagged = Self::decode_len(reader)?;
+            let is_compressed = (flagged & 1) == 1;
+            let payload_len = flagged >> 1;
+            if is_compressed {
+                let mut comp = vec![0u8; payload_len];
+                let mut read = 0usize;
+                while read < payload_len {
+                    read += reader.read(&mut comp[read..])?;
+                }
+                let orig_len = bytes::zstd_content_size(&comp)?;
+                let out = bytes::zstd_decompress(&comp, orig_len)?;
+                // SAFETY: V == u8, so reinterpretation is sound
+                let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
+                let mut deque = collections::VecDeque::with_capacity(orig_len);
+                deque.extend(out_v);
+                return Ok(deque);
+            } else {
+                let mut out = vec![0u8; payload_len];
+                let mut read = 0usize;
+                while read < payload_len {
+                    read += reader.read(&mut out[read..])?;
+                }
+                let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
+                let mut deque = collections::VecDeque::with_capacity(payload_len);
+                deque.extend(out_v);
+                return Ok(deque);
+            }
+        }
+
         let len = Self::decode_len(reader)?;
         let mut deque = collections::VecDeque::with_capacity(len);
         for _ in 0..len {
@@ -1307,4 +1430,184 @@ fn test_string_encode_decode() {
     assert_eq!(n, 1);
     let decoded: String = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, value);
+}
+
+#[test]
+fn test_compressed_bytes_roundtrip_vec() {
+    let data: Vec<u8> = (0..200u16).map(|i| (i % 251) as u8).collect();
+    let mut buf = Vec::new();
+    let n = data.encode(&mut buf).unwrap();
+    assert!(n > 0);
+    let rt: Vec<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, data);
+}
+
+#[test]
+fn test_compressed_bytes_roundtrip_slice() {
+    let data: Vec<u8> = (0..200u16).map(|i| (i % 251) as u8).collect();
+    let mut buf = Vec::new();
+    let n = (&data[..]).encode(&mut buf).unwrap();
+    assert!(n > 0);
+    let rt: Vec<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, data);
+}
+
+#[test]
+fn test_bytes_flag_raw_for_small_incompressible_slice() {
+    use crate::prelude::*;
+    // Pattern unlikely to compress
+    let data: Vec<u8> = (0u16..64).map(|i| (i as u8).wrapping_mul(13)).collect();
+    let mut buf = Vec::new();
+    (&data[..]).encode(&mut buf).unwrap();
+
+    // Parse flagged header
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flag = flagged & 1;
+    let payload_len = flagged >> 1;
+    assert_eq!(flag, 0, "expected raw path for small incompressible slice");
+    assert_eq!(payload_len, data.len());
+
+    // Ensure payload bytes equal the original raw data
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    assert_eq!(&buf[header.len()..], &data[..]);
+
+    // Full round-trip via Vec<u8>
+    let rt: Vec<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, data);
+}
+
+#[test]
+fn test_bytes_flag_compressed_for_repetitive_slice() {
+    use crate::prelude::*;
+    let data: Vec<u8> = vec![7; 4096];
+    let mut buf = Vec::new();
+    (&data[..]).encode(&mut buf).unwrap();
+
+    // Parse flagged header
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flag = flagged & 1;
+    let payload_len = flagged >> 1;
+    assert_eq!(flag, 1, "expected compressed path for repetitive slice");
+
+    // Header should be minimal; check the remainder length matches payload_len
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    assert_eq!(buf.len() - header.len(), payload_len);
+
+    // Decompress payload manually and verify it matches
+    let payload = &buf[header.len()..];
+    let frame_len = crate::bytes::zstd_content_size(payload).unwrap();
+    assert_eq!(frame_len, data.len());
+    let manual = crate::bytes::zstd_decompress(payload, frame_len).unwrap();
+    assert_eq!(manual, data);
+
+    // Full round-trip via Vec<u8>
+    let rt: Vec<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, data);
+}
+
+#[test]
+fn test_vec_u8_flag_paths() {
+    use crate::prelude::*;
+    // Raw path
+    let raw: Vec<u8> = (0..80).collect();
+    let mut buf = Vec::new();
+    raw.encode(&mut buf).unwrap();
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    assert_eq!(flagged & 1, 0);
+    let len = flagged >> 1;
+    assert_eq!(len, raw.len());
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    assert_eq!(&buf[header.len()..], &raw[..]);
+    let rt: Vec<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, raw);
+
+    // Compressed path
+    let comp: Vec<u8> = vec![0xAB; 8192];
+    let mut buf2 = Vec::new();
+    comp.encode(&mut buf2).unwrap();
+    let mut c2 = Cursor::new(&buf2);
+    let flagged2 = Lencode::decode_varint::<u64>(&mut c2).unwrap() as usize;
+    assert_eq!(flagged2 & 1, 1);
+    let payload_len = flagged2 >> 1;
+    let mut header2 = Vec::new();
+    Lencode::encode_varint(flagged2 as u64, &mut header2).unwrap();
+    assert_eq!(buf2.len() - header2.len(), payload_len);
+    let payload = &buf2[header2.len()..];
+    let frame_len = crate::bytes::zstd_content_size(payload).unwrap();
+    assert_eq!(frame_len, comp.len());
+    let manual = crate::bytes::zstd_decompress(payload, frame_len).unwrap();
+    assert_eq!(manual, comp);
+    let rt2: Vec<u8> = Decode::decode(&mut Cursor::new(&buf2)).unwrap();
+    assert_eq!(rt2, comp);
+}
+
+#[test]
+fn test_vecdeque_u8_flag_paths_roundtrip() {
+    use crate::prelude::*;
+    use core::iter::FromIterator;
+    // Raw path likely
+    let raw_vec: Vec<u8> = (0..90).map(|i| (i as u8).wrapping_mul(37)).collect();
+    let raw = collections::VecDeque::from_iter(raw_vec.clone());
+    let mut buf = Vec::new();
+    raw.encode(&mut buf).unwrap();
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    assert_eq!(flagged & 1, 0);
+    let len = flagged >> 1;
+    assert_eq!(len, raw_vec.len());
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    assert_eq!(&buf[header.len()..], &raw_vec[..]);
+    let rt: collections::VecDeque<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, raw);
+
+    // Compressed path
+    let comp_vec: Vec<u8> = vec![0; 10_000];
+    let comp = collections::VecDeque::from_iter(comp_vec.clone());
+    let mut buf2 = Vec::new();
+    comp.encode(&mut buf2).unwrap();
+    let mut c2 = Cursor::new(&buf2);
+    let flagged2 = Lencode::decode_varint::<u64>(&mut c2).unwrap() as usize;
+    assert_eq!(flagged2 & 1, 1);
+    let payload_len = flagged2 >> 1;
+    let mut header2 = Vec::new();
+    Lencode::encode_varint(flagged2 as u64, &mut header2).unwrap();
+    assert_eq!(buf2.len() - header2.len(), payload_len);
+    let payload = &buf2[header2.len()..];
+    let frame_len = crate::bytes::zstd_content_size(payload).unwrap();
+    assert_eq!(frame_len, comp_vec.len());
+    let manual = crate::bytes::zstd_decompress(payload, frame_len).unwrap();
+    assert_eq!(manual, comp_vec);
+    let rt2: collections::VecDeque<u8> = Decode::decode(&mut Cursor::new(&buf2)).unwrap();
+    assert_eq!(rt2, comp);
+}
+
+#[test]
+fn test_bytes_flag_corrupted_compressed_payload_errors() {
+    use crate::prelude::*;
+    // Ensure we get a compressed path
+    let data: Vec<u8> = vec![1; 2048];
+    let mut buf = Vec::new();
+    (&data[..]).encode(&mut buf).unwrap();
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    assert_eq!(flagged & 1, 1);
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    // Corrupt a byte in the payload (if present)
+    if buf.len() > header.len() {
+        let idx = header.len() + core::cmp::min(10, buf.len() - header.len() - 1);
+        // Flip some bits
+        let mut corrupted = buf.clone();
+        corrupted[idx] ^= 0xFF;
+        // Decoding should fail
+        let res: Result<Vec<u8>> = Decode::decode(&mut Cursor::new(&corrupted));
+        assert!(res.is_err());
+    }
 }
