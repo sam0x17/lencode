@@ -1,6 +1,7 @@
 #![cfg(feature = "std")]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, black_box};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use lencode::prelude::*;
 use rand::{Rng, rng};
 use std::collections::VecDeque;
@@ -119,4 +120,3 @@ fn bench_bytes_decoding(c: &mut Criterion) {
 
 criterion_group!(benches, bench_bytes_encoding, bench_bytes_decoding);
 criterion_main!(benches);
-

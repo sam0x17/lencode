@@ -1,7 +1,8 @@
 #![cfg(feature = "std")]
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 use lencode::{Decode, Encode};
 use rand::seq::SliceRandom;
 use rand::{Rng, rng};
