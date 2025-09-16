@@ -2,6 +2,11 @@
 name = "lencode-macros"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+authors = ["sam0x17"]
+description = "support macros for lencode"
+repository = "https://github.com/sam0x17/lencode"
+documentation = "https://docs.rs/lencode/latest"
 
 [lib]
 proc-macro = true
