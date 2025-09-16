@@ -57,7 +57,7 @@ pub fn zstd_content_size(compressed: &[u8]) -> Result<usize> {
 }
 
 #[inline(always)]
-fn varint_len_usize(mut val: usize) -> usize {
+const fn varint_len_usize(mut val: usize) -> usize {
     if val <= 127 {
         return 1;
     }
