@@ -1,293 +1,177 @@
-# Lencode
+# 📦 lencode
 
 [![Crates.io](https://img.shields.io/crates/v/lencode.svg)](https://crates.io/crates/lencode)
-[![Documentation](https://docs.rs/lencode/badge.svg)](https://docs.rs/lencode)
+[![docs.rs](https://docs.rs/lencode/badge.svg)](https://docs.rs/lencode)
+[![CI](https://github.com/sam0x17/lencode/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/sam0x17/lencode/actions/workflows/ci.yaml)
+[![Big Endian CI](https://github.com/sam0x17/lencode/actions/workflows/big-endian.yml/badge.svg?branch=main)](https://github.com/sam0x17/lencode/actions/workflows/big-endian.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Rust crate for encoding and decoding variable-length data using a high
-performance varint encoding scheme with built-in deduplication support.
+Compact, fast binary encoding with varints, optional deduplication, and opportunistic zstd compression for bytes and strings. `no_std` by default, with an opt‑in `std` feature.
 
-## Features
+## Highlights
 
-- 🚀 **High Performance**: Optimized variable-length integer encoding with minimal overhead
-- 🔄 **Deduplication**: Built-in value deduplication to reduce data size for repeated values
-- 🌐 **No-std Compatible**: Works in `no_std` environments for embedded and blockchain applications
-- 🗜️ **Compressed Bytes/Strings**: `&[u8]`, `Vec<u8>`, `VecDeque<u8>`, `&str`, and `String`
-  use zstd with a compact flagged header (no_std via zstd-safe)
-- 📦 **Comprehensive Types**: Support for primitives, collections, tuples, and custom types
-- ⛓️ **Solana Integration**: Optional Solana blockchain types support with efficient pubkey deduplication
-- 🎯 **Zero-copy**: Efficient cursor-based I/O operations
-- 📊 **Benchmarked**: Performance-tested against popular serialization libraries
+- Fast varints: efficient for small and large integers
+- Optional deduplication: replace repeats with compact IDs for supported types
+- Bytes/strings compression: flagged header + zstd when smaller
+- no_std + alloc: works without `std` (uses `zstd-safe`)
+- Derive macros: `#[derive(Encode, Decode)]` for your types
+- Solana support: feature `solana` adds v2/v3 SDK types
+- Big-endian ready: CI runs tests on s390x
 
-## Quick Start
-
-Add lencode to your `Cargo.toml`:
+## Install
 
 ```toml
 [dependencies]
 lencode = "0.1"
 
-# For Solana support
-lencode = { version = "0.1", features = ["solana"] }
-
-# For std support
+# With standard library types (e.g., Cow)
 lencode = { version = "0.1", features = ["std"] }
+
+# With Solana type support (implies std)
+lencode = { version = "0.1", features = ["solana"] }
 ```
 
-## Basic Usage
+## Quick start
 
-### Simple Encoding/Decoding
+### Derive and round‑trip
 
 ```rust
 use lencode::prelude::*;
 
-// Encode a value
-let value = 42u64;
-let mut buffer = Vec::new();
-let bytes_written = encode(&value, &mut buffer)?;
+#[derive(Encode, Decode, PartialEq, Debug)]
+struct Point { x: u64, y: u64 }
 
-// Decode the value
-let mut cursor = Cursor::new(&buffer);
-let decoded: u64 = decode(&mut cursor)?;
-assert_eq!(value, decoded);
+let p = Point { x: 3, y: 5 };
+let mut buf = Vec::new();
+encode(&p, &mut buf)?;
+let q: Point = decode(&mut Cursor::new(&buf))?;
+assert_eq!(p, q);
 ```
 
-### With Deduplication
+### Collections and primitives
 
 ```rust
 use lencode::prelude::*;
 
-// Values with duplicates
-let values = vec![100u32, 200u32, 100u32, 300u32, 200u32];
-
-// Encode with deduplication
-let mut buffer = Vec::new();
-let mut encoder = DedupeEncoder::new();
-let bytes_written = encode_ext(&values, &mut buffer, Some(&mut encoder))?;
-
-// Decode with deduplication
-let mut cursor = Cursor::new(&buffer);
-let mut decoder = DedupeDecoder::new();
-let decoded_values: Vec<u32> = decode_ext(&mut cursor, Some(&mut decoder))?;
-
-assert_eq!(values, decoded_values);
-// With deduplication, repeated values only store a reference after first occurrence
+let values: Vec<u128> = (0..10).collect();
+let mut buf = Vec::new();
+encode(&values, &mut buf)?;
+let rt: Vec<u128> = decode(&mut Cursor::new(&buf))?;
+assert_eq!(values, rt);
 ```
 
-### Solana Pubkey Deduplication
+### Deduplication (optional)
+
+To benefit from deduplication for your own types, implement `Pack` and the marker traits and pass the encoder/decoder via `encode_ext`/`decode_ext`.
 
 ```rust
-#![cfg(feature = "solana")]
-
-use solana_sdk::pubkey::Pubkey;
 use lencode::prelude::*;
 
-// Pubkeys in Solana transactions often repeat
-let pubkey1 = Pubkey::new_unique();
-let pubkey2 = Pubkey::new_unique();
-let pubkeys = vec![pubkey1, pubkey2, pubkey1, pubkey1, pubkey2]; // Duplicates
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+struct MyId(u32);
 
-let mut buffer = Vec::new();
-let mut encoder = DedupeEncoder::new();
-let bytes_written = encode_ext(&pubkeys, &mut buffer, Some(&mut encoder))?;
+impl Pack for MyId {
+    fn pack(&self, w: &mut impl Write) -> Result<usize> { self.0.pack(w) }
+    fn unpack(r: &mut impl Read) -> Result<Self> { Ok(Self(u32::unpack(r)?)) }
+}
+impl DedupeEncodeable for MyId {}
+impl DedupeDecodeable for MyId {}
 
-// First occurrence: 33 bytes (1 + 32), subsequent: 1 byte each
-// Total: 69 bytes vs 160 bytes without deduplication (56% savings!)
+let vals = vec![MyId(42), MyId(7), MyId(42), MyId(7), MyId(42)];
 
-// Decode with deduplication
-let mut cursor = Cursor::new(&buffer);
-let mut decoder = DedupeDecoder::new();
-let decoded_pubkeys: Vec<Pubkey> = decode_ext(&mut cursor, Some(&mut decoder))?;
+// Encode with deduplication enabled
+let mut enc = DedupeEncoder::new();
+let mut buf = Vec::new();
+encode_ext(&vals, &mut buf, Some(&mut enc))?;
 
-assert_eq!(pubkeys, decoded_pubkeys);
+// Decode with deduplication enabled
+let mut dec = DedupeDecoder::new();
+let roundtrip: Vec<MyId> = decode_ext(&mut Cursor::new(&buf), Some(&mut dec))?;
+assert_eq!(roundtrip, vals);
 ```
 
-## Core Concepts
+### Compact bytes and strings
 
-### Variable-Length Encoding
+`&[u8]`, `Vec<u8]`, `VecDeque<u8]`, `&str`, and `String` use a compact flagged header: `varint((payload_len << 1) | flag) + payload`.
 
-Lencode uses an optimized lencode varint encoding scheme that minimizes space usage:
+- `flag = 0` → raw bytes/UTF‑8
+- `flag = 1` → zstd frame (original size stored inside the frame)
 
-- Small integers use fewer bytes
-- Large integers use more bytes as needed
-- Signed integers use zigzag encoding for efficient negative number representation
+The encoder picks whichever is smaller per value.
 
-### Deduplication System
+## Supported types
 
-The deduplication system tracks previously encoded values:
+- Primitives: all ints, `bool`, `f32`, `f64`
+- Arrays: `[T; N]`
+- Option: `Option<T>`
+- Bytes/strings: `&[u8]`, `Vec<u8]`, `VecDeque<u8]`, `&str`, `String`
+- Collections (alloc): `Vec<T>`, `BTreeMap<K,V>`, `BTreeSet<V>`, `VecDeque<T>`, `LinkedList<T>`, `BinaryHeap<T>`
+- Tuples: `(T1,)` … up to 11 elements
+- `std` feature: adds support for `std::borrow::Cow<'_, T>`
+- `solana` feature: `Pubkey`, `Signature`, `Hash`, messages (legacy/v0), and related v2/v3 types
 
-- **First occurrence**: Encoded with ID 0 + full value data
-- **Subsequent occurrences**: Only the reference ID (variable-length integer)
-- **Memory efficient**: Uses HashMap for O(1) lookups
-- **Configurable**: Optional - pass `None` to disable
+Note: `HashMap`/`HashSet` are not implemented.
 
-### Traits
+## Cargo features
 
-- **`Encode`**: Convert values to bytes with optional deduplication
-- **`Decode`**: Convert bytes back to values with optional deduplication  
-- **`Pack`**: Platform-independent byte representation (used internally by deduplication)
+- `default`: core + `no_std` (uses `alloc`)
+- `std`: enables `std` adapters and `Cow`
+- `solana`: Solana SDK v2 + Agave v3 types (implies `std`)
 
-## Supported Types
+## Big‑endian and portability
 
-### Primitives
-- All integer types: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`, `usize`, `isize`
-- Floating-point: `f32`, `f64`
-- Boolean: `bool`
-- Arrays: `[T; N]` where `T: Encode + Decode`
+- Varints are decoded efficiently on little‑endian and portably on big‑endian
+- CI runs tests on `s390x-unknown-linux-gnu` using `cross`
+- `Pack` always uses a stable little‑endian layout
 
-### Collections
-- `Vec<T>`
-- `HashMap<K, V>`, `BTreeMap<K, V>`
-- `HashSet<T>`, `BTreeSet<T>`
-- `VecDeque<T>`, `LinkedList<T>`, `BinaryHeap<T>`
-- `Option<T>`
-- `String`
-
-### Tuples
-- Up to 11-element tuples: `(T1,)`, `(T1, T2)`, ..., `(T1, T2, ..., T11)`
-
-### Blockchain Types (with `solana` feature)
-- `Pubkey` - with optimized deduplication
-- `Signature`
-- `Hash`
-- `MessageHeader`
-
-### Custom Types
-- Implement `Encode`, `Decode`, and `Pack` traits for your own types
-
-## Performance
-
-Lencode is designed for high performance and has been benchmarked against popular serialization libraries:
+## Benchmarks
 
 ```bash
-# Run benchmarks
+# Full suite
 cargo bench --all-features
 
-# Compare with borsh and bincode
-cargo bench --bench roundup
+# Compare against borsh/bincode
+cargo bench --bench roundup --features std
 
-# Solana-specific benchmarks  
+# Solana‑specific
 cargo bench --bench solana_bench --features solana
 ```
 
-Typical performance characteristics:
-- **Encoding**: Competitive with bincode, faster than borsh for variable-length data
-- **Decoding**: Optimized cursor-based reading with minimal allocations
-- **Deduplication**: Significant space savings (30-70%) for data with repeated values
-- **Memory**: Low memory overhead, configurable buffer sizes
+## Errors
 
-Note: Byte sequences and strings (`&[u8]`, `Vec<u8>`, `VecDeque<u8>`, `&str`, `String`) use a
-flagged header: `varint((payload_len << 1) | flag) + payload`, where `flag=1` means `payload`
-is a zstd frame and `flag=0` means raw bytes. The encoder chooses whichever is smaller. For
-`flag=1`, the zstd frame stores the original size; no separate original length is encoded.
-
-## Advanced Usage
-
-### Custom Types
-
-```rust
-use lencode::prelude::*;
-
-#[derive(Debug, PartialEq)]
-struct Point {
-    x: f64,
-    y: f64,
-}
-
-impl Encode for Point {
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut bytes = 0;
-        bytes += self.x.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        bytes += self.y.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        Ok(bytes)
-    }
-}
-
-impl Decode for Point {
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let x = f64::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let y = f64::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        Ok(Point { x, y })
-    }
-}
-
-impl Pack for Point {
-    fn pack(&self, writer: &mut impl Write) -> Result<usize> {
-        let mut bytes = 0;
-        bytes += self.x.pack(writer)?;
-        bytes += self.y.pack(writer)?;
-        Ok(bytes)
-    }
-    
-    fn unpack(reader: &mut impl Read) -> Result<Self> {
-        let x = f64::unpack(reader)?;
-        let y = f64::unpack(reader)?;
-        Ok(Point { x, y })
-    }
-}
-```
-
-### Low-level Varint Operations
-
-```rust
-use lencode::prelude::*;
-
-// Direct varint encoding/decoding
-let value = 12345u64;
-let mut buffer = Vec::new();
-Lencode::encode_varint(value, &mut buffer)?;
-
-let mut cursor = Cursor::new(&buffer);
-let decoded = Lencode::decode_varint::<u64>(&mut cursor)?;
-```
-
-## Features
-
-- **`default`**: Core functionality only
-- **`std`**: Standard library support (collections, etc.)
-- **`solana`**: Solana blockchain types support (implies `std`)
-
-## Error Handling
-
-Lencode provides comprehensive error handling:
+Errors use `lencode::io::Error` and map to `std::io::Error` under `std`.
 
 ```rust
 use lencode::prelude::*;
 use lencode::io::Error;
 
-let value = 42u64;
-let mut buffer = Vec::new();
-
-match encode(&value, &mut buffer) {
-    Ok(bytes_written) => println!("Encoded {} bytes", bytes_written),
-    Err(Error::WriterOutOfSpace) => println!("Buffer too small"),
-    Err(Error::ReaderOutOfData) => println!("Unexpected end of data"),
-    Err(Error::InvalidData) => println!("Corrupted data"),
-    Err(e) => println!("Other error: {:?}", e),
+let mut buf = Vec::new();
+match encode(&123u64, &mut buf) {
+    Ok(n) => eprintln!("wrote {n} bytes"),
+    Err(Error::WriterOutOfSpace) => eprintln!("buffer too small"),
+    Err(Error::ReaderOutOfData) => eprintln!("unexpected EOF"),
+    Err(Error::InvalidData) => eprintln!("corrupted data"),
+    Err(e) => eprintln!("other error: {e}"),
 }
 ```
 
-## Contributing
+## Examples
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+- `examples/size_comparison.rs`: space savings on repeated Solana pubkeys
+- `examples/versioned_tx_compression.rs`: end‑to‑end on Solana versioned transactions
+
+Run with `--features solana`.
 
 ## License
 
-This project is licensed under the MIT License.
+MIT
 
 ## Changelog
 
-### 0.1.0 (Initial Release)
-- Variable-length integer encoding with lencode varint scheme
-- Deduplication system for space optimization
-- Support for primitives, collections, and tuples
-- Solana blockchain types integration
-- No-std compatibility
-- Comprehensive test suite and benchmarks
+### 0.1.0
+- Lencode varints for signed/unsigned ints
+- Optional deduplication via `DedupeEncoder`/`DedupeDecoder`
+- Bytes/strings with flagged header + zstd
+- `no_std` by default; `std` and `solana` features
+- Derive macros for `Encode`/`Decode`
+- Big‑endian test coverage
