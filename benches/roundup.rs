@@ -2,10 +2,10 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use std::hint::black_box;
 use lencode::{Decode, Encode};
 use rand::seq::SliceRandom;
 use rand::{Rng, rng};
+use std::hint::black_box;
 use std::io::Cursor;
 
 fn benchmark_roundup(c: &mut Criterion) {

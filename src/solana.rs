@@ -330,8 +330,8 @@ impl Encode for SanitizedMessage {
 // Implementations for Agave (v3) Geyser interface and its dependencies (inline)
 use agave_geyser_plugin_interface::geyser_plugin_interface as ifc;
 use solana_account_decoder_client_types as acct_dec_client;
-use solana_instruction_error as ixerr;
 use solana_hash as hash3;
+use solana_instruction_error as ixerr;
 use solana_message as msg3;
 use solana_pubkey as pubkey3;
 use solana_reward_info as reward_info;
@@ -1322,7 +1322,10 @@ impl Decode for txerr3::TransactionError {
             5 => E::InvalidAccountForFee,
             6 => E::AlreadyProcessed,
             7 => E::BlockhashNotFound,
-            8 => E::InstructionError(Decode::decode_ext(reader, None)?, Decode::decode_ext(reader, None)?),
+            8 => E::InstructionError(
+                Decode::decode_ext(reader, None)?,
+                Decode::decode_ext(reader, None)?,
+            ),
             9 => E::CallChainTooDeep,
             10 => E::MissingSignatureForFee,
             11 => E::InvalidAccountIndex,
@@ -1345,11 +1348,15 @@ impl Decode for txerr3::TransactionError {
             28 => E::WouldExceedMaxVoteCostLimit,
             29 => E::WouldExceedAccountDataTotalLimit,
             30 => E::DuplicateInstruction(Decode::decode_ext(reader, None)?),
-            31 => E::InsufficientFundsForRent { account_index: Decode::decode_ext(reader, None)? },
+            31 => E::InsufficientFundsForRent {
+                account_index: Decode::decode_ext(reader, None)?,
+            },
             32 => E::MaxLoadedAccountsDataSizeExceeded,
             33 => E::InvalidLoadedAccountsDataSizeLimit,
             34 => E::ResanitizationNeeded,
-            35 => E::ProgramExecutionTemporarilyRestricted { account_index: Decode::decode_ext(reader, None)? },
+            35 => E::ProgramExecutionTemporarilyRestricted {
+                account_index: Decode::decode_ext(reader, None)?,
+            },
             36 => E::UnbalancedTransaction,
             37 => E::ProgramCacheHitMaxLimit,
             38 => E::CommitCancelled,
@@ -1550,7 +1557,6 @@ impl Decode for ifc::GeyserPluginError {
         })
     }
 }
-
 
 #[test]
 fn test_agave_slot_status_roundtrip() {
@@ -2021,8 +2027,7 @@ fn test_msg3_v0_lookup_and_message_roundtrip() {
     // Lookup alone
     let mut buf = Vec::new();
     v0msg.address_table_lookups[0].encode(&mut buf).unwrap();
-    let dec_lookup: msg3::v0::MessageAddressTableLookup =
-        decode(&mut Cursor::new(&buf)).unwrap();
+    let dec_lookup: msg3::v0::MessageAddressTableLookup = decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(v0msg.address_table_lookups[0], dec_lookup);
 
     // Entire v0 message
@@ -2061,7 +2066,10 @@ fn test_msg3_sanitized_message_roundtrip_both_variants() {
     let mut buf = Vec::new();
     s_legacy.encode(&mut buf).unwrap();
     let dec_legacy: msg3::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
-    match dec_legacy { msg3::SanitizedMessage::Legacy(_) => {}, _ => panic!("wrong variant") }
+    match dec_legacy {
+        msg3::SanitizedMessage::Legacy(_) => {}
+        _ => panic!("wrong variant"),
+    }
 
     // V0 variant with loaded addresses
     let v0msg = msg3::v0::Message {
@@ -2080,7 +2088,10 @@ fn test_msg3_sanitized_message_roundtrip_both_variants() {
     buf.clear();
     s_v0.encode(&mut buf).unwrap();
     let dec_v0: msg3::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
-    match dec_v0 { msg3::SanitizedMessage::V0(_) => {}, _ => panic!("wrong variant") }
+    match dec_v0 {
+        msg3::SanitizedMessage::V0(_) => {}
+        _ => panic!("wrong variant"),
+    }
 }
 
 #[test]
@@ -2113,7 +2124,12 @@ fn test_tx3_sanitized_transaction_roundtrips() {
             accounts: vec![0],
             data: vec![1, 2],
         }];
-        let legacy = msg3::legacy::Message { header, account_keys, recent_blockhash, instructions };
+        let legacy = msg3::legacy::Message {
+            header,
+            account_keys,
+            recent_blockhash,
+            instructions,
+        };
         let reserved = std::collections::HashSet::default();
         msg3::LegacyMessage::new(legacy, &reserved)
     };
@@ -2140,7 +2156,10 @@ fn test_tx3_sanitized_transaction_roundtrips() {
     };
     let loaded = msg3::v0::LoadedMessage::new(
         v0msg,
-        msg3::v0::LoadedAddresses { writable: vec![], readonly: vec![] },
+        msg3::v0::LoadedAddresses {
+            writable: vec![],
+            readonly: vec![],
+        },
         &std::collections::HashSet::default(),
     );
     let s_v0 = msg3::SanitizedMessage::V0(loaded);
@@ -2176,7 +2195,10 @@ fn test_tx3_versioned_transaction_roundtrip_and_dedupe() {
             data: vec![0xEE],
         }],
     });
-    let tx = tx3::versioned::VersionedTransaction { signatures: vec![sig3::Signature::default()], message };
+    let tx = tx3::versioned::VersionedTransaction {
+        signatures: vec![sig3::Signature::default()],
+        message,
+    };
 
     let mut buf_plain = Vec::new();
     tx.encode_ext(&mut buf_plain, None).unwrap();
@@ -2185,7 +2207,11 @@ fn test_tx3_versioned_transaction_roundtrip_and_dedupe() {
     tx.encode_ext(&mut buf_dedupe, Some(&mut enc)).unwrap();
     assert!(buf_dedupe.len() < buf_plain.len());
     let mut dec = DedupeDecoder::new();
-    let rt = tx3::versioned::VersionedTransaction::decode_ext(&mut Cursor::new(&buf_dedupe), Some(&mut dec)).unwrap();
+    let rt = tx3::versioned::VersionedTransaction::decode_ext(
+        &mut Cursor::new(&buf_dedupe),
+        Some(&mut dec),
+    )
+    .unwrap();
     assert_eq!(tx, rt);
 }
 
@@ -2216,7 +2242,10 @@ fn test_rewards_and_partitions_roundtrip() {
         reward_type: Some(reward_info::RewardType::Fee),
         commission: Some(3),
     };
-    let rap = txstatus3::RewardsAndNumPartitions { rewards: vec![r], num_partitions: Some(2) };
+    let rap = txstatus3::RewardsAndNumPartitions {
+        rewards: vec![r],
+        num_partitions: Some(2),
+    };
     let mut buf = Vec::new();
     rap.encode(&mut buf).unwrap();
     let d: txstatus3::RewardsAndNumPartitions = decode(&mut Cursor::new(&buf)).unwrap();
@@ -2226,7 +2255,10 @@ fn test_rewards_and_partitions_roundtrip() {
 #[test]
 fn test_txctx_return_data_roundtrip() {
     use crate::prelude::*;
-    let v = txctx3::TransactionReturnData { program_id: pubkey3::Pubkey::new_unique(), data: vec![1, 2, 3] };
+    let v = txctx3::TransactionReturnData {
+        program_id: pubkey3::Pubkey::new_unique(),
+        data: vec![1, 2, 3],
+    };
     let mut buf = Vec::new();
     v.encode(&mut buf).unwrap();
     let d: txctx3::TransactionReturnData = decode(&mut Cursor::new(&buf)).unwrap();

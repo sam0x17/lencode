@@ -1,23 +1,27 @@
 #![cfg(feature = "std")]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::hint::black_box;
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lencode::prelude::*;
 use rand::{Rng, rng};
 use std::collections::VecDeque;
+use std::hint::black_box;
 
 fn bench_bytes_encoding(c: &mut Criterion) {
     let mut group = c.benchmark_group("bytes_encode");
 
     // Small random (likely raw)
     let rand_small: Vec<u8> = (0..256).map(|_| rand::rng().random()).collect();
-    group.bench_with_input(BenchmarkId::new("slice", "rand_small"), &rand_small, |b, data| {
-        b.iter(|| {
-            let mut buf = Vec::new();
-            black_box((&data[..]).encode(&mut buf).unwrap());
-            black_box(buf)
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("slice", "rand_small"),
+        &rand_small,
+        |b, data| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                black_box((&data[..]).encode(&mut buf).unwrap());
+                black_box(buf)
+            })
+        },
+    );
 
     // Large zeros (compressible)
     let zeros: Vec<u8> = vec![0; 64 * 1024];
@@ -41,7 +45,9 @@ fn bench_bytes_encoding(c: &mut Criterion) {
     });
 
     // Vec<u8> repeated pattern
-    let patt: Vec<u8> = (0..128).flat_map(|i| core::iter::repeat(i as u8).take(256)).collect();
+    let patt: Vec<u8> = (0..128)
+        .flat_map(|i| core::iter::repeat(i as u8).take(256))
+        .collect();
     group.bench_with_input(BenchmarkId::new("vec", "pattern"), &patt, |b, data| {
         b.iter(|| {
             let mut buf = Vec::new();
@@ -52,13 +58,17 @@ fn bench_bytes_encoding(c: &mut Criterion) {
 
     // VecDeque<u8> zeros
     let deq_zeros: VecDeque<u8> = std::iter::repeat(0u8).take(128 * 1024).collect();
-    group.bench_with_input(BenchmarkId::new("vecdeque", "zeros_128k"), &deq_zeros, |b, data| {
-        b.iter(|| {
-            let mut buf = Vec::new();
-            black_box(data.encode(&mut buf).unwrap());
-            black_box(buf)
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("vecdeque", "zeros_128k"),
+        &deq_zeros,
+        |b, data| {
+            b.iter(|| {
+                let mut buf = Vec::new();
+                black_box(data.encode(&mut buf).unwrap());
+                black_box(buf)
+            })
+        },
+    );
 
     group.finish();
 }
@@ -70,7 +80,9 @@ fn bench_bytes_decoding(c: &mut Criterion) {
     let rand_small: Vec<u8> = (0..256).map(|_| rand::rng().random()).collect();
     let zeros: Vec<u8> = vec![0; 64 * 1024];
     let rand_big: Vec<u8> = (0..32 * 1024).map(|_| rand::rng().random()).collect();
-    let patt: Vec<u8> = (0..128).flat_map(|i| core::iter::repeat(i as u8).take(256)).collect();
+    let patt: Vec<u8> = (0..128)
+        .flat_map(|i| core::iter::repeat(i as u8).take(256))
+        .collect();
     let deq_zeros: VecDeque<u8> = std::iter::repeat(0u8).take(128 * 1024).collect();
 
     let enc_rand_small = {

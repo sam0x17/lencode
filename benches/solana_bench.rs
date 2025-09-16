@@ -203,7 +203,12 @@ fn benchmark_compiled_instruction_data(c: &mut Criterion) {
     group.bench_function("lencode_decode_compressible", |b| {
         b.iter_batched(
             || Cursor::new(enc_compressible.clone()),
-            |mut cursor| black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(&mut cursor)).unwrap(),
+            |mut cursor| {
+                black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(
+                    &mut cursor,
+                ))
+                .unwrap()
+            },
             criterion::BatchSize::SmallInput,
         )
     });
@@ -211,7 +216,12 @@ fn benchmark_compiled_instruction_data(c: &mut Criterion) {
     group.bench_function("lencode_decode_random", |b| {
         b.iter_batched(
             || Cursor::new(enc_random.clone()),
-            |mut cursor| black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(&mut cursor)).unwrap(),
+            |mut cursor| {
+                black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(
+                    &mut cursor,
+                ))
+                .unwrap()
+            },
             criterion::BatchSize::SmallInput,
         )
     });

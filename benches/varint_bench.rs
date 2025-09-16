@@ -1,6 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use std::hint::black_box;
 use lencode::prelude::*;
+use std::hint::black_box;
 
 fn bench_encode(c: &mut Criterion) {
     c.bench_function("lencode_encode_u64", |b| {
