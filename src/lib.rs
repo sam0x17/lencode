@@ -455,10 +455,24 @@ impl Encode for &str {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        let mut total_written = 0;
-        total_written += Self::encode_len(self.len(), writer)?;
-        total_written += writer.write(self.as_bytes())?;
-        Ok(total_written)
+        // Encode as either raw UTF-8 bytes or compressed with a 1-bit flag in header
+        let bytes = self.as_bytes();
+        let compressed = bytes::zstd_compress(bytes)?;
+        let raw_len = bytes.len();
+        let comp_len = compressed.len();
+        let raw_hdr = bytes::flagged_header_len(raw_len, false);
+        let comp_hdr = bytes::flagged_header_len(comp_len, true);
+        if comp_len + comp_hdr < raw_len + raw_hdr {
+            let mut total = 0;
+            total += Self::encode_len((comp_len << 1) | 1, writer)?;
+            total += writer.write(&compressed)?;
+            Ok(total)
+        } else {
+            let mut total = 0;
+            total += Self::encode_len(raw_len << 1, writer)?;
+            total += writer.write(bytes)?;
+            Ok(total)
+        }
     }
 }
 
@@ -469,10 +483,7 @@ impl Encode for String {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        let mut total_written = 0;
-        total_written += Self::encode_len(self.len(), writer)?;
-        total_written += writer.write(self.as_bytes())?;
-        Ok(total_written)
+        self.as_str().encode_ext(writer, None)
     }
 }
 
@@ -482,10 +493,26 @@ impl Decode for String {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        let len = Self::decode_len(reader)?;
-        let mut buf = vec![0u8; len];
-        reader.read(&mut buf)?;
-        String::from_utf8(buf).map_err(|_| Error::InvalidData)
+        let flagged = Self::decode_len(reader)?;
+        let is_compressed = (flagged & 1) == 1;
+        let payload_len = flagged >> 1;
+        if is_compressed {
+            let mut comp = vec![0u8; payload_len];
+            let mut read = 0usize;
+            while read < payload_len {
+                read += reader.read(&mut comp[read..])?;
+            }
+            let orig_len = bytes::zstd_content_size(&comp)?;
+            let out = bytes::zstd_decompress(&comp, orig_len)?;
+            String::from_utf8(out).map_err(|_| Error::InvalidData)
+        } else {
+            let mut buf = vec![0u8; payload_len];
+            let mut read = 0usize;
+            while read < payload_len {
+                read += reader.read(&mut buf[read..])?;
+            }
+            String::from_utf8(buf).map_err(|_| Error::InvalidData)
+        }
     }
 }
 
@@ -1450,6 +1477,104 @@ fn test_compressed_bytes_roundtrip_slice() {
     assert!(n > 0);
     let rt: Vec<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(rt, data);
+}
+
+#[test]
+fn test_string_flag_raw_small_ascii() {
+    use crate::prelude::*;
+    let s = "Hello, Lencode!";
+    let mut buf = Vec::new();
+    s.encode(&mut buf).unwrap();
+
+    // Parse flagged header
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flag = flagged & 1;
+    let payload_len = flagged >> 1;
+    assert_eq!(flag, 0, "expected raw path for small ASCII string");
+    assert_eq!(payload_len, s.len());
+
+    // Verify raw payload equals original bytes
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    assert_eq!(&buf[header.len()..], s.as_bytes());
+
+    // Round-trip decode
+    let rt: String = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, s);
+}
+
+#[test]
+fn test_string_flag_compressed_repetitive_ascii() {
+    use crate::prelude::*;
+    // Highly compressible ASCII
+    let s = core::iter::repeat('A').take(32 * 1024).collect::<String>();
+    let mut buf = Vec::new();
+    s.encode(&mut buf).unwrap();
+
+    // Parse flagged header
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flag = flagged & 1;
+    let payload_len = flagged >> 1;
+    assert_eq!(flag, 1, "expected compressed path for repetitive string");
+
+    // Payload length matches buffer remainder
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    assert_eq!(buf.len() - header.len(), payload_len);
+
+    // Verify decompression restores original
+    let payload = &buf[header.len()..];
+    let frame_len = crate::bytes::zstd_content_size(payload).unwrap();
+    assert_eq!(frame_len, s.len());
+    let manual = crate::bytes::zstd_decompress(payload, frame_len).unwrap();
+    assert_eq!(manual, s.as_bytes());
+
+    // Round-trip decode
+    let rt: String = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, s);
+}
+
+#[test]
+fn test_string_flag_compressed_unicode() {
+    use crate::prelude::*;
+    // Compressible Unicode string (multi-byte UTF-8)
+    let s = core::iter::repeat("😀").take(8192).collect::<String>();
+    let mut buf = Vec::new();
+    s.encode(&mut buf).unwrap();
+
+    // Parse header and ensure compressed
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    assert_eq!(flagged & 1, 1);
+
+    // Round-trip decode
+    let rt: String = Decode::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(rt, s);
+}
+
+#[test]
+fn test_string_flag_corrupted_compressed_payload_errors() {
+    use crate::prelude::*;
+    // Ensure compression path is used
+    let s = core::iter::repeat('X').take(4096).collect::<String>();
+    let mut buf = Vec::new();
+    s.encode(&mut buf).unwrap();
+
+    // Get header length
+    let mut c = Cursor::new(&buf);
+    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    assert_eq!(flagged & 1, 1);
+    let mut header = Vec::new();
+    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+
+    if buf.len() > header.len() + 10 {
+        let mut corrupted = buf.clone();
+        corrupted[header.len() + 10] ^= 0xFF;
+        let res: Result<String> = Decode::decode(&mut Cursor::new(&corrupted));
+        assert!(res.is_err());
+    }
 }
 
 #[test]
