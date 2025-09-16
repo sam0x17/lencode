@@ -441,7 +441,7 @@ impl Encode for &[u8] {
             Ok(total)
         } else {
             let mut total = 0;
-            total += Self::encode_len(((raw_len << 1)), writer)?;
+            total += Self::encode_len((raw_len << 1), writer)?;
             total += writer.write(self)?;
             Ok(total)
         }
@@ -666,7 +666,7 @@ impl<T: Encode + 'static> Encode for Vec<T> {
                 return Ok(total);
             } else {
                 let mut total = 0;
-                total += Self::encode_len(((raw_len << 1)), writer)?;
+                total += Self::encode_len((raw_len << 1), writer)?;
                 total += writer.write(bytes)?;
                 return Ok(total);
             }
@@ -777,7 +777,7 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
                 return Ok(total_written);
             } else {
                 let mut total_written = 0;
-                total_written += Self::encode_len(((raw_len << 1)), writer)?;
+                total_written += Self::encode_len((raw_len << 1), writer)?;
                 total_written += writer.write(&tmp)?;
                 return Ok(total_written);
             }

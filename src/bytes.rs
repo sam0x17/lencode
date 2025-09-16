@@ -74,7 +74,7 @@ const fn varint_len_usize(mut val: usize) -> usize {
 ///
 /// The header encodes `(payload_len << 1) | (compressed as usize)` using Lencode varint.
 #[inline(always)]
-pub fn flagged_header_len(payload_len: usize, compressed: bool) -> usize {
+pub const fn flagged_header_len(payload_len: usize, compressed: bool) -> usize {
     let v = (payload_len << 1) | (compressed as usize);
     varint_len_usize(v)
 }
