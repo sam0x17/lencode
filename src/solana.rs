@@ -1,337 +1,7 @@
-use solana_sdk::{
-    hash::{HASH_BYTES, Hash},
-    instruction::CompiledInstruction,
-    message::{
-        LegacyMessage, Message, MessageHeader, SanitizedMessage, VersionedMessage,
-        v0::{self, MessageAddressTableLookup},
-    },
-    pubkey::Pubkey,
-    signature::{SIGNATURE_BYTES, Signature},
-    transaction::{SanitizedTransaction, VersionedTransaction},
-};
-
-use crate::prelude::*;
-
-impl Pack for Pubkey {
-    #[inline(always)]
-    fn pack(&self, writer: &mut impl Write) -> Result<usize> {
-        self.as_array().pack(writer)
-    }
-
-    #[inline(always)]
-    fn unpack(reader: &mut impl Read) -> Result<Self> {
-        let mut buf = [0u8; 32];
-        if reader.read(&mut buf)? != 32 {
-            return Err(Error::ReaderOutOfData);
-        }
-        Ok(Pubkey::new_from_array(buf))
-    }
-}
-
-impl DedupeEncodeable for Pubkey {}
-impl DedupeDecodeable for Pubkey {}
-
-impl Encode for Hash {
-    #[inline(always)]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        self.to_bytes().encode_ext(writer, dedupe_encoder)
-    }
-}
-
-impl Decode for Hash {
-    #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let bytes = <[u8; HASH_BYTES]>::decode_ext(reader, dedupe_decoder)?;
-        Ok(Hash::new_from_array(bytes))
-    }
-}
-
-impl Encode for Signature {
-    #[inline(always)]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        self.as_array().encode_ext(writer, dedupe_encoder)
-    }
-}
-
-impl Decode for Signature {
-    #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let sig: [u8; SIGNATURE_BYTES] = decode(reader)?;
-        Ok(Signature::from(sig))
-    }
-}
-
-// ========== solana-sdk (v2) message primitives ==========
-
-impl Encode for MessageHeader {
-    #[inline(always)]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let combined = u32::from_le_bytes([
-            self.num_required_signatures,
-            self.num_readonly_signed_accounts,
-            self.num_readonly_unsigned_accounts,
-            0,
-        ]);
-        combined.encode_ext(writer, dedupe_encoder)
-    }
-}
-
-impl Decode for MessageHeader {
-    #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let combined: u32 = decode(reader)?;
-        let b = combined.to_le_bytes();
-        Ok(Self {
-            num_required_signatures: b[0],
-            num_readonly_signed_accounts: b[1],
-            num_readonly_unsigned_accounts: b[2],
-        })
-    }
-}
-
-impl Encode for CompiledInstruction {
-    #[inline(always)]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self
-            .program_id_index
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .accounts
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.data.encode_ext(writer, dedupe_encoder)?;
-        Ok(n)
-    }
-}
-
-impl Decode for CompiledInstruction {
-    #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let program_id_index: u8 = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let accounts: Vec<u8> = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let data: Vec<u8> = Decode::decode_ext(reader, dedupe_decoder)?;
-        Ok(Self {
-            program_id_index,
-            accounts,
-            data,
-        })
-    }
-}
-
-impl Encode for Message {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self
-            .header
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .account_keys
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .recent_blockhash
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.instructions.encode_ext(writer, dedupe_encoder)?;
-        Ok(n)
-    }
-}
-
-impl Decode for Message {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let header: MessageHeader = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let account_keys: Vec<Pubkey> = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let recent_blockhash: Hash = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let instructions: Vec<CompiledInstruction> = Decode::decode_ext(reader, dedupe_decoder)?;
-        Ok(Self {
-            header,
-            account_keys,
-            recent_blockhash,
-            instructions,
-        })
-    }
-}
-
-impl Encode for MessageAddressTableLookup {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self
-            .account_key
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .writable_indexes
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.readonly_indexes.encode_ext(writer, dedupe_encoder)?;
-        Ok(n)
-    }
-}
-
-impl Decode for MessageAddressTableLookup {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let account_key: Pubkey = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let writable_indexes: Vec<u8> = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let readonly_indexes: Vec<u8> = Decode::decode_ext(reader, dedupe_decoder)?;
-        Ok(Self {
-            account_key,
-            writable_indexes,
-            readonly_indexes,
-        })
-    }
-}
-
-impl Encode for v0::Message {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self
-            .header
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .account_keys
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .recent_blockhash
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .instructions
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .address_table_lookups
-            .encode_ext(writer, dedupe_encoder)?;
-        Ok(n)
-    }
-}
-
-impl Decode for v0::Message {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let header: MessageHeader = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let account_keys: Vec<Pubkey> = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let recent_blockhash: Hash = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let instructions: Vec<CompiledInstruction> =
-            Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let address_table_lookups: Vec<MessageAddressTableLookup> =
-            Decode::decode_ext(reader, dedupe_decoder)?;
-        Ok(Self {
-            header,
-            account_keys,
-            recent_blockhash,
-            instructions,
-            address_table_lookups,
-        })
-    }
-}
-
-impl Encode for LegacyMessage<'_> {
-    #[inline(always)]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut n = 0;
-        n += self
-            .message
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .is_writable_account_cache
-            .encode_ext(writer, dedupe_encoder)?;
-        Ok(n)
-    }
-}
-
-impl Decode for LegacyMessage<'_> {
-    #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let message: Message = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let is_writable_account_cache: Vec<bool> = Decode::decode_ext(reader, dedupe_decoder)?;
-        Ok(LegacyMessage {
-            message: std::borrow::Cow::Owned(message),
-            is_writable_account_cache,
-        })
-    }
-}
-
-impl Encode for SanitizedMessage {
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        match self {
-            SanitizedMessage::Legacy(inner) => {
-                let mut n = <usize as Encode>::encode_discriminant(0, writer)?;
-                n += inner.encode_ext(writer, dedupe_encoder)?;
-                Ok(n)
-            }
-            SanitizedMessage::V0(inner) => {
-                let mut n = <usize as Encode>::encode_discriminant(1, writer)?;
-                n += inner.encode_ext(writer, dedupe_encoder)?;
-                Ok(n)
-            }
-        }
-    }
-}
-
-// Implementations for Agave (v3) Geyser interface and its dependencies (inline)
 use agave_geyser_plugin_interface::geyser_plugin_interface as ifc;
 use solana_account_decoder_client_types as acct_dec_client;
 use solana_hash as hash3;
-use solana_instruction_error as ixerr;
+use solana_instruction::error as ixerr;
 use solana_message as msg3;
 use solana_pubkey as pubkey3;
 use solana_reward_info as reward_info;
@@ -340,6 +10,25 @@ use solana_transaction as tx3;
 use solana_transaction_context as txctx3;
 use solana_transaction_error as txerr3;
 use solana_transaction_status as txstatus3;
+
+use crate::prelude::*;
+
+#[cfg(test)]
+use hash3::Hash;
+#[cfg(test)]
+use msg3::{
+    LegacyMessage, Message, MessageHeader, SanitizedMessage,
+    compiled_instruction::CompiledInstruction,
+    v0::{self, MessageAddressTableLookup},
+};
+#[cfg(test)]
+use pubkey3::Pubkey;
+#[cfg(test)]
+use sig3::Signature;
+#[cfg(test)]
+use tx3::versioned::VersionedTransaction;
+
+// Implementations for Agave (v3) Geyser interface and its dependencies (inline)
 
 // No serde/bincode usage in this module; all types implement Encode/Decode directly.
 
@@ -1622,217 +1311,6 @@ fn test_agave_geyser_plugin_error_roundtrip() {
         }
     }
 }
-impl Encode for v0::LoadedAddresses {
-    #[inline(always)]
-    #[allow(clippy::needless_option_as_deref)]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut total = 0;
-        total += self
-            .writable
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total += self
-            .readonly
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        Ok(total)
-    }
-}
-
-impl Decode for v0::LoadedAddresses {
-    #[inline(always)]
-    #[allow(clippy::needless_option_as_deref)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let writable = Vec::<Pubkey>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let readonly = Vec::<Pubkey>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        Ok(v0::LoadedAddresses { writable, readonly })
-    }
-}
-
-impl<'a> Encode for v0::LoadedMessage<'a> {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut total = 0;
-        total += self
-            .message
-            .as_ref()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total += self
-            .loaded_addresses
-            .as_ref()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total += self
-            .is_writable_account_cache
-            .encode_ext(writer, dedupe_encoder)?;
-        Ok(total)
-    }
-}
-
-impl<'a> Decode for v0::LoadedMessage<'a> {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let message = v0::Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let loaded_addresses =
-            v0::LoadedAddresses::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let is_writable_account_cache = Vec::<bool>::decode_ext(reader, dedupe_decoder)?;
-        Ok(v0::LoadedMessage {
-            message: std::borrow::Cow::Owned(message),
-            loaded_addresses: std::borrow::Cow::Owned(loaded_addresses),
-            is_writable_account_cache,
-        })
-    }
-}
-
-impl Encode for SanitizedTransaction {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut total = 0;
-        total += self
-            .message()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total += self
-            .message_hash()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total += self
-            .is_simple_vote_transaction()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        let sigs: Vec<Signature> = self.signatures().to_vec();
-        total += sigs.encode_ext(writer, dedupe_encoder)?;
-        Ok(total)
-    }
-}
-
-impl Decode for SanitizedTransaction {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let message = SanitizedMessage::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let message_hash = Hash::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let is_simple_vote_tx = bool::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let signatures = Vec::<Signature>::decode_ext(reader, dedupe_decoder)?;
-        SanitizedTransaction::try_new_from_fields(
-            message,
-            message_hash,
-            is_simple_vote_tx,
-            signatures,
-        )
-        .map_err(|_| Error::InvalidData)
-    }
-}
-
-impl Decode for SanitizedMessage {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let disc = <usize as Decode>::decode_discriminant(reader)?;
-        match disc {
-            0 => {
-                let inner = LegacyMessage::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-                Ok(SanitizedMessage::Legacy(inner))
-            }
-            1 => {
-                let inner = v0::LoadedMessage::decode_ext(reader, dedupe_decoder)?;
-                Ok(SanitizedMessage::V0(inner))
-            }
-            _ => Err(Error::InvalidData),
-        }
-    }
-}
-
-impl Encode for VersionedMessage {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut total = 0;
-        match self {
-            VersionedMessage::Legacy(message) => {
-                total += <usize as Encode>::encode_discriminant(0, writer)?;
-                total += message.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-            }
-            VersionedMessage::V0(message) => {
-                total += <usize as Encode>::encode_discriminant(1, writer)?;
-                total += message.encode_ext(writer, dedupe_encoder)?;
-            }
-        }
-        Ok(total)
-    }
-}
-
-impl Decode for VersionedMessage {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let disc = <usize as Decode>::decode_discriminant(reader)?;
-        match disc {
-            0 => {
-                let legacy = Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-                Ok(VersionedMessage::Legacy(legacy))
-            }
-            1 => {
-                let v0msg = v0::Message::decode_ext(reader, dedupe_decoder)?;
-                Ok(VersionedMessage::V0(v0msg))
-            }
-            _ => Err(Error::InvalidData),
-        }
-    }
-}
-
-impl Encode for VersionedTransaction {
-    #[inline]
-    fn encode_ext(
-        &self,
-        writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
-    ) -> Result<usize> {
-        let mut total = 0;
-        total += self
-            .signatures
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total += self.message.encode_ext(writer, dedupe_encoder)?;
-        Ok(total)
-    }
-}
-
-impl Decode for VersionedTransaction {
-    #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let signatures = Vec::<Signature>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let message = VersionedMessage::decode_ext(reader, dedupe_decoder)?;
-        Ok(VersionedTransaction {
-            signatures,
-            message,
-        })
-    }
-}
-
 // ===== Tests for Solana (v2) and Agave (v3) types =====
 
 #[test]
@@ -1855,11 +1333,11 @@ fn test_versioned_message_encode_decode_legacy() {
         recent_blockhash,
         instructions,
     };
-    let vm = VersionedMessage::Legacy(legacy);
+    let vm = msg3::VersionedMessage::Legacy(legacy);
 
     let mut buf = Vec::new();
     vm.encode(&mut buf).unwrap();
-    let decoded = VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
+    let decoded = msg3::VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
     assert_eq!(vm, decoded);
 }
 
@@ -1885,11 +1363,11 @@ fn test_versioned_message_encode_decode_v0() {
         instructions,
         address_table_lookups,
     };
-    let vm = VersionedMessage::V0(v0msg);
+    let vm = msg3::VersionedMessage::V0(v0msg);
 
     let mut buf = Vec::new();
     vm.encode(&mut buf).unwrap();
-    let decoded = VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
+    let decoded = msg3::VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
     assert_eq!(vm, decoded);
 }
 
@@ -1909,7 +1387,7 @@ fn test_versioned_transaction_roundtrip_and_dedupe() {
         accounts: vec![0, 1],
         data: vec![0xAA],
     }];
-    let message = VersionedMessage::Legacy(Message {
+    let message = msg3::VersionedMessage::Legacy(Message {
         header,
         account_keys,
         recent_blockhash,
@@ -1932,9 +1410,11 @@ fn test_versioned_transaction_roundtrip_and_dedupe() {
 
     // Round-trip with decoder
     let mut dec = DedupeDecoder::new();
-    let tx_dec =
-        VersionedTransaction::decode_ext(&mut std::io::Cursor::new(&buf_dedupe), Some(&mut dec))
-            .unwrap();
+    let tx_dec = tx3::versioned::VersionedTransaction::decode_ext(
+        &mut std::io::Cursor::new(&buf_dedupe),
+        Some(&mut dec),
+    )
+    .unwrap();
     assert_eq!(tx, tx_dec);
 }
 
@@ -2331,17 +1811,17 @@ fn test_encode_decode_sanitized_message() {
         message: std::borrow::Cow::Owned(message),
         is_writable_account_cache: vec![true, false, true, false],
     };
-    let original = SanitizedMessage::Legacy(legacy_message);
+    let original = msg3::SanitizedMessage::Legacy(legacy_message);
 
     let mut buffer = Vec::new();
     let bytes_written = original.encode(&mut buffer).unwrap();
     assert!(bytes_written > 0);
 
     let mut cursor = Cursor::new(&buffer);
-    let decoded: SanitizedMessage = SanitizedMessage::decode(&mut cursor).unwrap();
+    let decoded: SanitizedMessage = msg3::SanitizedMessage::decode(&mut cursor).unwrap();
 
     match (&original, &decoded) {
-        (SanitizedMessage::Legacy(orig), SanitizedMessage::Legacy(decoded)) => {
+        (msg3::SanitizedMessage::Legacy(orig), msg3::SanitizedMessage::Legacy(decoded)) => {
             assert_eq!(orig.message, decoded.message);
             assert_eq!(
                 orig.is_writable_account_cache,
@@ -2384,16 +1864,20 @@ fn test_encode_decode_sanitized_transaction_legacy() {
         is_writable_account_cache,
     };
 
-    let sanitized = SanitizedMessage::Legacy(legacy_message);
+    let sanitized = msg3::SanitizedMessage::Legacy(legacy_message);
     let signatures = vec![Signature::default(), Signature::default()];
-    let tx =
-        SanitizedTransaction::try_new_from_fields(sanitized, Hash::new_unique(), false, signatures)
-            .unwrap();
+    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+        sanitized,
+        Hash::new_unique(),
+        false,
+        signatures,
+    )
+    .unwrap();
 
     // Round-trip encode/decode
     let mut buf = Vec::new();
     tx.encode(&mut buf).unwrap();
-    let decoded = SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    let decoded = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(tx, decoded);
 }
 
@@ -2426,17 +1910,21 @@ fn test_encode_decode_sanitized_transaction_v0() {
     };
     let sanitized_v0 =
         v0::LoadedMessage::new(msg, loaded_addresses, &std::collections::HashSet::default());
-    let sanitized = SanitizedMessage::V0(sanitized_v0);
+    let sanitized = msg3::SanitizedMessage::V0(sanitized_v0);
 
     let signatures = vec![Signature::default()];
-    let tx =
-        SanitizedTransaction::try_new_from_fields(sanitized, Hash::new_unique(), false, signatures)
-            .unwrap();
+    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+        sanitized,
+        Hash::new_unique(),
+        false,
+        signatures,
+    )
+    .unwrap();
 
     // Round-trip encode/decode
     let mut buf = Vec::new();
     tx.encode(&mut buf).unwrap();
-    let decoded = SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    let decoded = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(tx, decoded);
 }
 
@@ -2470,8 +1958,8 @@ fn test_sanitized_transaction_legacy_with_dedup() {
         message: std::borrow::Cow::Owned(message),
         is_writable_account_cache,
     };
-    let sanitized = SanitizedMessage::Legacy(legacy_message);
-    let tx = SanitizedTransaction::try_new_from_fields(
+    let sanitized = msg3::SanitizedMessage::Legacy(legacy_message);
+    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
         sanitized,
         Hash::new_unique(),
         false,
@@ -2490,8 +1978,12 @@ fn test_sanitized_transaction_legacy_with_dedup() {
 
     // Round-trip decode both using a shared decoder to respect IDs
     let mut dec = DedupeDecoder::new();
-    let tx1 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec)).unwrap();
-    let tx2 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec)).unwrap();
+    let tx1 =
+        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec))
+            .unwrap();
+    let tx2 =
+        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec))
+            .unwrap();
     assert_eq!(tx, tx1);
     assert_eq!(tx, tx2);
 }
@@ -2528,8 +2020,8 @@ fn test_sanitized_transaction_v0_with_dedup() {
     };
     let loaded =
         v0::LoadedMessage::new(msg, loaded_addresses, &std::collections::HashSet::default());
-    let sanitized = SanitizedMessage::V0(loaded);
-    let tx = SanitizedTransaction::try_new_from_fields(
+    let sanitized = msg3::SanitizedMessage::V0(loaded);
+    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
         sanitized,
         Hash::new_unique(),
         false,
@@ -2545,8 +2037,12 @@ fn test_sanitized_transaction_v0_with_dedup() {
     assert!(buf2.len() < buf1.len());
 
     let mut dec = DedupeDecoder::new();
-    let tx1 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec)).unwrap();
-    let tx2 = SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec)).unwrap();
+    let tx1 =
+        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec))
+            .unwrap();
+    let tx2 =
+        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec))
+            .unwrap();
     assert_eq!(tx, tx1);
     assert_eq!(tx, tx2);
 }

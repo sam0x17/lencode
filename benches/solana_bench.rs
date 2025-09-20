@@ -5,7 +5,8 @@ use lencode::{
 };
 use rand::Rng;
 use rand::seq::SliceRandom;
-use solana_sdk::pubkey::Pubkey;
+use solana_message::compiled_instruction::CompiledInstruction;
+use solana_pubkey::Pubkey;
 use std::hint::black_box;
 use std::io::Cursor;
 
@@ -158,9 +159,9 @@ fn benchmark_compiled_instruction_data(c: &mut Criterion) {
     let compressible_data: Vec<u8> = vec![0; 64 * 1024];
     let random_data: Vec<u8> = (0..64 * 1024).map(|_| rng.random()).collect();
 
-    let mk_ixs = |data: &Vec<u8>| -> Vec<solana_sdk::instruction::CompiledInstruction> {
+    let mk_ixs = |data: &Vec<u8>| -> Vec<CompiledInstruction> {
         (0..64)
-            .map(|i| solana_sdk::instruction::CompiledInstruction {
+            .map(|i| CompiledInstruction {
                 program_id_index: (i % 5) as u8,
                 accounts: vec![0, 1, 2, 3, 4],
                 data: data.clone(),
@@ -203,12 +204,7 @@ fn benchmark_compiled_instruction_data(c: &mut Criterion) {
     group.bench_function("lencode_decode_compressible", |b| {
         b.iter_batched(
             || Cursor::new(enc_compressible.clone()),
-            |mut cursor| {
-                black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(
-                    &mut cursor,
-                ))
-                .unwrap()
-            },
+            |mut cursor| black_box(Vec::<CompiledInstruction>::decode(&mut cursor)).unwrap(),
             criterion::BatchSize::SmallInput,
         )
     });
@@ -216,12 +212,7 @@ fn benchmark_compiled_instruction_data(c: &mut Criterion) {
     group.bench_function("lencode_decode_random", |b| {
         b.iter_batched(
             || Cursor::new(enc_random.clone()),
-            |mut cursor| {
-                black_box(Vec::<solana_sdk::instruction::CompiledInstruction>::decode(
-                    &mut cursor,
-                ))
-                .unwrap()
-            },
+            |mut cursor| black_box(Vec::<CompiledInstruction>::decode(&mut cursor)).unwrap(),
             criterion::BatchSize::SmallInput,
         )
     });

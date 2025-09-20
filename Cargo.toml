@@ -15,14 +15,14 @@ documentation = "https://docs.rs/lencode/latest/lencode/"
 [dependencies]
 endian-cast = "2"
 generic-array = "1"
-solana-sdk = { version = "2", optional = true }
+solana-sdk = { version = "3", optional = true }
 agave-geyser-plugin-interface = { version = "3", optional = true }
 solana-message = { version = "3", optional = true }
 solana-transaction = { version = "3", optional = true }
 solana-transaction-status = { version = "3", optional = true }
 solana-transaction-context = { version = "3", optional = true }
 solana-transaction-error = { version = "3", optional = true }
-solana-instruction-error = { version = "2", optional = true }
+solana-instruction = { version = "3", optional = true }
 solana-hash = { version = "3", optional = true }
 solana-signature = { version = "3", optional = true }
 solana-pubkey = { version = "3", optional = true }
@@ -59,7 +59,7 @@ solana = [
     "dep:solana-transaction-status",
     "dep:solana-transaction-context",
     "dep:solana-transaction-error",
-    "dep:solana-instruction-error",
+    "dep:solana-instruction",
     "dep:solana-hash",
     "dep:solana-signature",
     "dep:solana-pubkey",

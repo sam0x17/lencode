@@ -6,14 +6,17 @@ use lencode::{
 #[cfg(feature = "solana")]
 use rand::Rng;
 #[cfg(feature = "solana")]
-use solana_sdk::{
-    hash::Hash,
-    instruction::CompiledInstruction,
-    message::{Message, MessageHeader, VersionedMessage, v0},
-    pubkey::Pubkey,
-    signature::Signature,
-    transaction::VersionedTransaction,
+use solana_hash::Hash;
+#[cfg(feature = "solana")]
+use solana_message::{
+    Message, MessageHeader, VersionedMessage, compiled_instruction::CompiledInstruction, v0,
 };
+#[cfg(feature = "solana")]
+use solana_pubkey::Pubkey;
+#[cfg(feature = "solana")]
+use solana_signature::Signature;
+#[cfg(feature = "solana")]
+use solana_transaction::versioned::VersionedTransaction;
 #[cfg(feature = "solana")]
 use std::{io::Cursor, time::Instant};
 

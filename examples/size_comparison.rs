@@ -9,7 +9,7 @@ use rand::Rng;
 use std::io::Cursor;
 
 #[cfg(feature = "solana")]
-use solana_sdk::pubkey::Pubkey;
+use solana_pubkey::Pubkey;
 
 #[cfg(feature = "solana")]
 fn main() {
