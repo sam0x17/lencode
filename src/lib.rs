@@ -123,6 +123,9 @@ pub mod prelude {
     pub use lencode_macros::*;
 }
 
+use core::mem::MaybeUninit;
+use core::ptr;
+
 use prelude::*;
 
 /// Encodes `value` into `writer` using the type’s [`Encode`] implementation.
@@ -606,7 +609,7 @@ impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
     }
 }
 
-impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
+impl<const N: usize, T: Encode> Encode for [T; N] {
     #[inline(always)]
     fn encode_ext(
         &self,
@@ -621,17 +624,34 @@ impl<const N: usize, T: Encode + Default + Copy> Encode for [T; N] {
     }
 }
 
-impl<const N: usize, T: Decode + Default + Copy> Decode for [T; N] {
+impl<const N: usize, T: Decode> Decode for [T; N] {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        let mut arr = [T::default(); N];
-        for item in &mut arr {
-            *item = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+        let mut arr = MaybeUninit::<[T; N]>::uninit();
+        let arr_ptr = arr.as_mut_ptr() as *mut T;
+        let mut idx = 0;
+        while idx < N {
+            match T::decode_ext(reader, dedupe_decoder.as_deref_mut()) {
+                Ok(value) => unsafe {
+                    ptr::write(arr_ptr.add(idx), value);
+                    idx += 1;
+                },
+                Err(err) => {
+                    for initialized in 0..idx {
+                        unsafe {
+                            ptr::drop_in_place(arr_ptr.add(initialized));
+                        }
+                    }
+                    return Err(err);
+                }
+            }
         }
-        Ok(arr)
+
+        // SAFETY: every element was written above, so the array is fully initialized.
+        Ok(unsafe { arr.assume_init() })
     }
 
     fn decode_len(_reader: &mut impl Read) -> Result<usize> {
@@ -1336,6 +1356,45 @@ fn test_encode_decode_arrays() {
     let n = values.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 5);
     let decoded: [u128; 5] = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
+    assert_eq!(decoded, values);
+}
+
+#[cfg(test)]
+#[derive(PartialEq, Debug)]
+struct NoDefault(u64);
+
+#[cfg(test)]
+impl Encode for NoDefault {
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        self.0.encode_ext(writer, dedupe_encoder)
+    }
+}
+
+#[cfg(test)]
+impl Decode for NoDefault {
+    fn decode_ext(
+        reader: &mut impl Read,
+        dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Ok(Self(u64::decode_ext(reader, dedupe_decoder)?))
+    }
+}
+
+#[test]
+fn test_encode_decode_nested_arrays_roundtrip() {
+    let values = [
+        [NoDefault(1), NoDefault(2), NoDefault(3)],
+        [NoDefault(4), NoDefault(5), NoDefault(6)],
+    ];
+
+    let mut encoded = Vec::new();
+    encode(&values, &mut encoded).unwrap();
+
+    let decoded: [[NoDefault; 3]; 2] = decode(&mut Cursor::new(&encoded)).unwrap();
     assert_eq!(decoded, values);
 }
 
