@@ -120,16 +120,105 @@ impl From<u128> for U256 {
     }
 }
 
-#[test]
-fn test_u256() {
-    let a = U256::new(uint!(3749384739874982798749827982479879287984798U256));
-    let b = U256::new(uint!(38473878979879837598792422429889U256));
-    assert_eq!(a + b - b, a);
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(not(feature = "std"))]
+    use alloc::vec::Vec;
 
-#[test]
-fn test_u256_one_constant() {
-    // Basic sanity for ONE and ZERO
-    assert!(U256::ONE != U256::ZERO);
-    assert_eq!(U256::ONE + U256::ONE, U256::from(2u8));
+    fn payload_len(bytes: &[u8]) -> usize {
+        bytes
+            .iter()
+            .rposition(|&b| b != 0)
+            .map_or(1, |idx| idx + 1)
+    }
+
+    #[test]
+    fn test_u256() {
+        let a = U256::new(uint!(3749384739874982798749827982479879287984798U256));
+        let b = U256::new(uint!(38473878979879837598792422429889U256));
+        assert_eq!(a + b - b, a);
+    }
+
+    #[test]
+    fn test_u256_one_constant() {
+        // Basic sanity for ONE and ZERO
+        assert!(U256::ONE != U256::ZERO);
+        assert_eq!(U256::ONE + U256::ONE, U256::from(2u8));
+    }
+
+    #[test]
+    fn u256_encode_decode_small_values_roundtrip() {
+        for raw in 0u8..=127 {
+            let value = U256::from(raw);
+            let mut buf = Vec::new();
+            let written = value.encode(&mut buf).unwrap();
+            assert_eq!(written, 1);
+            assert_eq!(buf.len(), 1);
+            assert_eq!(buf[0], raw);
+
+            let mut cursor = Cursor::new(buf.as_slice());
+            let decoded = U256::decode(&mut cursor).unwrap();
+            assert_eq!(decoded, value);
+        }
+    }
+
+    #[test]
+    fn u256_encode_decode_large_values_roundtrip() {
+        let cases = [
+            U256::from(128u16),
+            U256::from(255u16),
+            U256::from(256u32),
+            U256::from(65535u32),
+            U256::from(65536u32),
+            U256::from(1u64) << 63,
+            U256::from(1u64) << 64,
+            (U256::from(1u128) << 120) + U256::from(0x1122_3344_5566_7788u64),
+            (U256::from(1u128) << 200)
+                + (U256::from(1u64) << 100)
+                + U256::from(0xA5A5u16),
+        ];
+
+        for value in cases {
+            let mut buf = Vec::new();
+            let written = value.encode(&mut buf).unwrap();
+            assert_eq!(written, buf.len());
+            assert!(buf.len() > 1);
+
+            let le = value.le_bytes();
+            let payload = payload_len(&le);
+            assert!(payload <= 0x7F);
+            assert_eq!(buf[0], 0x80 | payload as u8);
+            assert_eq!(&buf[1..], &le[..payload]);
+
+            let mut cursor = Cursor::new(buf.as_slice());
+            let decoded = U256::decode(&mut cursor).unwrap();
+            assert_eq!(decoded, value);
+        }
+    }
+
+    #[test]
+    fn u256_encode_decode_max_value_roundtrip() {
+        let value = U256::MAX_VALUE;
+        let mut buf = Vec::new();
+        let written = value.encode(&mut buf).unwrap();
+        assert_eq!(written, buf.len());
+        assert_eq!(buf.len(), 33);
+
+        let le = value.le_bytes();
+        assert_eq!(buf[0], 0x80 | 32);
+        assert_eq!(&buf[1..], &le[..]);
+
+        let mut cursor = Cursor::new(buf.as_slice());
+        let decoded = U256::decode(&mut cursor).unwrap();
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn u256_decode_errors_on_truncated_payload() {
+        let bytes = [0x83];
+        let mut cursor = Cursor::new(&bytes[..]);
+        let err = U256::decode(&mut cursor).unwrap_err();
+        assert!(matches!(err, Error::ReaderOutOfData));
+    }
 }

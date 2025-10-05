@@ -267,7 +267,7 @@ macro_rules! impl_encode_decode_unsigned_primitive {
     };
 }
 
-impl_encode_decode_unsigned_primitive!(u16, u32, u64, u128);
+impl_encode_decode_unsigned_primitive!(u16, u32, u64, u128, U256);
 
 impl Encode for usize {
     #[inline(always)]
