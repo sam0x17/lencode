@@ -124,6 +124,10 @@ pub mod prelude {
 }
 
 use core::mem::MaybeUninit;
+use core::num::{
+    NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroI128, NonZeroIsize, NonZeroU16,
+    NonZeroU32, NonZeroU64, NonZeroU8, NonZeroU128, NonZeroUsize,
+};
 use core::ptr;
 
 use prelude::*;
@@ -347,6 +351,55 @@ impl Decode for isize {
         unimplemented!()
     }
 }
+
+macro_rules! impl_encode_decode_nonzero {
+    ($(($nonzero:ty, $inner:ty)),* $(,)?) => {
+        $(
+            impl Encode for $nonzero {
+                #[inline(always)]
+                fn encode_ext(
+                    &self,
+                    writer: &mut impl Write,
+                    dedupe_encoder: Option<&mut DedupeEncoder>,
+                ) -> Result<usize> {
+                    let value: $inner = self.get();
+                    value.encode_ext(writer, dedupe_encoder)
+                }
+            }
+
+            impl Decode for $nonzero {
+                #[inline(always)]
+                fn decode_ext(
+                    reader: &mut impl Read,
+                    dedupe_decoder: Option<&mut DedupeDecoder>,
+                ) -> Result<Self> {
+                    let value: $inner = <$inner as Decode>::decode_ext(reader, dedupe_decoder)?;
+                    Self::new(value).ok_or(Error::InvalidData)
+                }
+
+                #[inline(always)]
+                fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+                    unimplemented!()
+                }
+            }
+        )*
+    };
+}
+
+impl_encode_decode_nonzero!(
+    (NonZeroU8, u8),
+    (NonZeroU16, u16),
+    (NonZeroU32, u32),
+    (NonZeroU64, u64),
+    (NonZeroU128, u128),
+    (NonZeroUsize, usize),
+    (NonZeroI8, i8),
+    (NonZeroI16, i16),
+    (NonZeroI32, i32),
+    (NonZeroI64, i64),
+    (NonZeroI128, i128),
+    (NonZeroIsize, isize),
+);
 
 impl Encode for bool {
     #[inline(always)]
@@ -1382,6 +1435,28 @@ impl Decode for NoDefault {
     ) -> Result<Self> {
         Ok(Self(u64::decode_ext(reader, dedupe_decoder)?))
     }
+}
+
+#[test]
+fn test_nonzero_roundtrip() {
+    let unsigned = NonZeroU32::new(123).unwrap();
+    let signed = NonZeroI64::new(-987654321).unwrap();
+
+    let mut buf_unsigned = Vec::new();
+    encode(&unsigned, &mut buf_unsigned).unwrap();
+    let decoded_unsigned: NonZeroU32 = decode(&mut Cursor::new(&buf_unsigned)).unwrap();
+    assert_eq!(decoded_unsigned, unsigned);
+
+    let mut buf_signed = Vec::new();
+    encode(&signed, &mut buf_signed).unwrap();
+    let decoded_signed: NonZeroI64 = decode(&mut Cursor::new(&buf_signed)).unwrap();
+    assert_eq!(decoded_signed, signed);
+}
+
+#[test]
+fn test_nonzero_decode_zero_fails() {
+    let err: Result<NonZeroU16> = Decode::decode(&mut Cursor::new(&[0u8]));
+    assert!(matches!(err, Err(Error::InvalidData)));
 }
 
 #[test]
