@@ -99,3 +99,11 @@ fn test_enum_with_deduplication() {
 
     assert_eq!(original, decoded);
 }
+
+// regression test
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Encode, Decode)]
+#[repr(u8)]
+pub enum SiblingPosition {
+    Left,
+    Right,
+}

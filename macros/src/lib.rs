@@ -337,7 +337,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                     syn::Fields::Unit => {
                         if use_numeric_disc {
                             quote! {
-                                ((#name::#vname as #repr_ty_ts) as usize) => Ok(#name::#vname),
+                                disc if disc == ((#name::#vname as #repr_ty_ts) as usize) => Ok(#name::#vname),
                             }
                         } else {
                             quote! {
