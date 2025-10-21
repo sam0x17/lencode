@@ -127,10 +127,7 @@ mod tests {
     use alloc::vec::Vec;
 
     fn payload_len(bytes: &[u8]) -> usize {
-        bytes
-            .iter()
-            .rposition(|&b| b != 0)
-            .map_or(1, |idx| idx + 1)
+        bytes.iter().rposition(|&b| b != 0).map_or(1, |idx| idx + 1)
     }
 
     #[test]
@@ -174,9 +171,7 @@ mod tests {
             U256::from(1u64) << 63,
             U256::from(1u64) << 64,
             (U256::from(1u128) << 120) + U256::from(0x1122_3344_5566_7788u64),
-            (U256::from(1u128) << 200)
-                + (U256::from(1u64) << 100)
-                + U256::from(0xA5A5u16),
+            (U256::from(1u128) << 200) + (U256::from(1u64) << 100) + U256::from(0xA5A5u16),
         ];
 
         for value in cases {
