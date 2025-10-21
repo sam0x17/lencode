@@ -125,8 +125,8 @@ pub mod prelude {
 
 use core::mem::MaybeUninit;
 use core::num::{
-    NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroI128, NonZeroIsize, NonZeroU16,
-    NonZeroU32, NonZeroU64, NonZeroU8, NonZeroU128, NonZeroUsize,
+    NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
+    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
 };
 use core::ptr;
 
