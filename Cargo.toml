@@ -1,9 +1,10 @@
 [workspace]
 members = ["macros", "."]
+package.version = "0.1.5"
 
 [package]
 name = "lencode"
-version = "0.1.5"
+version.workspace = true
 edition = "2024"
 license = "MIT"
 description = "A crate for encoding and decoding variable-length data using the Lencode varint encoding scheme and deduplication"
