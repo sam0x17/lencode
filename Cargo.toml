@@ -3,7 +3,7 @@ members = ["macros", "."]
 
 [package]
 name = "lencode"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 license = "MIT"
 description = "A crate for encoding and decoding variable-length data using the Lencode varint encoding scheme and deduplication"
