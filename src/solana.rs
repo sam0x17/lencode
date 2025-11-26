@@ -813,6 +813,7 @@ impl Encode for ixerr::InstructionError {
             E::DuplicateAccountIndex => 16,
             E::ExecutableModified => 17,
             E::RentEpochModified => 18,
+            #[allow(deprecated)]
             E::NotEnoughAccountKeys => 19,
             E::AccountDataSizeChanged => 20,
             E::AccountNotExecutable => 21,
@@ -884,6 +885,7 @@ impl Decode for ixerr::InstructionError {
             16 => E::DuplicateAccountIndex,
             17 => E::ExecutableModified,
             18 => E::RentEpochModified,
+            #[allow(deprecated)]
             19 => E::NotEnoughAccountKeys,
             20 => E::AccountDataSizeChanged,
             21 => E::AccountNotExecutable,
