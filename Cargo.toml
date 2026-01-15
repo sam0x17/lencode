@@ -30,7 +30,7 @@ solana-pubkey = { version = "3", optional = true }
 solana-clock = { version = "3", optional = true }
 solana-reward-info = { version = "3", optional = true }
 solana-account-decoder-client-types = { version = "3", optional = true }
-ruint = { version = "1" }
+ruint = { version = "1", default-features = false}
 newt-hype = { version = "0", default-features = false }
 hashbrown = "0"
 zstd-safe = { version = "7", default-features = false }
@@ -49,7 +49,7 @@ bincode = { version = "2", features = ["serde"] }
 
 [features]
 default = []
-std = []
+std = ["ruint/std"]
 solana = [
     "std",
     "dep:solana-sdk",
