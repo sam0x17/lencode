@@ -1,8 +1,8 @@
 use core::any::{Any, TypeId};
 use core::hash::Hash;
 use hashbrown::HashMap;
-use smallbox::space::S16;
 use smallbox::SmallBox;
+use smallbox::space::S8;
 
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
@@ -59,7 +59,7 @@ impl<T: DedupeDecodeable> Decode for T {
 /// Stateful encoder that replaces repeated values with compact IDs.
 pub struct DedupeEncoder {
     // Store type-specific hashmaps: TypeId -> HashMap<T, usize>
-    type_stores: HashMap<TypeId, SmallBox<dyn Any + Send + Sync, S16>>,
+    type_stores: HashMap<TypeId, SmallBox<dyn Any + Send + Sync, S8>>,
     // Next ID to assign (starts at 1)
     next_id: usize,
     initial_capacity: usize,
@@ -140,12 +140,9 @@ impl DedupeEncoder {
         let type_id = TypeId::of::<T>();
 
         // Get or create the type-specific store for this type
-        let store = self
-            .type_stores
-            .entry(type_id)
-            .or_insert_with(|| {
-                smallbox::smallbox!(HashMap::<T, usize>::with_capacity(self.initial_capacity))
-            });
+        let store = self.type_stores.entry(type_id).or_insert_with(|| {
+            smallbox::smallbox!(HashMap::<T, usize>::with_capacity(self.initial_capacity))
+        });
 
         // Downcast to the concrete type
         let typed_store = store
