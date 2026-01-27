@@ -285,16 +285,6 @@ where
         + for<'de> SchemaRead<'de, Dst = T>,
 {
     let mut group = c.comparison_benchmark_group(format!("{name}_encode"));
-    group.bench_function("lencode", |b| {
-        b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_lencode_into(value, &mut cursor);
-                black_box(cursor.into_inner());
-            },
-            BatchSize::SmallInput,
-        )
-    });
     group.bench_function("bincode", |b| {
         b.iter_batched(
             || Cursor::new(Vec::new()),
@@ -320,6 +310,16 @@ where
             || Cursor::new(Vec::new()),
             |mut cursor| {
                 encode_wincode_into(value, &mut cursor);
+                black_box(cursor.into_inner());
+            },
+            BatchSize::SmallInput,
+        )
+    });
+    group.bench_function("lencode", |b| {
+        b.iter_batched(
+            || Cursor::new(Vec::new()),
+            |mut cursor| {
+                encode_lencode_into(value, &mut cursor);
                 black_box(cursor.into_inner());
             },
             BatchSize::SmallInput,
