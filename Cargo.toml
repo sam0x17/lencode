@@ -33,6 +33,7 @@ solana-account-decoder-client-types = { version = "3", optional = true }
 ruint = { version = "1", default-features = false}
 newt-hype = { version = "0", default-features = false }
 hashbrown = "0"
+smallbox = { version = "0.8", default-features = false }
 zstd-safe = { version = "7", default-features = false }
 
 lencode-macros = { path = "macros", version = "0.1.6" }
