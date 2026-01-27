@@ -1,55 +1,18 @@
-#![cfg(all(feature = "solana", feature = "std"))]
+#![cfg(feature = "std")]
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use lencode::prelude::*;
 use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use solana_message::compiled_instruction::CompiledInstruction;
-use solana_pubkey::Pubkey;
 use std::hint::black_box;
 use std::io::Cursor;
+use wincode::SchemaReadOwned;
 use wincode::io::{ReadError as WincodeReadError, ReadResult as WincodeReadResult};
 use wincode::io::{Reader as WincodeReader, WriteError as WincodeWriteError};
 use wincode::io::{WriteResult as WincodeWriteResult, Writer as WincodeWriter};
-use wincode::{SchemaRead, SchemaReadOwned, SchemaWrite};
-
-#[derive(
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    SchemaWrite,
-    SchemaRead,
-    BorshSerialize,
-    BorshDeserialize,
-)]
-#[repr(transparent)]
-struct BenchPubkey([u8; 32]);
-
-impl From<Pubkey> for BenchPubkey {
-    fn from(value: Pubkey) -> Self {
-        Self(value.to_bytes())
-    }
-}
-
-impl Pack for BenchPubkey {
-    fn pack(&self, writer: &mut impl Write) -> Result<usize> {
-        self.0.pack(writer)
-    }
-
-    fn unpack(reader: &mut impl Read) -> Result<Self> {
-        Ok(Self(<[u8; 32]>::unpack(reader)?))
-    }
-}
-
-impl DedupeEncodeable for BenchPubkey {}
-impl DedupeDecodeable for BenchPubkey {}
+use wincode::{SchemaRead, SchemaWrite};
 
 #[derive(
     Clone,
@@ -64,24 +27,11 @@ impl DedupeDecodeable for BenchPubkey {}
     BorshSerialize,
     BorshDeserialize,
 )]
-struct BenchCompiledInstruction {
-    program_id_index: u8,
-    #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
-    accounts: Vec<u8>,
-    #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
-    data: Vec<u8>,
-}
-
-impl From<&CompiledInstruction> for BenchCompiledInstruction {
-    fn from(value: &CompiledInstruction) -> Self {
-        Self {
-            program_id_index: value.program_id_index,
-            accounts: value.accounts.clone(),
-            data: value.data.clone(),
-        }
-    }
+struct SmallStruct {
+    a: u64,
+    b: i32,
+    c: bool,
+    d: [u8; 32],
 }
 
 #[derive(
@@ -97,14 +47,48 @@ impl From<&CompiledInstruction> for BenchCompiledInstruction {
     BorshSerialize,
     BorshDeserialize,
 )]
-struct BenchMessage {
-    #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
-    account_keys: Vec<BenchPubkey>,
-    recent_blockhash: [u8; 32],
-    #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
-    instructions: Vec<BenchCompiledInstruction>,
+struct MediumStruct {
+    id: u64,
+    flag: bool,
+    payload: Vec<u8>,
+    numbers: Vec<u64>,
+    name: String,
+}
+
+fn random_bytes(rng: &mut StdRng, len: usize) -> Vec<u8> {
+    (0..len).map(|_| rng.random()).collect()
+}
+
+fn make_small(rng: &mut StdRng) -> SmallStruct {
+    let mut d = [0u8; 32];
+    for byte in d.iter_mut() {
+        *byte = rng.random();
+    }
+    SmallStruct {
+        a: rng.random(),
+        b: rng.random(),
+        c: rng.random(),
+        d,
+    }
+}
+
+fn make_medium(rng: &mut StdRng, payload_len: usize, compressible: bool) -> MediumStruct {
+    let payload = if compressible {
+        vec![0u8; payload_len]
+    } else {
+        random_bytes(rng, payload_len)
+    };
+    let numbers = (0..512).map(|_| rng.random()).collect::<Vec<u64>>();
+    let name = (0..32)
+        .map(|_| (b'a' + (rng.random::<u8>() % 26)) as char)
+        .collect::<String>();
+    MediumStruct {
+        id: rng.random(),
+        flag: rng.random(),
+        payload,
+        numbers,
+        name,
+    }
 }
 
 struct WincodeStdCursorWriter<'a> {
@@ -225,31 +209,9 @@ fn encode_lencode<T: Encode>(value: &T) -> Vec<u8> {
 }
 
 #[inline(always)]
-fn encode_lencode_dedupe_into<T: Encode>(
-    value: &T,
-    encoder: &mut DedupeEncoder,
-    cursor: &mut Cursor<Vec<u8>>,
-) {
-    value.encode_ext(cursor, Some(encoder)).unwrap();
-}
-
-#[inline(always)]
-fn encode_lencode_dedupe<T: Encode>(value: &T, encoder: &mut DedupeEncoder) -> Vec<u8> {
-    let mut cursor = Cursor::new(Vec::new());
-    encode_lencode_dedupe_into(value, encoder, &mut cursor);
-    cursor.into_inner()
-}
-
-#[inline(always)]
 fn decode_lencode<T: Decode>(bytes: &[u8]) -> T {
     let mut cursor = Cursor::new(bytes);
     T::decode_ext(&mut cursor, None).unwrap()
-}
-
-#[inline(always)]
-fn decode_lencode_dedupe<T: Decode>(bytes: &[u8], decoder: &mut DedupeDecoder) -> T {
-    let mut cursor = Cursor::new(bytes);
-    T::decode_ext(&mut cursor, Some(decoder)).unwrap()
 }
 
 #[inline(always)]
@@ -386,178 +348,27 @@ where
     group.finish();
 }
 
-fn make_pubkeys(rng: &mut StdRng, count: usize) -> Vec<BenchPubkey> {
-    (0..count)
-        .map(|_| {
-            let bytes: [u8; 32] = rng.random();
-            let pubkey = Pubkey::new_from_array(bytes);
-            BenchPubkey::from(pubkey)
-        })
-        .collect()
+fn benchmark_regular_codecs(c: &mut Criterion) {
+    let mut rng = StdRng::seed_from_u64(0xC0DEC0DE);
+
+    let small = make_small(&mut rng);
+    bench_codec(c, "regular_small_struct", &small);
+
+    let medium_random = make_medium(&mut rng, 64 * 1024, false);
+    bench_codec(c, "regular_medium_random", &medium_random);
+
+    let medium_compressible = make_medium(&mut rng, 64 * 1024, true);
+    bench_codec(c, "regular_medium_compressible", &medium_compressible);
+
+    let vec_u64 = (0..2048).map(|_| rng.random()).collect::<Vec<u64>>();
+    bench_codec(c, "regular_vec_u64_2k", &vec_u64);
+
+    let bytes_random = random_bytes(&mut rng, 64 * 1024);
+    bench_codec(c, "regular_bytes_random_64k", &bytes_random);
+
+    let bytes_zero = vec![0u8; 64 * 1024];
+    bench_codec(c, "regular_bytes_zero_64k", &bytes_zero);
 }
 
-fn make_pubkeys_with_duplicates(rng: &mut StdRng, count: usize) -> Vec<BenchPubkey> {
-    let unique_count = count / 2;
-    let mut unique = make_pubkeys(rng, unique_count);
-    let mut dupes = (0..(count - unique_count))
-        .map(|_| {
-            let idx = rng.random_range(0..unique.len());
-            unique[idx].clone()
-        })
-        .collect::<Vec<_>>();
-    unique.append(&mut dupes);
-    unique.shuffle(rng);
-    unique
-}
-
-fn make_instructions(
-    rng: &mut StdRng,
-    count: usize,
-    accounts_len: usize,
-    data_len: usize,
-) -> Vec<BenchCompiledInstruction> {
-    (0..count)
-        .map(|i| {
-            let accounts = (0..accounts_len)
-                .map(|_| rng.random_range(0..64) as u8)
-                .collect::<Vec<u8>>();
-            let data = (0..data_len).map(|_| rng.random()).collect::<Vec<u8>>();
-            let ix = CompiledInstruction {
-                program_id_index: (i % 16) as u8,
-                accounts,
-                data,
-            };
-            BenchCompiledInstruction::from(&ix)
-        })
-        .collect()
-}
-
-fn make_message(rng: &mut StdRng, key_count: usize, ix_count: usize) -> BenchMessage {
-    let account_keys = make_pubkeys(rng, key_count);
-    let recent_blockhash: [u8; 32] = rng.random();
-    let instructions = make_instructions(rng, ix_count, 8, 96);
-    BenchMessage {
-        account_keys,
-        recent_blockhash,
-        instructions,
-    }
-}
-
-fn bench_pubkey_vec(c: &mut Criterion) {
-    let mut rng = StdRng::seed_from_u64(0xA11CE);
-    let pubkeys = make_pubkeys(&mut rng, 1024);
-    bench_codec(c, "solana_pubkey_vec_1k", &pubkeys);
-}
-
-fn bench_pubkey_vec_dupes(c: &mut Criterion) {
-    let mut rng = StdRng::seed_from_u64(0xD00D);
-    let pubkeys = make_pubkeys_with_duplicates(&mut rng, 1024);
-
-    let mut group = c.comparison_benchmark_group("solana_pubkey_vec_50pct_dupes_encode");
-    group.bench_function("lencode", |b| {
-        b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_lencode_into(&pubkeys, &mut cursor);
-                black_box(cursor.into_inner());
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.bench_function("lencode_dedupe", |b| {
-        b.iter_batched(
-            || {
-                (
-                    Cursor::new(Vec::new()),
-                    DedupeEncoder::with_capacity(2048, 1),
-                )
-            },
-            |(mut cursor, mut encoder)| {
-                encode_lencode_dedupe_into(&pubkeys, &mut encoder, &mut cursor);
-                black_box(cursor.into_inner());
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.bench_function("bincode", |b| {
-        b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_bincode_into(&pubkeys, &mut cursor);
-                black_box(cursor.into_inner());
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.bench_function("borsh", |b| {
-        b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_borsh_into(&pubkeys, &mut cursor);
-                black_box(cursor.into_inner());
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.bench_function("wincode", |b| {
-        b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_wincode_into(&pubkeys, &mut cursor);
-                black_box(cursor.into_inner());
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.finish();
-
-    let lencode_bytes = encode_lencode(&pubkeys);
-    let lencode_dedupe_bytes = {
-        let mut encoder = DedupeEncoder::with_capacity(2048, 1);
-        encode_lencode_dedupe(&pubkeys, &mut encoder)
-    };
-    let bincode_bytes = encode_bincode(&pubkeys);
-    let borsh_bytes = encode_borsh(&pubkeys);
-    let wincode_bytes = encode_wincode(&pubkeys);
-
-    let mut group = c.comparison_benchmark_group("solana_pubkey_vec_50pct_dupes_decode");
-    group.bench_function("lencode", |b| {
-        b.iter(|| black_box(decode_lencode::<Vec<BenchPubkey>>(&lencode_bytes)))
-    });
-    group.bench_function("lencode_dedupe", |b| {
-        b.iter_batched(
-            || DedupeDecoder::with_capacity(2048),
-            |mut decoder| {
-                black_box(decode_lencode_dedupe::<Vec<BenchPubkey>>(
-                    &lencode_dedupe_bytes,
-                    &mut decoder,
-                ))
-            },
-            BatchSize::SmallInput,
-        )
-    });
-    group.bench_function("bincode", |b| {
-        b.iter(|| black_box(decode_bincode::<Vec<BenchPubkey>>(&bincode_bytes)))
-    });
-    group.bench_function("borsh", |b| {
-        b.iter(|| black_box(decode_borsh::<Vec<BenchPubkey>>(&borsh_bytes)))
-    });
-    group.bench_function("wincode", |b| {
-        b.iter(|| black_box(decode_wincode::<Vec<BenchPubkey>>(&wincode_bytes)))
-    });
-    group.finish();
-}
-
-fn bench_message(c: &mut Criterion) {
-    let mut rng = StdRng::seed_from_u64(0xBEEF);
-    let message = make_message(&mut rng, 128, 64);
-    bench_codec(c, "solana_message", &message);
-}
-
-criterion_group!(
-    benches,
-    bench_pubkey_vec,
-    bench_pubkey_vec_dupes,
-    bench_message
-);
+criterion_group!(benches, benchmark_regular_codecs);
 criterion_main!(benches);

@@ -44,13 +44,17 @@ bincode = { version = "2", features = ["serde"], optional = true }
 [dev-dependencies]
 rayon = "1"
 rand = ">= 0.9"
-criterion = { version = ">= 0.5", features = ["html_reports"] }
+criterion = { git = "https://github.com/sam0x17/criterion.rs", features = ["html_reports"] }
 borsh = ">= 1.5"
 bincode = { version = "2", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+wincode = { version = "0.2.5", features = ["derive", "solana-short-vec"] }
+solana-short-vec = "3"
 
 [features]
 default = []
 std = ["ruint/std"]
+comparison-bench = []
 solana = [
     "std",
     "dep:solana-sdk",
@@ -99,10 +103,15 @@ harness = false
 
 [[bench]]
 name = "solana_bench"
-required-features = ["solana"]
+required-features = ["std", "solana", "comparison-bench"]
 harness = false
 
 [[bench]]
 name = "bytes_bench"
 harness = false
 required-features = ["std"]
+
+[[bench]]
+name = "codec_bench"
+harness = false
+required-features = ["std", "comparison-bench"]
