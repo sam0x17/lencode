@@ -346,6 +346,14 @@ where
         b.iter(|| black_box(decode_wincode::<T>(&wincode_bytes)))
     });
     group.finish();
+
+    println!(
+        "[size] {name}: lencode={} bincode={} borsh={} wincode={}",
+        lencode_bytes.len(),
+        bincode_bytes.len(),
+        borsh_bytes.len(),
+        wincode_bytes.len()
+    );
 }
 
 fn benchmark_regular_codecs(c: &mut Criterion) {
