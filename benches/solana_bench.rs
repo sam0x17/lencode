@@ -528,6 +528,15 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let borsh_bytes = encode_borsh(&pubkeys);
     let wincode_bytes = encode_wincode(&pubkeys);
 
+    println!(
+        "[size] solana_pubkey_vec_50pct_dupes: lencode={} lencode_dedupe={} bincode={} borsh={} wincode={}",
+        lencode_bytes.len(),
+        lencode_dedupe_bytes.len(),
+        bincode_bytes.len(),
+        borsh_bytes.len(),
+        wincode_bytes.len()
+    );
+
     let mut group = c.comparison_benchmark_group("solana_pubkey_vec_50pct_dupes_decode");
     group.bench_function("lencode", |b| {
         b.iter(|| black_box(decode_lencode::<Vec<BenchPubkey>>(&lencode_bytes)))
