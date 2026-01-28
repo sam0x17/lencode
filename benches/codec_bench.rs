@@ -72,13 +72,18 @@ fn make_small(rng: &mut StdRng) -> SmallStruct {
     }
 }
 
-fn make_medium(rng: &mut StdRng, payload_len: usize, compressible: bool) -> MediumStruct {
+fn make_medium(
+    rng: &mut StdRng,
+    payload_len: usize,
+    numbers_len: usize,
+    compressible: bool,
+) -> MediumStruct {
     let payload = if compressible {
         vec![0u8; payload_len]
     } else {
         random_bytes(rng, payload_len)
     };
-    let numbers = (0..512).map(|_| rng.random()).collect::<Vec<u64>>();
+    let numbers = (0..numbers_len).map(|_| rng.random()).collect::<Vec<u64>>();
     let name = (0..32)
         .map(|_| (b'a' + (rng.random::<u8>() % 26)) as char)
         .collect::<String>();
@@ -362,20 +367,17 @@ fn benchmark_regular_codecs(c: &mut Criterion) {
     let small = make_small(&mut rng);
     bench_codec(c, "regular_small_struct", &small);
 
-    let medium_random = make_medium(&mut rng, 64 * 1024, false);
+    let medium_random = make_medium(&mut rng, 512, 8, false);
     bench_codec(c, "regular_medium_random", &medium_random);
 
-    let medium_compressible = make_medium(&mut rng, 64 * 1024, true);
+    let medium_compressible = make_medium(&mut rng, 512, 8, true);
     bench_codec(c, "regular_medium_compressible", &medium_compressible);
 
-    let vec_u64 = (0..2048).map(|_| rng.random()).collect::<Vec<u64>>();
-    bench_codec(c, "regular_vec_u64_2k", &vec_u64);
+    let value_u64: u64 = rng.random();
+    bench_codec(c, "regular_u64", &value_u64);
 
-    let bytes_random = random_bytes(&mut rng, 64 * 1024);
-    bench_codec(c, "regular_bytes_random_64k", &bytes_random);
-
-    let bytes_zero = vec![0u8; 64 * 1024];
-    bench_codec(c, "regular_bytes_zero_64k", &bytes_zero);
+    let bytes_random = random_bytes(&mut rng, 256);
+    bench_codec(c, "regular_bytes_random_256", &bytes_random);
 }
 
 criterion_group!(benches, benchmark_regular_codecs);

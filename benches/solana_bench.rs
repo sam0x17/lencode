@@ -443,7 +443,7 @@ fn make_instructions(
 fn make_message(rng: &mut StdRng, key_count: usize, ix_count: usize) -> BenchMessage {
     let account_keys = make_pubkeys(rng, key_count);
     let recent_blockhash: [u8; 32] = rng.random();
-    let instructions = make_instructions(rng, ix_count, 8, 96);
+    let instructions = make_instructions(rng, ix_count, 4, 32);
     BenchMessage {
         account_keys,
         recent_blockhash,
@@ -451,15 +451,19 @@ fn make_message(rng: &mut StdRng, key_count: usize, ix_count: usize) -> BenchMes
     }
 }
 
-fn bench_pubkey_vec(c: &mut Criterion) {
+fn bench_pubkey(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xA11CE);
-    let pubkeys = make_pubkeys(&mut rng, 1024);
-    bench_codec(c, "solana_pubkey_vec_1k", &pubkeys);
+    let pubkey = make_pubkeys(&mut rng, 1)
+        .pop()
+        .expect("expected one pubkey");
+    bench_codec(c, "solana_pubkey", &pubkey);
 }
 
 fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xD00D);
-    let pubkeys = make_pubkeys_with_duplicates(&mut rng, 1024);
+    let count = 128;
+    let pubkeys = make_pubkeys_with_duplicates(&mut rng, count);
+    let capacity = count;
 
     let mut group = c.comparison_benchmark_group("solana_pubkey_vec_50pct_dupes_encode");
     group.bench_function("lencode", |b| {
@@ -477,7 +481,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
             || {
                 (
                     Cursor::new(Vec::new()),
-                    DedupeEncoder::with_capacity(2048, 1),
+                    DedupeEncoder::with_capacity(capacity, 1),
                 )
             },
             |(mut cursor, mut encoder)| {
@@ -521,7 +525,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
 
     let lencode_bytes = encode_lencode(&pubkeys);
     let lencode_dedupe_bytes = {
-        let mut encoder = DedupeEncoder::with_capacity(2048, 1);
+        let mut encoder = DedupeEncoder::with_capacity(capacity, 1);
         encode_lencode_dedupe(&pubkeys, &mut encoder)
     };
     let bincode_bytes = encode_bincode(&pubkeys);
@@ -543,7 +547,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     });
     group.bench_function("lencode_dedupe", |b| {
         b.iter_batched(
-            || DedupeDecoder::with_capacity(2048),
+            || DedupeDecoder::with_capacity(capacity),
             |mut decoder| {
                 black_box(decode_lencode_dedupe::<Vec<BenchPubkey>>(
                     &lencode_dedupe_bytes,
@@ -567,13 +571,13 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
 
 fn bench_message(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xBEEF);
-    let message = make_message(&mut rng, 128, 64);
+    let message = make_message(&mut rng, 16, 4);
     bench_codec(c, "solana_message", &message);
 }
 
 criterion_group!(
     benches,
-    bench_pubkey_vec,
+    bench_pubkey,
     bench_pubkey_vec_dupes,
     bench_message
 );
