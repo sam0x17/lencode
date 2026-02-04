@@ -1,13 +1,24 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use lencode::prelude::*;
+use rand::{Rng, rng};
 use std::hint::black_box;
 
+fn random_u64_split(rng: &mut impl Rng) -> u64 {
+    let half = u64::MAX / 2;
+    if rng.random() {
+        rng.random_range(0..=half)
+    } else {
+        rng.random_range((half + 1)..=u64::MAX)
+    }
+}
+
 fn bench_encode(c: &mut Criterion) {
+    let mut rng = rng();
     c.bench_function("lencode_encode_u64", |b| {
         b.iter_batched(
             || {
                 let cursor = Cursor::new([0u8; 16]);
-                let value: u64 = rand::random();
+                let value = random_u64_split(&mut rng);
                 (cursor, value)
             },
             |(mut cursor, value)| {
@@ -19,11 +30,12 @@ fn bench_encode(c: &mut Criterion) {
 }
 
 fn bench_decode(c: &mut Criterion) {
+    let mut rng = rng();
     c.bench_function("lencode_decode_u64", |b| {
         b.iter_batched(
             || {
                 let mut buf = [0u8; 16];
-                let value: u64 = rand::random();
+                let value = random_u64_split(&mut rng);
                 {
                     let mut cursor = Cursor::new(&mut buf[..]);
                     Lencode::encode_varint(value, &mut cursor).unwrap();

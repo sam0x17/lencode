@@ -404,34 +404,122 @@ fn make_pubkeys(rng: &mut StdRng, count: usize) -> Vec<BenchPubkey> {
         .collect()
 }
 
-fn make_pubkeys_with_duplicates(rng: &mut StdRng, count: usize) -> Vec<BenchPubkey> {
-    let unique_count = count / 2;
-    let mut unique = make_pubkeys(rng, unique_count);
-    let mut dupes = (0..(count - unique_count))
-        .map(|_| {
-            let idx = rng.random_range(0..unique.len());
-            unique[idx].clone()
-        })
-        .collect::<Vec<_>>();
-    unique.append(&mut dupes);
-    unique.shuffle(rng);
-    unique
+fn make_pubkeys_with_hotset(
+    rng: &mut StdRng,
+    count: usize,
+    hotset_size: usize,
+    hotset_pct: u8,
+) -> Vec<BenchPubkey> {
+    let mut hotset = make_pubkeys(rng, hotset_size.max(1));
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        if rng.random_range(0..100) < hotset_pct {
+            let idx = rng.random_range(0..hotset.len());
+            out.push(hotset[idx].clone());
+        } else {
+            let bytes: [u8; 32] = rng.random();
+            let pubkey = Pubkey::new_from_array(bytes);
+            out.push(BenchPubkey::from(pubkey));
+        }
+    }
+    out.shuffle(rng);
+    out
+}
+
+fn random_key_count(rng: &mut StdRng) -> usize {
+    let roll = rng.random_range(0..100);
+    if roll < 50 {
+        rng.random_range(8..=12)
+    } else if roll < 80 {
+        rng.random_range(13..=20)
+    } else if roll < 95 {
+        rng.random_range(21..=32)
+    } else {
+        rng.random_range(33..=64)
+    }
+}
+
+fn random_program_id_count(rng: &mut StdRng, key_count: usize) -> usize {
+    let roll = rng.random_range(0..100);
+    let desired = if roll < 70 {
+        1
+    } else if roll < 95 {
+        2
+    } else {
+        3
+    };
+    desired.min(key_count.saturating_sub(1)).max(1)
+}
+
+fn random_ix_count(rng: &mut StdRng) -> usize {
+    let roll = rng.random_range(0..100);
+    if roll < 50 {
+        1
+    } else if roll < 80 {
+        2
+    } else if roll < 92 {
+        3
+    } else if roll < 98 {
+        4
+    } else {
+        rng.random_range(5..=8)
+    }
+}
+
+fn random_accounts_len(rng: &mut StdRng, max_accounts: usize) -> usize {
+    if max_accounts <= 1 {
+        return max_accounts;
+    }
+    let roll = rng.random_range(0..100);
+    let (min, max) = if roll < 55 {
+        (2, 4)
+    } else if roll < 85 {
+        (5, 8)
+    } else if roll < 95 {
+        (9, 12)
+    } else {
+        (13, 20)
+    };
+    let lo = min.min(max_accounts);
+    let hi = max.min(max_accounts);
+    if lo > hi {
+        max_accounts
+    } else {
+        rng.random_range(lo..=hi)
+    }
+}
+
+fn random_data_len(rng: &mut StdRng) -> usize {
+    let roll = rng.random_range(0..100);
+    if roll < 55 {
+        rng.random_range(0..=16)
+    } else if roll < 85 {
+        rng.random_range(17..=64)
+    } else if roll < 95 {
+        rng.random_range(65..=256)
+    } else {
+        rng.random_range(257..=1024)
+    }
 }
 
 fn make_instructions(
     rng: &mut StdRng,
     count: usize,
-    accounts_len: usize,
-    data_len: usize,
+    key_count: usize,
+    program_id_start: usize,
 ) -> Vec<BenchCompiledInstruction> {
+    let non_program_count = program_id_start;
+    let max_accounts = non_program_count.max(1);
     (0..count)
-        .map(|i| {
-            let accounts = (0..accounts_len)
-                .map(|_| rng.random_range(0..64) as u8)
-                .collect::<Vec<u8>>();
+        .map(|_| {
+            let accounts_len = random_accounts_len(rng, max_accounts);
+            let mut accounts = (0..non_program_count as u8).collect::<Vec<u8>>();
+            accounts.shuffle(rng);
+            accounts.truncate(accounts_len);
+            let data_len = random_data_len(rng);
             let data = (0..data_len).map(|_| rng.random()).collect::<Vec<u8>>();
             let ix = CompiledInstruction {
-                program_id_index: (i % 16) as u8,
+                program_id_index: rng.random_range(program_id_start as u8..key_count as u8),
                 accounts,
                 data,
             };
@@ -440,10 +528,14 @@ fn make_instructions(
         .collect()
 }
 
-fn make_message(rng: &mut StdRng, key_count: usize, ix_count: usize) -> BenchMessage {
+fn make_message(rng: &mut StdRng) -> BenchMessage {
+    let key_count = random_key_count(rng);
+    let program_id_count = random_program_id_count(rng, key_count);
+    let program_id_start = key_count - program_id_count;
+    let ix_count = random_ix_count(rng);
     let account_keys = make_pubkeys(rng, key_count);
     let recent_blockhash: [u8; 32] = rng.random();
-    let instructions = make_instructions(rng, ix_count, 4, 32);
+    let instructions = make_instructions(rng, ix_count, key_count, program_id_start);
     BenchMessage {
         account_keys,
         recent_blockhash,
@@ -462,10 +554,13 @@ fn bench_pubkey(c: &mut Criterion) {
 fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xD00D);
     let count = 128;
-    let pubkeys = make_pubkeys_with_duplicates(&mut rng, count);
+    let hotset_size = 8;
+    let hotset_pct = 30;
+    let pubkeys = make_pubkeys_with_hotset(&mut rng, count, hotset_size, hotset_pct);
     let capacity = count;
+    let label = format!("solana_pubkey_vec_hotset_{}pct", hotset_pct);
 
-    let mut group = c.comparison_benchmark_group("solana_pubkey_vec_50pct_dupes_encode");
+    let mut group = c.comparison_benchmark_group(format!("{label}_encode"));
     group.bench_function("lencode", |b| {
         b.iter_batched(
             || Cursor::new(Vec::new()),
@@ -533,7 +628,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let wincode_bytes = encode_wincode(&pubkeys);
 
     println!(
-        "[size] solana_pubkey_vec_50pct_dupes: lencode={} lencode_dedupe={} bincode={} borsh={} wincode={}",
+        "[size] {label}: lencode={} lencode_dedupe={} bincode={} borsh={} wincode={}",
         lencode_bytes.len(),
         lencode_dedupe_bytes.len(),
         bincode_bytes.len(),
@@ -541,7 +636,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
         wincode_bytes.len()
     );
 
-    let mut group = c.comparison_benchmark_group("solana_pubkey_vec_50pct_dupes_decode");
+    let mut group = c.comparison_benchmark_group(format!("{label}_decode"));
     group.bench_function("lencode", |b| {
         b.iter(|| black_box(decode_lencode::<Vec<BenchPubkey>>(&lencode_bytes)))
     });
@@ -571,7 +666,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
 
 fn bench_message(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xBEEF);
-    let message = make_message(&mut rng, 16, 4);
+    let message = make_message(&mut rng);
     bench_codec(c, "solana_message", &message);
 }
 

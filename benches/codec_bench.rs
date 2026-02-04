@@ -31,7 +31,7 @@ struct SmallStruct {
     a: u64,
     b: i32,
     c: bool,
-    d: [u8; 32],
+    d: [u8; 4],
 }
 
 #[derive(
@@ -59,14 +59,32 @@ fn random_bytes(rng: &mut StdRng, len: usize) -> Vec<u8> {
     (0..len).map(|_| rng.random()).collect()
 }
 
+fn random_u64_split(rng: &mut StdRng) -> u64 {
+    let half = u64::MAX / 2;
+    if rng.random() {
+        rng.random_range(0..=half)
+    } else {
+        rng.random_range((half + 1)..=u64::MAX)
+    }
+}
+
+fn random_i32_split(rng: &mut StdRng) -> i32 {
+    let half = i32::MAX / 2;
+    if rng.random() {
+        rng.random_range((half + 1)..=i32::MAX)
+    } else {
+        rng.random_range(i32::MIN..=half)
+    }
+}
+
 fn make_small(rng: &mut StdRng) -> SmallStruct {
-    let mut d = [0u8; 32];
+    let mut d = [0u8; 4];
     for byte in d.iter_mut() {
         *byte = rng.random();
     }
     SmallStruct {
-        a: rng.random(),
-        b: rng.random(),
+        a: random_u64_split(rng),
+        b: random_i32_split(rng),
         c: rng.random(),
         d,
     }
@@ -83,12 +101,14 @@ fn make_medium(
     } else {
         random_bytes(rng, payload_len)
     };
-    let numbers = (0..numbers_len).map(|_| rng.random()).collect::<Vec<u64>>();
+    let numbers = (0..numbers_len)
+        .map(|_| random_u64_split(rng))
+        .collect::<Vec<u64>>();
     let name = (0..32)
         .map(|_| (b'a' + (rng.random::<u8>() % 26)) as char)
         .collect::<String>();
     MediumStruct {
-        id: rng.random(),
+        id: random_u64_split(rng),
         flag: rng.random(),
         payload,
         numbers,
@@ -373,7 +393,7 @@ fn benchmark_regular_codecs(c: &mut Criterion) {
     let medium_compressible = make_medium(&mut rng, 512, 8, true);
     bench_codec(c, "regular_medium_compressible", &medium_compressible);
 
-    let value_u64: u64 = rng.random();
+    let value_u64: u64 = random_u64_split(&mut rng);
     bench_codec(c, "regular_u64", &value_u64);
 
     let bytes_random = random_bytes(&mut rng, 256);
