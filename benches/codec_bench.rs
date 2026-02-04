@@ -59,6 +59,13 @@ fn random_bytes(rng: &mut StdRng, len: usize) -> Vec<u8> {
     (0..len).map(|_| rng.random()).collect()
 }
 
+fn bench_enabled(name: &str) -> bool {
+    match std::env::var("LENCODE_CODEC_FILTER") {
+        Ok(filter) if !filter.is_empty() => name.contains(&filter),
+        _ => true,
+    }
+}
+
 fn random_u64_split(rng: &mut StdRng) -> u64 {
     let half = u64::MAX / 2;
     if rng.random() {
@@ -384,20 +391,30 @@ where
 fn benchmark_regular_codecs(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(0xC0DEC0DE);
 
-    let small = make_small(&mut rng);
-    bench_codec(c, "regular_small_struct", &small);
+    if bench_enabled("regular_small_struct") {
+        let small = make_small(&mut rng);
+        bench_codec(c, "regular_small_struct", &small);
+    }
 
-    let medium_random = make_medium(&mut rng, 512, 8, false);
-    bench_codec(c, "regular_medium_random", &medium_random);
+    if bench_enabled("regular_medium_random") {
+        let medium_random = make_medium(&mut rng, 512, 8, false);
+        bench_codec(c, "regular_medium_random", &medium_random);
+    }
 
-    let medium_compressible = make_medium(&mut rng, 512, 8, true);
-    bench_codec(c, "regular_medium_compressible", &medium_compressible);
+    if bench_enabled("regular_medium_compressible") {
+        let medium_compressible = make_medium(&mut rng, 512, 8, true);
+        bench_codec(c, "regular_medium_compressible", &medium_compressible);
+    }
 
-    let value_u64: u64 = random_u64_split(&mut rng);
-    bench_codec(c, "regular_u64", &value_u64);
+    if bench_enabled("regular_u64") {
+        let value_u64: u64 = random_u64_split(&mut rng);
+        bench_codec(c, "regular_u64", &value_u64);
+    }
 
-    let bytes_random = random_bytes(&mut rng, 256);
-    bench_codec(c, "regular_bytes_random_256", &bytes_random);
+    if bench_enabled("regular_bytes_random_256") {
+        let bytes_random = random_bytes(&mut rng, 256);
+        bench_codec(c, "regular_bytes_random_256", &bytes_random);
+    }
 }
 
 criterion_group!(benches, benchmark_regular_codecs);

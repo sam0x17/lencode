@@ -45,7 +45,7 @@ bincode = { version = "2", features = ["serde"], optional = true }
 rayon = "1"
 rand = ">= 0.9"
 criterion = { git = "https://github.com/sam0x17/criterion.rs", features = ["html_reports"] }
-borsh = ">= 1.5"
+borsh = { version = ">= 1.5", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 wincode = { version = "0.2.5", features = ["derive", "solana-short-vec"] }
