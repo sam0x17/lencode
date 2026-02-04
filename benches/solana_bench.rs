@@ -404,13 +404,12 @@ fn make_pubkeys(rng: &mut StdRng, count: usize) -> Vec<BenchPubkey> {
         .collect()
 }
 
-fn make_pubkeys_with_hotset(
+fn make_pubkeys_with_hotset_from(
     rng: &mut StdRng,
     count: usize,
-    hotset_size: usize,
+    hotset: &[BenchPubkey],
     hotset_pct: u8,
 ) -> Vec<BenchPubkey> {
-    let mut hotset = make_pubkeys(rng, hotset_size.max(1));
     let mut out = Vec::with_capacity(count);
     for _ in 0..count {
         if rng.random_range(0..100) < hotset_pct {
@@ -424,6 +423,16 @@ fn make_pubkeys_with_hotset(
     }
     out.shuffle(rng);
     out
+}
+
+fn make_pubkeys_with_hotset(
+    rng: &mut StdRng,
+    count: usize,
+    hotset_size: usize,
+    hotset_pct: u8,
+) -> Vec<BenchPubkey> {
+    let hotset = make_pubkeys(rng, hotset_size.max(1));
+    make_pubkeys_with_hotset_from(rng, count, &hotset, hotset_pct)
 }
 
 fn random_key_count(rng: &mut StdRng) -> usize {
@@ -627,13 +636,38 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let borsh_bytes = encode_borsh(&pubkeys);
     let wincode_bytes = encode_wincode(&pubkeys);
 
+    let size_batch_count = 16usize;
+    let mut size_rng = StdRng::seed_from_u64(0xD00D_BEEF);
+    let size_hotset = make_pubkeys(&mut size_rng, hotset_size.max(1));
+    let mut size_lencode_total = 0usize;
+    let mut size_lencode_dedupe_total = 0usize;
+    let mut size_bincode_total = 0usize;
+    let mut size_borsh_total = 0usize;
+    let mut size_wincode_total = 0usize;
+    let mut size_encoder =
+        DedupeEncoder::with_capacity(capacity.saturating_mul(size_batch_count), 1);
+    for _ in 0..size_batch_count {
+        let batch =
+            make_pubkeys_with_hotset_from(&mut size_rng, count, &size_hotset, hotset_pct);
+        size_lencode_total += encode_lencode(&batch).len();
+        size_lencode_dedupe_total += encode_lencode_dedupe(&batch, &mut size_encoder).len();
+        size_bincode_total += encode_bincode(&batch).len();
+        size_borsh_total += encode_borsh(&batch).len();
+        size_wincode_total += encode_wincode(&batch).len();
+    }
+    let size_lencode = size_lencode_total / size_batch_count;
+    let size_lencode_dedupe = size_lencode_dedupe_total / size_batch_count;
+    let size_bincode = size_bincode_total / size_batch_count;
+    let size_borsh = size_borsh_total / size_batch_count;
+    let size_wincode = size_wincode_total / size_batch_count;
+
     println!(
         "[size] {label}: lencode={} lencode_dedupe={} bincode={} borsh={} wincode={}",
-        lencode_bytes.len(),
-        lencode_dedupe_bytes.len(),
-        bincode_bytes.len(),
-        borsh_bytes.len(),
-        wincode_bytes.len()
+        size_lencode,
+        size_lencode_dedupe,
+        size_bincode,
+        size_borsh,
+        size_wincode
     );
 
     let mut group = c.comparison_benchmark_group(format!("{label}_decode"));
