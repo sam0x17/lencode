@@ -21,6 +21,46 @@ pub enum Lencode {}
 
 impl Lencode {
     #[inline(always)]
+    pub(crate) fn encode_varint_u16(val: u16, writer: &mut impl Write) -> Result<usize> {
+        if val <= 0x7F {
+            let byte = val as u8;
+            writer.write(core::slice::from_ref(&byte))?;
+            return Ok(1);
+        }
+
+        let n = ((16 - val.leading_zeros() + 7) >> 3) as usize;
+        let first_byte = 0x80 | (n as u8 & 0x7F);
+        let mut out = [0u8; 3];
+        out[0] = first_byte;
+        let bytes = val.to_le_bytes();
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
+        }
+        writer.write(&out[..(1 + n)])?;
+        Ok(1 + n)
+    }
+
+    #[inline(always)]
+    pub(crate) fn encode_varint_u32(val: u32, writer: &mut impl Write) -> Result<usize> {
+        if val <= 0x7F {
+            let byte = val as u8;
+            writer.write(core::slice::from_ref(&byte))?;
+            return Ok(1);
+        }
+
+        let n = ((32 - val.leading_zeros() + 7) >> 3) as usize;
+        let first_byte = 0x80 | (n as u8 & 0x7F);
+        let mut out = [0u8; 5];
+        out[0] = first_byte;
+        let bytes = val.to_le_bytes();
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
+        }
+        writer.write(&out[..(1 + n)])?;
+        Ok(1 + n)
+    }
+
+    #[inline(always)]
     pub(crate) fn encode_varint_u64(val: u64, writer: &mut impl Write) -> Result<usize> {
         if val <= 0x7F {
             let byte = val as u8;
@@ -41,6 +81,50 @@ impl Lencode {
     }
 
     #[inline(always)]
+    pub(crate) fn encode_varint_u128(val: u128, writer: &mut impl Write) -> Result<usize> {
+        if val <= 0x7F {
+            let byte = val as u8;
+            writer.write(core::slice::from_ref(&byte))?;
+            return Ok(1);
+        }
+
+        let n = ((128 - val.leading_zeros() + 7) >> 3) as usize;
+        let first_byte = 0x80 | (n as u8 & 0x7F);
+        let mut out = [0u8; 17];
+        out[0] = first_byte;
+        let bytes = val.to_le_bytes();
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
+        }
+        writer.write(&out[..(1 + n)])?;
+        Ok(1 + n)
+    }
+
+    #[inline(always)]
+    pub(crate) fn encode_varint_i16(val: i16, writer: &mut impl Write) -> Result<usize> {
+        let unsigned = zigzag_encode(val);
+        Self::encode_varint_u16(unsigned, writer)
+    }
+
+    #[inline(always)]
+    pub(crate) fn encode_varint_i32(val: i32, writer: &mut impl Write) -> Result<usize> {
+        let unsigned = zigzag_encode(val);
+        Self::encode_varint_u32(unsigned, writer)
+    }
+
+    #[inline(always)]
+    pub(crate) fn encode_varint_i64(val: i64, writer: &mut impl Write) -> Result<usize> {
+        let unsigned = zigzag_encode(val);
+        Self::encode_varint_u64(unsigned, writer)
+    }
+
+    #[inline(always)]
+    pub(crate) fn encode_varint_i128(val: i128, writer: &mut impl Write) -> Result<usize> {
+        let unsigned = zigzag_encode(val);
+        Self::encode_varint_u128(unsigned, writer)
+    }
+
+    #[inline(always)]
     pub(crate) fn decode_varint_u64(reader: &mut impl Read) -> Result<u64> {
         let mut first = 0u8;
         reader.read(core::slice::from_mut(&mut first))?;
@@ -49,14 +133,20 @@ impl Lencode {
         }
         let n = (first & 0x7F) as usize;
         if n == 0 {
-            return Ok(first as u64);
+            #[cfg(target_endian = "little")]
+            {
+                return Ok(first as u64);
+            }
+            #[cfg(target_endian = "big")]
+            {
+                return Ok(0);
+            }
         }
         #[cfg(target_endian = "little")]
         {
             let mut val: u64 = 0;
-            let val_bytes = unsafe {
-                core::slice::from_raw_parts_mut(&mut val as *mut u64 as *mut u8, 8)
-            };
+            let val_bytes =
+                unsafe { core::slice::from_raw_parts_mut(&mut val as *mut u64 as *mut u8, 8) };
             reader.read(&mut val_bytes[..n])?;
             Ok(val)
         }

@@ -271,7 +271,59 @@ macro_rules! impl_encode_decode_unsigned_primitive {
     };
 }
 
-impl_encode_decode_unsigned_primitive!(u16, u32, u128, U256);
+impl_encode_decode_unsigned_primitive!(U256);
+
+impl Encode for u16 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_u16(*self, writer)
+    }
+}
+
+impl Decode for u16 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
+impl Encode for u32 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_u32(*self, writer)
+    }
+}
+
+impl Decode for u32 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
 
 impl Encode for u64 {
     #[inline(always)]
@@ -285,6 +337,32 @@ impl Encode for u64 {
 }
 
 impl Decode for u64 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
+impl Encode for u128 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_u128(*self, writer)
+    }
+}
+
+impl Decode for u128 {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
@@ -350,7 +428,111 @@ macro_rules! impl_encode_decode_signed_primitive {
     };
 }
 
-impl_encode_decode_signed_primitive!(i16, i32, i64, i128);
+impl_encode_decode_signed_primitive!();
+
+impl Encode for i16 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_i16(*self, writer)
+    }
+}
+
+impl Decode for i16 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint_signed(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
+impl Encode for i32 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_i32(*self, writer)
+    }
+}
+
+impl Decode for i32 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint_signed(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
+impl Encode for i64 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_i64(*self, writer)
+    }
+}
+
+impl Decode for i64 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint_signed(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
+
+impl Encode for i128 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_i128(*self, writer)
+    }
+}
+
+impl Decode for i128 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint_signed(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
 
 impl Encode for isize {
     #[inline(always)]
@@ -359,7 +541,7 @@ impl Encode for isize {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        Lencode::encode_varint_signed(*self as i64, writer)
+        Lencode::encode_varint_i64(*self as i64, writer)
     }
 }
 
