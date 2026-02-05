@@ -70,14 +70,11 @@ impl VarintEncodingScheme for Lencode {
                     core::mem::size_of::<I>(),
                 )
             };
-            // Read first prefix byte separately to avoid overwriting for large values.
-            let mut first = 0u8;
-            reader.read(core::slice::from_mut(&mut first))?;
+            // Read first prefix byte directly into value storage.
+            reader.read(&mut val_bytes[..1])?;
+            let first = unsafe { *val_bytes.get_unchecked(0) };
             if first & 0x80 == 0 {
                 // Small integer already in place
-                unsafe {
-                    *val_bytes.get_unchecked_mut(0) = first;
-                }
                 return Ok(val);
             }
             let n = (first & 0x7F) as usize;
