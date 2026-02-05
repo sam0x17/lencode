@@ -647,8 +647,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let mut size_encoder =
         DedupeEncoder::with_capacity(capacity.saturating_mul(size_batch_count), 1);
     for _ in 0..size_batch_count {
-        let batch =
-            make_pubkeys_with_hotset_from(&mut size_rng, count, &size_hotset, hotset_pct);
+        let batch = make_pubkeys_with_hotset_from(&mut size_rng, count, &size_hotset, hotset_pct);
         size_lencode_total += encode_lencode(&batch).len();
         size_lencode_dedupe_total += encode_lencode_dedupe(&batch, &mut size_encoder).len();
         size_bincode_total += encode_bincode(&batch).len();
@@ -663,11 +662,7 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
 
     println!(
         "[size] {label}: lencode={} lencode_dedupe={} bincode={} borsh={} wincode={}",
-        size_lencode,
-        size_lencode_dedupe,
-        size_bincode,
-        size_borsh,
-        size_wincode
+        size_lencode, size_lencode_dedupe, size_bincode, size_borsh, size_wincode
     );
 
     let mut group = c.comparison_benchmark_group(format!("{label}_decode"));
@@ -704,10 +699,5 @@ fn bench_message(c: &mut Criterion) {
     bench_codec(c, "solana_message", &message);
 }
 
-criterion_group!(
-    benches,
-    bench_pubkey,
-    bench_pubkey_vec_dupes,
-    bench_message
-);
+criterion_group!(benches, bench_pubkey, bench_pubkey_vec_dupes, bench_message);
 criterion_main!(benches);

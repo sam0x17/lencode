@@ -22,23 +22,40 @@ pub enum Lencode {}
 impl VarintEncodingScheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
-        let mask = I::MAX_VALUE - I::ONE_HUNDRED_TWENTY_SEVEN;
-        if (val & mask) == I::ZERO {
+        if (val >> 7) == I::ZERO {
+            #[cfg(target_endian = "little")]
+            let byte = val.ne_bytes()[0];
+            #[cfg(target_endian = "big")]
             let byte = val.le_bytes()[0];
-            writer.write(&[byte])?;
+            writer.write(core::slice::from_ref(&byte))?;
             return Ok(1);
         }
 
-        let le_bytes = val.le_bytes();
-        let mut n = le_bytes.len();
-        while n > 0 && le_bytes[n - 1] == 0 {
+        #[cfg(target_endian = "little")]
+        let bytes = val.ne_bytes();
+        #[cfg(target_endian = "big")]
+        let bytes = val.le_bytes();
+        let bytes = bytes.as_slice();
+        let mut n = bytes.len();
+        while n > 1 && unsafe { *bytes.get_unchecked(n - 1) } == 0 {
             n -= 1;
         }
 
         let first_byte = 0x80 | (n as u8 & 0x7F);
-        writer.write(&[first_byte])?;
-        writer.write(&le_bytes[..n])?;
-        Ok(1 + n)
+        const STACK_BUF_BYTES: usize = 33; // 1-byte prefix + up to 32-byte payload (U256)
+        if n + 1 <= STACK_BUF_BYTES {
+            let mut out = [0u8; STACK_BUF_BYTES];
+            out[0] = first_byte;
+            unsafe {
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
+            }
+            writer.write(&out[..(1 + n)])?;
+            Ok(1 + n)
+        } else {
+            writer.write(core::slice::from_ref(&first_byte))?;
+            writer.write(&bytes[..n])?;
+            Ok(1 + n)
+        }
     }
 
     #[inline(always)]
@@ -53,11 +70,14 @@ impl VarintEncodingScheme for Lencode {
                     core::mem::size_of::<I>(),
                 )
             };
-            // Read first prefix byte directly into value storage
-            reader.read(&mut val_bytes[..1])?;
-            let first = val_bytes[0];
+            // Read first prefix byte separately to avoid overwriting for large values.
+            let mut first = 0u8;
+            reader.read(core::slice::from_mut(&mut first))?;
             if first & 0x80 == 0 {
                 // Small integer already in place
+                unsafe {
+                    *val_bytes.get_unchecked_mut(0) = first;
+                }
                 return Ok(val);
             }
             let n = (first & 0x7F) as usize;
