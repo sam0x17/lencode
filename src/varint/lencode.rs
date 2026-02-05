@@ -19,6 +19,62 @@ use core::mem;
 /// used in practice.
 pub enum Lencode {}
 
+impl Lencode {
+    #[inline(always)]
+    pub(crate) fn encode_varint_u64(val: u64, writer: &mut impl Write) -> Result<usize> {
+        if val <= 0x7F {
+            let byte = val as u8;
+            writer.write(core::slice::from_ref(&byte))?;
+            return Ok(1);
+        }
+
+        let n = ((64 - val.leading_zeros() + 7) >> 3) as usize;
+        let first_byte = 0x80 | (n as u8 & 0x7F);
+        let mut out = [0u8; 9];
+        out[0] = first_byte;
+        let bytes = val.to_le_bytes();
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
+        }
+        writer.write(&out[..(1 + n)])?;
+        Ok(1 + n)
+    }
+
+    #[inline(always)]
+    pub(crate) fn decode_varint_u64(reader: &mut impl Read) -> Result<u64> {
+        let mut first = 0u8;
+        reader.read(core::slice::from_mut(&mut first))?;
+        if first & 0x80 == 0 {
+            return Ok(first as u64);
+        }
+        let n = (first & 0x7F) as usize;
+        if n == 0 {
+            return Ok(first as u64);
+        }
+        #[cfg(target_endian = "little")]
+        {
+            let mut val: u64 = 0;
+            let val_bytes = unsafe {
+                core::slice::from_raw_parts_mut(&mut val as *mut u64 as *mut u8, 8)
+            };
+            reader.read(&mut val_bytes[..n])?;
+            Ok(val)
+        }
+        #[cfg(target_endian = "big")]
+        {
+            let mut buf = [0u8; 8];
+            reader.read(&mut buf[..n])?;
+            let mut val = 0u64;
+            let mut shift = 0u32;
+            for i in 0..n {
+                val |= (buf[i] as u64) << shift;
+                shift += 8;
+            }
+            Ok(val)
+        }
+    }
+}
+
 impl VarintEncodingScheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {

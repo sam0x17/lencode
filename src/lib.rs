@@ -194,7 +194,7 @@ pub trait Encode {
     /// Encodes a collection length in a compact form.
     #[inline(always)]
     fn encode_len(len: usize, writer: &mut impl Write) -> Result<usize> {
-        Lencode::encode_varint(len as u64, writer)
+        Lencode::encode_varint_u64(len as u64, writer)
     }
 
     /// Encodes an enum discriminant in a compact, consistent form.
@@ -202,7 +202,7 @@ pub trait Encode {
     /// The default uses an unsigned varint.
     #[inline(always)]
     fn encode_discriminant(discriminant: usize, writer: &mut impl Write) -> Result<usize> {
-        Lencode::encode_varint(discriminant as u64, writer)
+        Lencode::encode_varint_u64(discriminant as u64, writer)
     }
 
     /// Convenience wrapper around [`Encode::encode_ext`] without deduplication.
@@ -225,7 +225,7 @@ pub trait Decode {
     /// Decodes a collection length previously encoded with [`Encode::encode_len`].
     #[inline(always)]
     fn decode_len(reader: &mut impl Read) -> Result<usize> {
-        Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
+        Lencode::decode_varint_u64(reader).map(|v| v as usize)
     }
 
     /// Decodes an enum discriminant previously encoded with [`Encode::encode_discriminant`].
@@ -233,7 +233,7 @@ pub trait Decode {
     /// The default reads an unsigned varint.
     #[inline(always)]
     fn decode_discriminant(reader: &mut impl Read) -> Result<usize> {
-        Lencode::decode_varint::<u64>(reader).map(|v| v as usize)
+        Lencode::decode_varint_u64(reader).map(|v| v as usize)
     }
 
     /// Convenience wrapper around [`Decode::decode_ext`] without deduplication.
@@ -271,7 +271,33 @@ macro_rules! impl_encode_decode_unsigned_primitive {
     };
 }
 
-impl_encode_decode_unsigned_primitive!(u16, u32, u64, u128, U256);
+impl_encode_decode_unsigned_primitive!(u16, u32, u128, U256);
+
+impl Encode for u64 {
+    #[inline(always)]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        _dedupe_encoder: Option<&mut DedupeEncoder>,
+    ) -> Result<usize> {
+        Lencode::encode_varint_u64(*self, writer)
+    }
+}
+
+impl Decode for u64 {
+    #[inline(always)]
+    fn decode_ext(
+        reader: &mut impl Read,
+        _dedupe_decoder: Option<&mut DedupeDecoder>,
+    ) -> Result<Self> {
+        Lencode::decode_varint(reader)
+    }
+
+    #[inline(always)]
+    fn decode_len(_reader: &mut impl Read) -> Result<usize> {
+        unimplemented!()
+    }
+}
 
 impl Encode for usize {
     #[inline(always)]
@@ -280,7 +306,7 @@ impl Encode for usize {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
-        Lencode::encode_varint(*self as u64, writer)
+        Lencode::encode_varint_u64(*self as u64, writer)
     }
 }
 
@@ -290,7 +316,7 @@ impl Decode for usize {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint(reader).map(|v: u64| v as usize)
+        Lencode::decode_varint_u64(reader).map(|v| v as usize)
     }
 
     #[inline(always)]
@@ -1633,7 +1659,7 @@ fn test_string_flag_raw_small_ascii() {
 
     // Parse flagged header
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     let flag = flagged & 1;
     let payload_len = flagged >> 1;
     assert_eq!(flag, 0, "expected raw path for small ASCII string");
@@ -1641,7 +1667,7 @@ fn test_string_flag_raw_small_ascii() {
 
     // Verify raw payload equals original bytes
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
     assert_eq!(&buf[header.len()..], s.as_bytes());
 
     // Round-trip decode
@@ -1659,14 +1685,14 @@ fn test_string_flag_compressed_repetitive_ascii() {
 
     // Parse flagged header
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     let flag = flagged & 1;
     let payload_len = flagged >> 1;
     assert_eq!(flag, 1, "expected compressed path for repetitive string");
 
     // Payload length matches buffer remainder
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
     assert_eq!(buf.len() - header.len(), payload_len);
 
     // Verify decompression restores original
@@ -1691,7 +1717,7 @@ fn test_string_flag_compressed_unicode() {
 
     // Parse header and ensure compressed
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     assert_eq!(flagged & 1, 1);
 
     // Round-trip decode
@@ -1709,10 +1735,10 @@ fn test_string_flag_corrupted_compressed_payload_errors() {
 
     // Get header length
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     assert_eq!(flagged & 1, 1);
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
 
     if buf.len() > header.len() + 10 {
         let mut corrupted = buf.clone();
@@ -1732,7 +1758,7 @@ fn test_bytes_flag_raw_for_small_incompressible_slice() {
 
     // Parse flagged header
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     let flag = flagged & 1;
     let payload_len = flagged >> 1;
     assert_eq!(flag, 0, "expected raw path for small incompressible slice");
@@ -1740,7 +1766,7 @@ fn test_bytes_flag_raw_for_small_incompressible_slice() {
 
     // Ensure payload bytes equal the original raw data
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
     assert_eq!(&buf[header.len()..], &data[..]);
 
     // Full round-trip via Vec<u8>
@@ -1757,14 +1783,14 @@ fn test_bytes_flag_compressed_for_repetitive_slice() {
 
     // Parse flagged header
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     let flag = flagged & 1;
     let payload_len = flagged >> 1;
     assert_eq!(flag, 1, "expected compressed path for repetitive slice");
 
     // Header should be minimal; check the remainder length matches payload_len
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
     assert_eq!(buf.len() - header.len(), payload_len);
 
     // Decompress payload manually and verify it matches
@@ -1787,12 +1813,12 @@ fn test_vec_u8_flag_paths() {
     let mut buf = Vec::new();
     raw.encode(&mut buf).unwrap();
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     assert_eq!(flagged & 1, 0);
     let len = flagged >> 1;
     assert_eq!(len, raw.len());
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
     assert_eq!(&buf[header.len()..], &raw[..]);
     let rt: Vec<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(rt, raw);
@@ -1802,11 +1828,11 @@ fn test_vec_u8_flag_paths() {
     let mut buf2 = Vec::new();
     comp.encode(&mut buf2).unwrap();
     let mut c2 = Cursor::new(&buf2);
-    let flagged2 = Lencode::decode_varint::<u64>(&mut c2).unwrap() as usize;
+    let flagged2 = Lencode::decode_varint_u64(&mut c2).unwrap() as usize;
     assert_eq!(flagged2 & 1, 1);
     let payload_len = flagged2 >> 1;
     let mut header2 = Vec::new();
-    Lencode::encode_varint(flagged2 as u64, &mut header2).unwrap();
+    Lencode::encode_varint_u64(flagged2 as u64, &mut header2).unwrap();
     assert_eq!(buf2.len() - header2.len(), payload_len);
     let payload = &buf2[header2.len()..];
     let frame_len = crate::bytes::zstd_content_size(payload).unwrap();
@@ -1827,12 +1853,12 @@ fn test_vecdeque_u8_flag_paths_roundtrip() {
     let mut buf = Vec::new();
     raw.encode(&mut buf).unwrap();
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     assert_eq!(flagged & 1, 0);
     let len = flagged >> 1;
     assert_eq!(len, raw_vec.len());
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
     assert_eq!(&buf[header.len()..], &raw_vec[..]);
     let rt: collections::VecDeque<u8> = Decode::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(rt, raw);
@@ -1843,11 +1869,11 @@ fn test_vecdeque_u8_flag_paths_roundtrip() {
     let mut buf2 = Vec::new();
     comp.encode(&mut buf2).unwrap();
     let mut c2 = Cursor::new(&buf2);
-    let flagged2 = Lencode::decode_varint::<u64>(&mut c2).unwrap() as usize;
+    let flagged2 = Lencode::decode_varint_u64(&mut c2).unwrap() as usize;
     assert_eq!(flagged2 & 1, 1);
     let payload_len = flagged2 >> 1;
     let mut header2 = Vec::new();
-    Lencode::encode_varint(flagged2 as u64, &mut header2).unwrap();
+    Lencode::encode_varint_u64(flagged2 as u64, &mut header2).unwrap();
     assert_eq!(buf2.len() - header2.len(), payload_len);
     let payload = &buf2[header2.len()..];
     let frame_len = crate::bytes::zstd_content_size(payload).unwrap();
@@ -1866,10 +1892,10 @@ fn test_bytes_flag_corrupted_compressed_payload_errors() {
     let mut buf = Vec::new();
     (&data[..]).encode(&mut buf).unwrap();
     let mut c = Cursor::new(&buf);
-    let flagged = Lencode::decode_varint::<u64>(&mut c).unwrap() as usize;
+    let flagged = Lencode::decode_varint_u64(&mut c).unwrap() as usize;
     assert_eq!(flagged & 1, 1);
     let mut header = Vec::new();
-    Lencode::encode_varint(flagged as u64, &mut header).unwrap();
+    Lencode::encode_varint_u64(flagged as u64, &mut header).unwrap();
     // Corrupt a byte in the payload (if present)
     if buf.len() > header.len() {
         let idx = header.len() + core::cmp::min(10, buf.len() - header.len() - 1);
