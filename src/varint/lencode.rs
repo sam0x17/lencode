@@ -84,11 +84,16 @@ impl Lencode {
             }
             unsafe {
                 *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                core::ptr::copy_nonoverlapping(
-                    &val as *const u32 as *const u8,
-                    dst.as_mut_ptr().add(1),
-                    n,
-                );
+                if dst.len() >= 5 {
+                    let le = val.to_le_bytes();
+                    (dst.as_mut_ptr().add(1) as *mut [u8; 4]).write_unaligned(le);
+                } else {
+                    core::ptr::copy_nonoverlapping(
+                        &val as *const u32 as *const u8,
+                        dst.as_mut_ptr().add(1),
+                        n,
+                    );
+                }
             }
             writer.advance_mut(total);
             return Ok(total);
@@ -102,9 +107,9 @@ impl Lencode {
         let n = ((32 - val.leading_zeros() + 7) >> 3) as usize;
         let mut out = [0u8; 5];
         out[0] = 0x80 | (n as u8);
-        let bytes = val.to_le_bytes();
+        let le = val.to_le_bytes();
         unsafe {
-            core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
+            (out.as_mut_ptr().add(1) as *mut [u8; 4]).write_unaligned(le);
         }
         writer.write(&out[..(1 + n)])?;
         Ok(1 + n)
@@ -129,11 +134,17 @@ impl Lencode {
             }
             unsafe {
                 *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                core::ptr::copy_nonoverlapping(
-                    &val as *const u64 as *const u8,
-                    dst.as_mut_ptr().add(1),
-                    n,
-                );
+                if dst.len() >= 9 {
+                    // Fast: write all 8 LE bytes at once (avoids variable-length copy).
+                    let le = val.to_le_bytes();
+                    (dst.as_mut_ptr().add(1) as *mut [u8; 8]).write_unaligned(le);
+                } else {
+                    core::ptr::copy_nonoverlapping(
+                        &val as *const u64 as *const u8,
+                        dst.as_mut_ptr().add(1),
+                        n,
+                    );
+                }
             }
             writer.advance_mut(total);
             return Ok(total);
@@ -147,9 +158,9 @@ impl Lencode {
         let n = ((64 - val.leading_zeros() + 7) >> 3) as usize;
         let mut out = [0u8; 9];
         out[0] = 0x80 | (n as u8);
-        let bytes = val.to_le_bytes();
+        let le = val.to_le_bytes();
         unsafe {
-            core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
+            (out.as_mut_ptr().add(1) as *mut [u8; 8]).write_unaligned(le);
         }
         writer.write(&out[..(1 + n)])?;
         Ok(1 + n)
@@ -277,14 +288,24 @@ impl Lencode {
             if 1 + n > slice.len() {
                 return Err(Error::ReaderOutOfData);
             }
-            let mut val: u32 = 0;
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    slice.as_ptr().add(1),
-                    &mut val as *mut u32 as *mut u8,
-                    n,
-                );
-            }
+            let val: u32 = if slice.len() >= 5 {
+                let raw = unsafe { (slice.as_ptr().add(1) as *const u32).read_unaligned() };
+                if n < 4 {
+                    raw & ((1u32 << (n << 3)) - 1)
+                } else {
+                    raw
+                }
+            } else {
+                let mut v: u32 = 0;
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        slice.as_ptr().add(1),
+                        &mut v as *mut u32 as *mut u8,
+                        n,
+                    );
+                }
+                v
+            };
             reader.advance(1 + n);
             return Ok(val);
         }
@@ -318,14 +339,25 @@ impl Lencode {
             if 1 + n > slice.len() {
                 return Err(Error::ReaderOutOfData);
             }
-            let mut val: u64 = 0;
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    slice.as_ptr().add(1),
-                    &mut val as *mut u64 as *mut u8,
-                    n,
-                );
-            }
+            let val: u64 = if slice.len() >= 9 {
+                // Fast: read full 8 bytes and mask to n bytes
+                let raw = unsafe { (slice.as_ptr().add(1) as *const u64).read_unaligned() };
+                if n < 8 {
+                    raw & ((1u64 << (n << 3)) - 1)
+                } else {
+                    raw
+                }
+            } else {
+                let mut v: u64 = 0;
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        slice.as_ptr().add(1),
+                        &mut v as *mut u64 as *mut u8,
+                        n,
+                    );
+                }
+                v
+            };
             reader.advance(1 + n);
             return Ok(val);
         }

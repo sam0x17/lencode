@@ -1,7 +1,11 @@
-//! Helpers for compressed byte-sequence encoding/decoding.
+//! Helpers for compressed byte‑sequence encoding/decoding.
 //!
-//! This module provides zstd-based compression/decompression for contiguous u8 collections in
-//! a no_std-compatible manner using `zstd-safe`.
+//! This module provides zstd‑based compression/decompression for contiguous `u8` collections
+//! in a `no_std`‑compatible manner using `zstd-safe`.
+//!
+//! An entropy heuristic ([`looks_incompressible`]) samples the first 32 bytes of a payload
+//! and skips compression when the data appears random, avoiding wasted CPU on high‑entropy
+//! inputs.
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -16,6 +20,28 @@ const ZSTD_LEVEL: i32 = 1;
 /// Minimum payload size to attempt compression. Below this threshold,
 /// raw bytes are always used because compression overhead outweighs savings.
 pub(crate) const MIN_COMPRESS_LEN: usize = 64;
+
+/// Quick entropy check: returns `true` if a sample of the data appears incompressible.
+///
+/// Samples the first 32 bytes and counts distinct byte values using a 256‑bit
+/// bitmap. If ≥28 out of 32 sampled bytes are distinct, the data is almost
+/// certainly incompressible (e.g. random bytes, encrypted data, already‑compressed
+/// content) and zstd compression is skipped.
+#[inline(always)]
+pub(crate) fn looks_incompressible(data: &[u8]) -> bool {
+    let sample_len = data.len().min(32);
+    if sample_len < 32 {
+        return false; // small data: let zstd decide
+    }
+    // Bitmap: 256 bits = 4 u64s
+    let mut bits = [0u64; 4];
+    for &b in &data[..sample_len] {
+        bits[(b >> 6) as usize] |= 1u64 << (b & 63);
+    }
+    let distinct =
+        bits[0].count_ones() + bits[1].count_ones() + bits[2].count_ones() + bits[3].count_ones();
+    distinct >= 28
+}
 
 /// Compresses `input` with zstd, returning the compressed bytes.
 #[inline(always)]

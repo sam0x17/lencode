@@ -22,6 +22,11 @@ const DEFAULT_NUM_TYPES: usize = 4;
 /// [`Encode::encode_ext`] to take advantage of [`DedupeEncoder`].
 pub trait DedupeEncodeable: Hash + Eq + Pack + Clone + Send + Sync + 'static {}
 
+/// Blanket [`Encode`] impl for all [`DedupeEncodeable`] types.
+///
+/// Delegates to [`DedupeEncoder::encode`] when a dedupe context is active,
+/// otherwise falls back to [`Pack::pack`]. The [`Encode::encode_slice`]
+/// override delegates to [`Pack::pack_slice`] for bulk encoding.
 impl<T: DedupeEncodeable> Encode for T {
     #[inline(always)]
     fn encode_ext(
@@ -35,6 +40,11 @@ impl<T: DedupeEncodeable> Encode for T {
             self.pack(writer)
         }
     }
+
+    #[inline(always)]
+    fn encode_slice(items: &[Self], writer: &mut impl Write) -> Result<usize> {
+        T::pack_slice(items, writer)
+    }
 }
 
 /// Marker trait for types eligible for deduplicated decoding.
@@ -42,6 +52,11 @@ impl<T: DedupeEncodeable> Encode for T {
 /// Pairs with `DedupeEncodeable`; see that trait for details.
 pub trait DedupeDecodeable: Pack + Clone + Hash + Eq + Send + Sync + 'static {}
 
+/// Blanket [`Decode`] impl for all [`DedupeDecodeable`] types.
+///
+/// Delegates to [`DedupeDecoder::decode`] when a dedupe context is active,
+/// otherwise falls back to [`Pack::unpack`]. The [`Decode::decode_vec`]
+/// override delegates to [`Pack::unpack_vec`] for bulk decoding.
 impl<T: DedupeDecodeable> Decode for T {
     #[inline(always)]
     fn decode_ext(
@@ -53,6 +68,11 @@ impl<T: DedupeDecodeable> Decode for T {
         } else {
             T::unpack(reader)
         }
+    }
+
+    #[inline(always)]
+    fn decode_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
+        T::unpack_vec(reader, count)
     }
 }
 

@@ -1,8 +1,14 @@
 use crate::prelude::*;
 
-/// Implemented on types that can be packed into a platform-independent byte-stream.
+/// Implemented on types that can be packed into a platform‑independent byte‑stream.
 ///
-/// This is a requirement for types that implement the dedupe encoding/decoding strategy.
+/// This is a requirement for types that implement the dedupe encoding/decoding strategy
+/// via [`DedupeEncodeable`]/[`DedupeDecodeable`].
+///
+/// The trait provides optional bulk operations ([`Pack::pack_slice`] and
+/// [`Pack::unpack_vec`]) whose defaults iterate per‑element. Types with fixed‑size
+/// byte representations (e.g. `[u8; N]`, `#[repr(transparent)]` newtypes over byte
+/// arrays) should override these for zero‑copy bulk I/O.
 pub trait Pack: Sized {
     /// Writes `self` to `writer` using a stable, platform‑independent layout.
     ///
@@ -12,6 +18,44 @@ pub trait Pack: Sized {
     ///
     /// The source is any type implementing [`Read`].
     fn unpack(reader: &mut impl Read) -> Result<Self>;
+
+    /// Packs a contiguous slice of items into the writer.
+    ///
+    /// The default iterates per‑element. Override this for types whose packed
+    /// representation is a contiguous byte sequence to enable bulk `memcpy`
+    /// writes. For `#[repr(transparent)]` newtypes over `[u8; N]`, the
+    /// override can safely transmute the slice and delegate to
+    /// `<[u8; N]>::pack_slice`.
+    ///
+    /// Wired into [`Encode::encode_slice`] via the [`DedupeEncodeable`] blanket
+    /// impl, so overriding this automatically speeds up `Vec<Self>` encoding.
+    #[inline(always)]
+    fn pack_slice(items: &[Self], writer: &mut impl Write) -> Result<usize> {
+        let mut total = 0;
+        for item in items {
+            total += item.pack(writer)?;
+        }
+        Ok(total)
+    }
+
+    /// Unpacks `count` items from the reader into a `Vec`.
+    ///
+    /// The default iterates per‑element. Override this for types whose packed
+    /// representation is a contiguous byte sequence to enable bulk `memcpy`
+    /// reads. For `#[repr(transparent)]` newtypes over `[u8; N]`, the override
+    /// can safely transmute the resulting `Vec` and delegate to
+    /// `<[u8; N]>::unpack_vec`.
+    ///
+    /// Wired into [`Decode::decode_vec`] via the [`DedupeDecodeable`] blanket
+    /// impl, so overriding this automatically speeds up `Vec<Self>` decoding.
+    #[inline(always)]
+    fn unpack_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
+        let mut vec = Vec::with_capacity(count);
+        for _ in 0..count {
+            vec.push(Self::unpack(reader)?);
+        }
+        Ok(vec)
+    }
 }
 
 impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
@@ -75,6 +119,59 @@ impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
             }
         }
         Ok(unsafe { arr.assume_init() })
+    }
+
+    #[inline(always)]
+    fn pack_slice(items: &[Self], writer: &mut impl Write) -> Result<usize> {
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let total = N * items.len();
+            let bytes: &[u8] =
+                unsafe { core::slice::from_raw_parts(items.as_ptr() as *const u8, total) };
+            return writer.write(bytes);
+        }
+        let mut total = 0;
+        for item in items {
+            total += item.pack(writer)?;
+        }
+        Ok(total)
+    }
+
+    #[inline(always)]
+    fn unpack_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let total = N * count;
+            if let Some(buf) = reader.buf() {
+                if buf.len() >= total {
+                    let mut vec: Vec<Self> = Vec::with_capacity(count);
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            buf.as_ptr(),
+                            vec.as_mut_ptr() as *mut u8,
+                            total,
+                        );
+                        vec.set_len(count);
+                    }
+                    reader.advance(total);
+                    return Ok(vec);
+                }
+                return Err(Error::ReaderOutOfData);
+            }
+            // Fallback: read through trait
+            let mut vec: Vec<Self> = Vec::with_capacity(count);
+            let dst =
+                unsafe { core::slice::from_raw_parts_mut(vec.as_mut_ptr() as *mut u8, total) };
+            let mut read = 0;
+            while read < total {
+                read += reader.read(&mut dst[read..])?;
+            }
+            unsafe { vec.set_len(count) };
+            return Ok(vec);
+        }
+        let mut vec = Vec::with_capacity(count);
+        for _ in 0..count {
+            vec.push(Self::unpack(reader)?);
+        }
+        Ok(vec)
     }
 }
 

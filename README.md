@@ -12,7 +12,8 @@ Compact, fast binary encoding with varints, optional deduplication, and opportun
 
 - Fast varints: efficient for small and large integers
 - Optional deduplication: replace repeats with compact IDs for supported types
-- Bytes/strings compression: flagged header + zstd when smaller
+- Bytes/strings compression: flagged header + zstd when smaller; high‑entropy data is detected and skipped automatically
+- Bulk encoding: `Vec<T>` of fixed‑size types (e.g. `[u8; 32]`) are encoded/decoded via bulk `memcpy`, not per‑element
 - no_std + alloc: works without `std` (uses `zstd-safe`)
 - Derive macros: `#[derive(Encode, Decode)]` for your types
 - Solana support: feature `solana` adds v2/v3 SDK types
@@ -97,7 +98,17 @@ assert_eq!(roundtrip, vals);
 - `flag = 0` → raw bytes/UTF‑8
 - `flag = 1` → zstd frame (original size stored inside the frame)
 
-The encoder picks whichever is smaller per value.
+The encoder picks whichever is smaller per value. High‑entropy data (random bytes, encrypted content) is detected via a fast entropy check and skips compression entirely.
+
+### Bulk encoding for fixed‑size types
+
+`Vec<T>` where `T` has a fixed‑size wire representation (e.g. `[u8; 32]`, or `#[repr(transparent)]` newtypes over byte arrays) is encoded and decoded via bulk `memcpy` rather than per‑element iteration. This is handled automatically through `Encode::encode_slice` / `Decode::decode_vec` and their `Pack` counterparts `Pack::pack_slice` / `Pack::unpack_vec`.
+
+Custom `Pack` types can opt in by overriding `pack_slice` and `unpack_vec`.
+
+### Writer pre‑allocation
+
+The `Write` trait provides a `reserve(additional)` hint. Growable writers like `VecWriter` use this to pre‑allocate capacity before encoding large collections, reducing intermediate reallocations.
 
 ## Supported types
 

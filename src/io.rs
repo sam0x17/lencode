@@ -121,6 +121,15 @@ pub trait Write {
     /// Only valid when `buf_mut()` returned `Some` with at least `n` bytes.
     #[inline(always)]
     fn advance_mut(&mut self, _n: usize) {}
+
+    /// Hints that at least `additional` more bytes will be written.
+    ///
+    /// Writers backed by growable buffers (e.g. [`VecWriter`]) use this to
+    /// pre‑allocate capacity, reducing intermediate reallocations when encoding
+    /// large collections. The default is a no‑op, which is correct for
+    /// fixed‑capacity writers like [`Cursor`].
+    #[inline(always)]
+    fn reserve(&mut self, _additional: usize) {}
 }
 
 #[cfg(feature = "std")]
@@ -217,8 +226,8 @@ impl Write for VecWriter {
         let cap = self.0.capacity();
         let spare = cap - len;
         if spare < 17 {
-            // Amortize allocation: reserve enough for many writes at once
-            self.0.reserve(256);
+            // Amortize allocation: use doubling strategy for smooth growth
+            self.0.reserve(cap.max(256));
         }
         let cap = self.0.capacity();
         unsafe {
@@ -233,6 +242,11 @@ impl Write for VecWriter {
     fn advance_mut(&mut self, n: usize) {
         let new_len = self.0.len() + n;
         unsafe { self.0.set_len(new_len) };
+    }
+
+    #[inline(always)]
+    fn reserve(&mut self, additional: usize) {
+        self.0.reserve(additional);
     }
 }
 
@@ -265,7 +279,7 @@ impl Write for alloc::vec::Vec<u8> {
         let cap = self.capacity();
         let spare = cap - len;
         if spare < 17 {
-            self.reserve(256);
+            self.reserve(cap.max(256));
         }
         let cap = self.capacity();
         unsafe {
@@ -280,6 +294,11 @@ impl Write for alloc::vec::Vec<u8> {
     fn advance_mut(&mut self, n: usize) {
         let new_len = self.len() + n;
         unsafe { self.set_len(new_len) };
+    }
+
+    #[inline(always)]
+    fn reserve(&mut self, additional: usize) {
+        alloc::vec::Vec::reserve(self, additional);
     }
 }
 

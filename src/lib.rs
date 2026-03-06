@@ -20,9 +20,19 @@
 //!   - `flag = 1` → `payload` is a zstd frame (original size is stored in the frame)
 //!   - `flag = 0` → `payload` is raw bytes/UTF‑8
 //! - The encoder picks whichever is smaller per value.
+//! - High‑entropy data (random bytes) is detected via a fast entropy check and skips
+//!   compression entirely, avoiding wasted work.
 //!
 //! This keeps headers minimal while improving size significantly for repetitive content, and
 //! is `no_std` compatible via `zstd-safe`.
+//!
+//! ## Bulk encoding
+//!
+//! Collections of fixed‑size elements (e.g. `Vec<[u8; 32]>`) are encoded via bulk
+//! `memcpy` when possible, avoiding per‑element overhead. This is handled automatically
+//! through [`Encode::encode_slice`] and [`Decode::decode_vec`], which types can override
+//! for optimized batch operations. The [`Pack`] trait provides analogous
+//! [`Pack::pack_slice`]/[`Pack::unpack_vec`] methods for deduplicated types.
 //!
 //! Quick start:
 //!
@@ -183,6 +193,10 @@ pub fn decode_ext<T: Decode>(
 pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 /// Trait for types that can be encoded to a binary stream.
+///
+/// Implementors must provide [`Encode::encode_ext`]. The remaining methods have
+/// sensible defaults but can be overridden for performance (e.g. bulk `memcpy`
+/// for fixed‑size types).
 pub trait Encode {
     /// Encodes `self` to `writer`, optionally using [`DedupeEncoder`].
     fn encode_ext(
@@ -210,9 +224,33 @@ pub trait Encode {
     fn encode(&self, writer: &mut impl Write) -> Result<usize> {
         self.encode_ext(writer, None)
     }
+
+    /// Encodes a contiguous slice of items without deduplication.
+    ///
+    /// The default iterates per‑element. Types whose wire representation is a
+    /// fixed‑size byte sequence (e.g. `[u8; N]`) override this to perform a
+    /// single bulk write, which is significantly faster for large collections.
+    ///
+    /// Called automatically by `Vec<T>::encode_ext` when no [`DedupeEncoder`] is
+    /// active.
+    #[inline(always)]
+    fn encode_slice(items: &[Self], writer: &mut impl Write) -> Result<usize>
+    where
+        Self: Sized,
+    {
+        let mut total = 0;
+        for item in items {
+            total += item.encode_ext(writer, None)?;
+        }
+        Ok(total)
+    }
 }
 
 /// Trait for types that can be decoded from a binary stream.
+///
+/// Implementors must provide [`Decode::decode_ext`]. The remaining methods have
+/// sensible defaults but can be overridden for performance (e.g. bulk `memcpy`
+/// for fixed‑size types).
 pub trait Decode {
     /// Decodes `Self` from `reader`, optionally using [`DedupeDecoder`].
     fn decode_ext(
@@ -243,6 +281,26 @@ pub trait Decode {
         Self: Sized,
     {
         Self::decode_ext(reader, None)
+    }
+
+    /// Decodes `count` items into a `Vec` without deduplication.
+    ///
+    /// The default iterates per‑element. Types whose wire representation is a
+    /// fixed‑size byte sequence (e.g. `[u8; N]`) override this to perform a
+    /// single bulk read, which is significantly faster for large collections.
+    ///
+    /// Called automatically by `Vec<T>::decode_ext` when no [`DedupeDecoder`] is
+    /// active.
+    #[inline(always)]
+    fn decode_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>>
+    where
+        Self: Sized,
+    {
+        let mut vec = Vec::with_capacity(count);
+        for _ in 0..count {
+            vec.push(Self::decode_ext(reader, None)?);
+        }
+        Ok(vec)
     }
 }
 
@@ -706,7 +764,7 @@ impl Encode for &[u8] {
         // header = varint((payload_len << 1) | (is_compressed as usize))
         let raw_len = self.len();
         // Skip compression for small payloads where overhead outweighs savings
-        if raw_len >= bytes::MIN_COMPRESS_LEN {
+        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(self) {
             let compressed = bytes::zstd_compress(self)?;
             let comp_len = compressed.len();
             let raw_hdr = bytes::flagged_header_len(raw_len, false);
@@ -736,7 +794,7 @@ impl Encode for &str {
         let bytes = self.as_bytes();
         let raw_len = bytes.len();
         // Skip compression for small payloads where overhead outweighs savings
-        if raw_len >= bytes::MIN_COMPRESS_LEN {
+        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes) {
             let compressed = bytes::zstd_compress(bytes)?;
             let comp_len = compressed.len();
             let raw_hdr = bytes::flagged_header_len(raw_len, false);
@@ -923,6 +981,21 @@ impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
         }
         Ok(total_written)
     }
+
+    #[inline(always)]
+    fn encode_slice(items: &[Self], writer: &mut impl Write) -> Result<usize> {
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let total = N * items.len();
+            let bytes: &[u8] =
+                unsafe { core::slice::from_raw_parts(items.as_ptr() as *const u8, total) };
+            return writer.write(bytes);
+        }
+        let mut total = 0;
+        for item in items {
+            total += item.encode_ext(writer, None)?;
+        }
+        Ok(total)
+    }
 }
 
 impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
@@ -983,6 +1056,44 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
 
     fn decode_len(_reader: &mut impl Read) -> Result<usize> {
         unimplemented!()
+    }
+
+    #[inline(always)]
+    fn decode_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let total = N * count;
+            if let Some(buf) = reader.buf() {
+                if buf.len() >= total {
+                    let mut vec: Vec<Self> = Vec::with_capacity(count);
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            buf.as_ptr(),
+                            vec.as_mut_ptr() as *mut u8,
+                            total,
+                        );
+                        vec.set_len(count);
+                    }
+                    reader.advance(total);
+                    return Ok(vec);
+                }
+                return Err(Error::ReaderOutOfData);
+            }
+            // Fallback: read through trait
+            let mut vec: Vec<Self> = Vec::with_capacity(count);
+            let dst =
+                unsafe { core::slice::from_raw_parts_mut(vec.as_mut_ptr() as *mut u8, total) };
+            let mut read = 0;
+            while read < total {
+                read += reader.read(&mut dst[read..])?;
+            }
+            unsafe { vec.set_len(count) };
+            return Ok(vec);
+        }
+        let mut vec = Vec::with_capacity(count);
+        for _ in 0..count {
+            vec.push(Self::decode_ext(reader, None)?);
+        }
+        Ok(vec)
     }
 }
 
@@ -1046,6 +1157,9 @@ impl<T: Decode + 'static> Decode for Vec<T> {
         }
 
         let len = Self::decode_len(reader)?;
+        if dedupe_decoder.is_none() {
+            return T::decode_vec(reader, len);
+        }
         let mut vec = Vec::with_capacity(len);
         for _ in 0..len {
             vec.push(T::decode_ext(reader, dedupe_decoder.as_deref_mut())?);
@@ -1068,7 +1182,7 @@ impl<T: Encode + 'static> Encode for Vec<T> {
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, self.len()) };
             let raw_len = bytes.len();
             // Skip compression for small payloads where overhead outweighs savings
-            if raw_len >= bytes::MIN_COMPRESS_LEN {
+            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes) {
                 let compressed = bytes::zstd_compress(bytes)?;
                 let comp_len = compressed.len();
                 let raw_hdr = bytes::flagged_header_len(raw_len, false);
@@ -1088,6 +1202,12 @@ impl<T: Encode + 'static> Encode for Vec<T> {
 
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
+        if dedupe_encoder.is_none() {
+            // Pre-reserve to avoid intermediate reallocations
+            writer.reserve(self.len() * core::mem::size_of::<T>());
+            total_written += T::encode_slice(self, writer)?;
+            return Ok(total_written);
+        }
         for item in self {
             total_written += item.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
         }
@@ -1181,7 +1301,7 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
             tmp.extend_from_slice(b_u8);
             let raw_len = tmp.len();
             // Skip compression for small payloads where overhead outweighs savings
-            if raw_len >= bytes::MIN_COMPRESS_LEN {
+            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(&tmp) {
                 let compressed = bytes::zstd_compress(&tmp)?;
                 let comp_len = compressed.len();
                 let raw_hdr = bytes::flagged_header_len(raw_len, false);
