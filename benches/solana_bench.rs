@@ -22,6 +22,7 @@ use wincode::{SchemaRead, SchemaReadOwned, SchemaWrite};
     PartialEq,
     Eq,
     Hash,
+    Pack,
     Serialize,
     Deserialize,
     SchemaWrite,
@@ -35,32 +36,6 @@ struct BenchPubkey([u8; 32]);
 impl From<Pubkey> for BenchPubkey {
     fn from(value: Pubkey) -> Self {
         Self(value.to_bytes())
-    }
-}
-
-impl Pack for BenchPubkey {
-    fn pack(&self, writer: &mut impl Write) -> Result<usize> {
-        self.0.pack(writer)
-    }
-
-    fn unpack(reader: &mut impl Read) -> Result<Self> {
-        Ok(Self(<[u8; 32]>::unpack(reader)?))
-    }
-
-    #[inline(always)]
-    fn pack_slice(items: &[Self], writer: &mut impl Write) -> Result<usize> {
-        // SAFETY: BenchPubkey is #[repr(transparent)] over [u8; 32], so &[BenchPubkey]
-        // has the same layout as &[[u8; 32]].
-        let inner: &[[u8; 32]] =
-            unsafe { core::slice::from_raw_parts(items.as_ptr() as *const [u8; 32], items.len()) };
-        <[u8; 32]>::pack_slice(inner, writer)
-    }
-
-    #[inline(always)]
-    fn unpack_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
-        // SAFETY: BenchPubkey is #[repr(transparent)] over [u8; 32].
-        let inner = <[u8; 32]>::unpack_vec(reader, count)?;
-        Ok(unsafe { core::mem::transmute::<Vec<[u8; 32]>, Vec<BenchPubkey>>(inner) })
     }
 }
 

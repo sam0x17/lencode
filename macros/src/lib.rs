@@ -3,6 +3,10 @@
 //! - `#[derive(Encode)]` implements `lencode::Encode` by writing fields in declaration order
 //!   and encoding enum discriminants compactly.
 //! - `#[derive(Decode)]` implements `lencode::Decode` to read the same layout.
+//! - `#[derive(Pack)]` implements `lencode::pack::Pack` by packing/unpacking fields in
+//!   declaration order. For `#[repr(transparent)]` single‑field structs, it additionally
+//!   generates bulk `pack_slice`/`unpack_vec` overrides that transmute to/from the inner
+//!   type's slice/vec, enabling zero‑copy bulk I/O for newtypes over byte arrays.
 //!
 //! For C‑like enums with an explicit `#[repr(uN/iN)]`, the numeric value of the discriminant
 //! is preserved; otherwise, the variant index is used.
@@ -11,6 +15,25 @@ use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
 use syn::{Attribute, DeriveInput, Ident, Result, Type, parse_quote, parse2};
+
+/// Returns `true` if `#[repr(transparent)]` is present on the item.
+fn has_repr_transparent(attrs: &[Attribute]) -> bool {
+    for attr in attrs {
+        if attr.path().is_ident("repr") {
+            let mut found = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("transparent") {
+                    found = true;
+                }
+                Ok(())
+            });
+            if found {
+                return true;
+            }
+        }
+    }
+    false
+}
 
 fn enum_repr_ty(attrs: &[Attribute]) -> Option<Type> {
     let mut out: Option<Type> = None;
@@ -68,6 +91,28 @@ pub fn derive_encode(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Decode)]
 pub fn derive_decode(input: TokenStream) -> TokenStream {
     match derive_decode_impl(input) {
+        Ok(ts) => ts.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Derives `lencode::pack::Pack` for structs.
+///
+/// - Fields are packed/unpacked in declaration order using their own `Pack` impls.
+/// - For `#[repr(transparent)]` single‑field structs, bulk `pack_slice` and `unpack_vec`
+///   overrides are generated that transmute to/from the inner type's slice/vec, enabling
+///   zero‑copy bulk I/O for newtypes over byte arrays.
+///
+/// # Example
+///
+/// ```ignore
+/// #[repr(transparent)]
+/// #[derive(Pack)]
+/// struct MyPubkey([u8; 32]);
+/// ```
+#[proc_macro_derive(Pack)]
+pub fn derive_pack(input: TokenStream) -> TokenStream {
+    match derive_pack_impl(input) {
         Ok(ts) => ts.into(),
         Err(err) => err.to_compile_error().into(),
     }
@@ -373,6 +418,135 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
     }
 }
 
+#[inline(always)]
+fn derive_pack_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
+    let derive_input = parse2::<DeriveInput>(input.into())?;
+    let krate = crate_path();
+    let name = derive_input.ident.clone();
+
+    let data_struct = match derive_input.data {
+        syn::Data::Struct(s) => s,
+        _ => {
+            return Err(syn::Error::new_spanned(
+                name,
+                "Pack can only be derived for structs",
+            ));
+        }
+    };
+
+    let is_transparent = has_repr_transparent(&derive_input.attrs);
+
+    // Collect fields info
+    let fields = &data_struct.fields;
+    let field_count = fields.len();
+
+    let (pack_body, unpack_body) = match fields {
+        syn::Fields::Named(named) => {
+            let pack_stmts = named.named.iter().map(|f| {
+                let fname = &f.ident;
+                let ftype = &f.ty;
+                quote! {
+                    total += <#ftype as #krate::pack::Pack>::pack(&self.#fname, writer)?;
+                }
+            });
+            let unpack_fields = named.named.iter().map(|f| {
+                let fname = &f.ident;
+                let ftype = &f.ty;
+                quote! {
+                    #fname: <#ftype as #krate::pack::Pack>::unpack(reader)?,
+                }
+            });
+            (
+                quote! {
+                    let mut total = 0usize;
+                    #(#pack_stmts)*
+                    Ok(total)
+                },
+                quote! {
+                    Ok(#name {
+                        #(#unpack_fields)*
+                    })
+                },
+            )
+        }
+        syn::Fields::Unnamed(unnamed) => {
+            let pack_stmts = unnamed.unnamed.iter().enumerate().map(|(i, f)| {
+                let index = syn::Index::from(i);
+                let ftype = &f.ty;
+                quote! {
+                    total += <#ftype as #krate::pack::Pack>::pack(&self.#index, writer)?;
+                }
+            });
+            let unpack_fields = unnamed.unnamed.iter().map(|f| {
+                let ftype = &f.ty;
+                quote! {
+                    <#ftype as #krate::pack::Pack>::unpack(reader)?,
+                }
+            });
+            (
+                quote! {
+                    let mut total = 0usize;
+                    #(#pack_stmts)*
+                    Ok(total)
+                },
+                quote! {
+                    Ok(#name(
+                        #(#unpack_fields)*
+                    ))
+                },
+            )
+        }
+        syn::Fields::Unit => (quote! { Ok(0) }, quote! { Ok(#name) }),
+    };
+
+    // For #[repr(transparent)] single-field structs, generate bulk pack_slice/unpack_vec
+    let bulk_methods = if is_transparent && field_count == 1 {
+        let inner_ty = match fields {
+            syn::Fields::Named(named) => &named.named[0].ty,
+            syn::Fields::Unnamed(unnamed) => &unnamed.unnamed[0].ty,
+            _ => unreachable!(),
+        };
+        quote! {
+            #[inline(always)]
+            fn pack_slice(items: &[Self], writer: &mut impl #krate::io::Write) -> #krate::Result<usize> {
+                // SAFETY: #[repr(transparent)] guarantees identical layout.
+                let inner: &[#inner_ty] = unsafe {
+                    core::slice::from_raw_parts(
+                        items.as_ptr() as *const #inner_ty,
+                        items.len(),
+                    )
+                };
+                <#inner_ty as #krate::pack::Pack>::pack_slice(inner, writer)
+            }
+
+            #[inline(always)]
+            fn unpack_vec(reader: &mut impl #krate::io::Read, count: usize) -> #krate::Result<Vec<Self>> {
+                let inner = <#inner_ty as #krate::pack::Pack>::unpack_vec(reader, count)?;
+                // SAFETY: #[repr(transparent)] guarantees identical layout.
+                Ok(unsafe { core::mem::transmute::<Vec<#inner_ty>, Vec<#name>>(inner) })
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    Ok(quote! {
+        impl #krate::pack::Pack for #name {
+            #[inline(always)]
+            fn pack(&self, writer: &mut impl #krate::io::Write) -> #krate::Result<usize> {
+                #pack_body
+            }
+
+            #[inline(always)]
+            fn unpack(reader: &mut impl #krate::io::Read) -> #krate::Result<Self> {
+                #unpack_body
+            }
+
+            #bulk_methods
+        }
+    })
+}
+
 #[test]
 fn test_derive_encode_struct_basic() {
     let tokens = quote! {
@@ -432,4 +606,50 @@ fn test_derive_decode_struct_basic() {
         }
     };
     assert_eq!(derived.to_string(), expected.to_string());
+}
+
+#[test]
+fn test_derive_pack_named_struct() {
+    let tokens = quote! {
+        struct Point {
+            x: u32,
+            y: u32,
+        }
+    };
+    let derived = derive_pack_impl(tokens).unwrap();
+    let expected = quote! {
+        impl ::lencode::pack::Pack for Point {
+            #[inline(always)]
+            fn pack(&self, writer: &mut impl ::lencode::io::Write) -> ::lencode::Result<usize> {
+                let mut total = 0usize;
+                total += <u32 as ::lencode::pack::Pack>::pack(&self.x, writer)?;
+                total += <u32 as ::lencode::pack::Pack>::pack(&self.y, writer)?;
+                Ok(total)
+            }
+
+            #[inline(always)]
+            fn unpack(reader: &mut impl ::lencode::io::Read) -> ::lencode::Result<Self> {
+                Ok(Point {
+                    x: <u32 as ::lencode::pack::Pack>::unpack(reader)?,
+                    y: <u32 as ::lencode::pack::Pack>::unpack(reader)?,
+                })
+            }
+        }
+    };
+    assert_eq!(derived.to_string(), expected.to_string());
+}
+
+#[test]
+fn test_derive_pack_transparent_tuple_struct() {
+    let tokens = quote! {
+        #[repr(transparent)]
+        struct MyKey([u8; 32]);
+    };
+    let derived = derive_pack_impl(tokens).unwrap();
+    // Just verify it parses and contains key signatures; exact whitespace around >> varies.
+    let s = derived.to_string();
+    assert!(s.contains("pack_slice"), "should contain pack_slice override");
+    assert!(s.contains("unpack_vec"), "should contain unpack_vec override");
+    assert!(s.contains("transmute"), "should contain transmute for bulk decode");
+    assert!(s.contains("from_raw_parts"), "should contain from_raw_parts for bulk encode");
 }

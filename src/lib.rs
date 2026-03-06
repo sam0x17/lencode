@@ -10,8 +10,10 @@
 //! [`DedupeEncoder`]/[`DedupeDecoder`], which replaces repeated values with small IDs to
 //! reduce size for data with many duplicates.
 //!
-//! Derive macros for [`Encode`] and [`Decode`] are available from the companion crate
-//! [`lencode_macros`] and re‑exported in [`prelude`].
+//! Derive macros for [`Encode`], [`Decode`], and [`Pack`] are available from the companion
+//! crate [`lencode_macros`] and re‑exported in [`prelude`]. `#[derive(Pack)]` on a
+//! `#[repr(transparent)]` single‑field struct automatically generates bulk `pack_slice`
+//! and `unpack_vec` overrides for zero‑copy I/O.
 //!
 //! Bytes and strings are compacted using a flagged header with opportunistic zstd compression:
 //!

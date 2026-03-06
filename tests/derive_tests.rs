@@ -107,3 +107,67 @@ pub enum SiblingPosition {
     Left,
     Right,
 }
+
+// derive(Pack) tests
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Pack)]
+struct SimplePoint {
+    x: u32,
+    y: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Pack)]
+#[repr(transparent)]
+struct MyKey([u8; 32]);
+
+impl DedupeEncodeable for MyKey {}
+impl DedupeDecodeable for MyKey {}
+
+#[test]
+fn test_derive_pack_named_struct_roundtrip() {
+    let p = SimplePoint { x: 42, y: 99 };
+    let mut buf = Vec::new();
+    p.pack(&mut buf).unwrap();
+    let decoded = SimplePoint::unpack(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(p, decoded);
+}
+
+#[test]
+fn test_derive_pack_transparent_roundtrip() {
+    let key = MyKey([0xAB; 32]);
+    let mut buf = Vec::new();
+    key.pack(&mut buf).unwrap();
+    assert_eq!(buf.len(), 32);
+    let decoded = MyKey::unpack(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(key, decoded);
+}
+
+#[test]
+fn test_derive_pack_transparent_bulk_vec_roundtrip() {
+    // Test that the derived pack_slice/unpack_vec work via Vec<MyKey> encode/decode
+    let keys: Vec<MyKey> = (0..100u8).map(|i| MyKey([i; 32])).collect();
+    let mut buf = VecWriter::new();
+    encode(&keys, &mut buf).unwrap();
+    let decoded: Vec<MyKey> = decode(&mut Cursor::new(buf.as_slice())).unwrap();
+    assert_eq!(keys, decoded);
+}
+
+#[test]
+fn test_derive_pack_transparent_dedupe_roundtrip() {
+    // Test deduplication works with the derived Pack
+    let keys = vec![
+        MyKey([1; 32]),
+        MyKey([2; 32]),
+        MyKey([1; 32]),
+        MyKey([2; 32]),
+        MyKey([1; 32]),
+    ];
+
+    let mut enc = DedupeEncoder::new();
+    let mut buf = VecWriter::new();
+    encode_ext(&keys, &mut buf, Some(&mut enc)).unwrap();
+
+    let mut dec = DedupeDecoder::new();
+    let decoded: Vec<MyKey> = decode_ext(&mut Cursor::new(buf.as_slice()), Some(&mut dec)).unwrap();
+    assert_eq!(keys, decoded);
+}

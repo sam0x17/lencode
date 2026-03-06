@@ -15,7 +15,7 @@ Compact, fast binary encoding with varints, optional deduplication, and opportun
 - Bytes/strings compression: flagged header + zstd when smaller; high‑entropy data is detected and skipped automatically
 - Bulk encoding: `Vec<T>` of fixed‑size types (e.g. `[u8; 32]`) are encoded/decoded via bulk `memcpy`, not per‑element
 - no_std + alloc: works without `std` (uses `zstd-safe`)
-- Derive macros: `#[derive(Encode, Decode)]` for your types
+- Derive macros: `#[derive(Encode, Decode)]` for your types, `#[derive(Pack)]` for dedupe/bulk types
 - Solana support: feature `solana` adds v2/v3 SDK types
 - Big-endian ready: CI runs tests on s390x
 
@@ -104,7 +104,18 @@ The encoder picks whichever is smaller per value. High‑entropy data (random by
 
 `Vec<T>` where `T` has a fixed‑size wire representation (e.g. `[u8; 32]`, or `#[repr(transparent)]` newtypes over byte arrays) is encoded and decoded via bulk `memcpy` rather than per‑element iteration. This is handled automatically through `Encode::encode_slice` / `Decode::decode_vec` and their `Pack` counterparts `Pack::pack_slice` / `Pack::unpack_vec`.
 
-Custom `Pack` types can opt in by overriding `pack_slice` and `unpack_vec`.
+Custom `Pack` types can opt in by overriding `pack_slice` and `unpack_vec`, or by using `#[derive(Pack)]` on a `#[repr(transparent)]` single‑field struct, which generates the bulk overrides automatically:
+
+```rust
+use lencode::prelude::*;
+
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Pack)]
+struct MyPubkey([u8; 32]);
+
+impl DedupeEncodeable for MyPubkey {}
+impl DedupeDecodeable for MyPubkey {}
+```
 
 ### Writer pre‑allocation
 

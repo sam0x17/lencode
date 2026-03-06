@@ -9,6 +9,10 @@ use crate::prelude::*;
 /// [`Pack::unpack_vec`]) whose defaults iterate per‑element. Types with fixed‑size
 /// byte representations (e.g. `[u8; N]`, `#[repr(transparent)]` newtypes over byte
 /// arrays) should override these for zero‑copy bulk I/O.
+///
+/// Use `#[derive(Pack)]` to auto‑implement this trait. For `#[repr(transparent)]`
+/// single‑field structs, the derive macro generates optimized `pack_slice`/`unpack_vec`
+/// overrides automatically.
 pub trait Pack: Sized {
     /// Writes `self` to `writer` using a stable, platform‑independent layout.
     ///
