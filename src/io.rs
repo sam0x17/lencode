@@ -129,8 +129,19 @@ use alloc::vec::Vec;
 impl Write for Vec<u8> {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.extend_from_slice(buf);
-        Ok(buf.len())
+        let len = self.len();
+        let add = buf.len();
+        if add == 0 {
+            return Ok(0);
+        }
+        self.reserve(add);
+        // SAFETY: we reserved enough space for `add` bytes and set_len after copy.
+        unsafe {
+            let dst = self.as_mut_ptr().add(len);
+            core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, add);
+            self.set_len(len + add);
+        }
+        Ok(add)
     }
 
     #[inline(always)]
