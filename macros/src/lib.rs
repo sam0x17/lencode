@@ -648,8 +648,20 @@ fn test_derive_pack_transparent_tuple_struct() {
     let derived = derive_pack_impl(tokens).unwrap();
     // Just verify it parses and contains key signatures; exact whitespace around >> varies.
     let s = derived.to_string();
-    assert!(s.contains("pack_slice"), "should contain pack_slice override");
-    assert!(s.contains("unpack_vec"), "should contain unpack_vec override");
-    assert!(s.contains("transmute"), "should contain transmute for bulk decode");
-    assert!(s.contains("from_raw_parts"), "should contain from_raw_parts for bulk encode");
+    assert!(
+        s.contains("pack_slice"),
+        "should contain pack_slice override"
+    );
+    assert!(
+        s.contains("unpack_vec"),
+        "should contain unpack_vec override"
+    );
+    assert!(
+        s.contains("transmute"),
+        "should contain transmute for bulk decode"
+    );
+    assert!(
+        s.contains("from_raw_parts"),
+        "should contain from_raw_parts for bulk encode"
+    );
 }
