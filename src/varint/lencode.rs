@@ -477,7 +477,7 @@ impl VarintEncodingScheme for Lencode {
 
         let first_byte = 0x80 | (n as u8 & 0x7F);
         const STACK_BUF_BYTES: usize = 33; // 1-byte prefix + up to 32-byte payload (U256)
-        if n + 1 <= STACK_BUF_BYTES {
+        if n < STACK_BUF_BYTES {
             let mut out = [0u8; STACK_BUF_BYTES];
             out[0] = first_byte;
             unsafe {

@@ -157,10 +157,16 @@ extern crate alloc;
 /// `VecWriter` bypasses that blanket and writes directly into spare capacity.
 pub struct VecWriter(pub alloc::vec::Vec<u8>);
 
+impl Default for VecWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VecWriter {
     /// Creates a new empty `VecWriter`.
     #[inline(always)]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(alloc::vec::Vec::new())
     }
 

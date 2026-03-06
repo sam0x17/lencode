@@ -21,15 +21,14 @@ impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
             let bytes: &[u8] =
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, N) };
-            if let Some(buf) = writer.buf_mut() {
-                if buf.len() >= N {
+            if let Some(buf) = writer.buf_mut()
+                && buf.len() >= N {
                     unsafe {
                         core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr(), N);
                     }
                     writer.advance_mut(N);
                     return Ok(N);
                 }
-            }
             return writer.write(bytes);
         }
         let mut total_bytes = 0;

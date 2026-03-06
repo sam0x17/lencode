@@ -777,15 +777,14 @@ impl Decode for String {
         let payload_len = flagged >> 1;
         if is_compressed {
             // Zero-copy fast path
-            if let Some(slice) = reader.buf() {
-                if slice.len() >= payload_len {
+            if let Some(slice) = reader.buf()
+                && slice.len() >= payload_len {
                     let comp = &slice[..payload_len];
                     let orig_len = bytes::zstd_content_size(comp)?;
                     let out = bytes::zstd_decompress(comp, orig_len)?;
                     reader.advance(payload_len);
                     return String::from_utf8(out).map_err(|_| Error::InvalidData);
                 }
-            }
             let mut comp = vec![0u8; payload_len];
             let mut read = 0usize;
             while read < payload_len {
@@ -796,8 +795,8 @@ impl Decode for String {
             String::from_utf8(out).map_err(|_| Error::InvalidData)
         } else {
             // Zero-copy fast path
-            if let Some(slice) = reader.buf() {
-                if slice.len() >= payload_len {
+            if let Some(slice) = reader.buf()
+                && slice.len() >= payload_len {
                     let mut buf = vec![0u8; payload_len];
                     unsafe {
                         core::ptr::copy_nonoverlapping(
@@ -809,7 +808,6 @@ impl Decode for String {
                     reader.advance(payload_len);
                     return String::from_utf8(buf).map_err(|_| Error::InvalidData);
                 }
-            }
             let mut buf = vec![0u8; payload_len];
             let mut read = 0usize;
             while read < payload_len {
@@ -910,15 +908,14 @@ impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
             let bytes: &[u8] =
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, N) };
-            if let Some(buf) = writer.buf_mut() {
-                if buf.len() >= N {
+            if let Some(buf) = writer.buf_mut()
+                && buf.len() >= N {
                     unsafe {
                         core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr(), N);
                     }
                     writer.advance_mut(N);
                     return Ok(N);
                 }
-            }
             return writer.write(bytes);
         }
         let mut total_written = 0;
@@ -1003,8 +1000,8 @@ impl<T: Decode + 'static> Decode for Vec<T> {
             let payload_len = flagged >> 1;
             if is_compressed {
                 // Zero-copy fast path for compressed data
-                if let Some(slice) = reader.buf() {
-                    if slice.len() >= payload_len {
+                if let Some(slice) = reader.buf()
+                    && slice.len() >= payload_len {
                         let comp = &slice[..payload_len];
                         let orig_len = bytes::zstd_content_size(comp)?;
                         let out = bytes::zstd_decompress(comp, orig_len)?;
@@ -1012,7 +1009,6 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                         let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                         return Ok(vec_t);
                     }
-                }
                 let mut comp = vec![0u8; payload_len];
                 let mut read = 0usize;
                 while read < payload_len {
@@ -1024,8 +1020,8 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                 return Ok(vec_t);
             } else {
                 // Zero-copy fast path for raw data
-                if let Some(slice) = reader.buf() {
-                    if slice.len() >= payload_len {
+                if let Some(slice) = reader.buf()
+                    && slice.len() >= payload_len {
                         let mut out = vec![0u8; payload_len];
                         unsafe {
                             core::ptr::copy_nonoverlapping(
@@ -1038,7 +1034,6 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                         let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                         return Ok(vec_t);
                     }
-                }
                 let mut out = vec![0u8; payload_len];
                 let mut read = 0usize;
                 while read < payload_len {
