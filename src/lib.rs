@@ -290,7 +290,7 @@ impl Decode for u16 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint(reader)
+        Lencode::decode_varint_u16(reader)
     }
 
     #[inline(always)]
@@ -316,7 +316,7 @@ impl Decode for u32 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint(reader)
+        Lencode::decode_varint_u32(reader)
     }
 
     #[inline(always)]
@@ -342,7 +342,7 @@ impl Decode for u64 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint(reader)
+        Lencode::decode_varint_u64(reader)
     }
 
     #[inline(always)]
@@ -368,7 +368,7 @@ impl Decode for u128 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint(reader)
+        Lencode::decode_varint_u128(reader)
     }
 
     #[inline(always)]
@@ -447,7 +447,7 @@ impl Decode for i16 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint_signed(reader)
+        Ok(zigzag_decode(Lencode::decode_varint_u16(reader)?))
     }
 
     #[inline(always)]
@@ -473,7 +473,7 @@ impl Decode for i32 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint_signed(reader)
+        Ok(zigzag_decode(Lencode::decode_varint_u32(reader)?))
     }
 
     #[inline(always)]
@@ -499,7 +499,7 @@ impl Decode for i64 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint_signed(reader)
+        Ok(zigzag_decode(Lencode::decode_varint_u64(reader)?))
     }
 
     #[inline(always)]
@@ -525,7 +525,7 @@ impl Decode for i128 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint_signed(reader)
+        Ok(zigzag_decode(Lencode::decode_varint_u128(reader)?))
     }
 
     #[inline(always)]
@@ -551,7 +551,7 @@ impl Decode for isize {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
-        Lencode::decode_varint_signed(reader).map(|v: i64| v as isize)
+        Ok(zigzag_decode(Lencode::decode_varint_u64(reader)?) as isize)
     }
 
     #[inline(always)]
@@ -704,22 +704,24 @@ impl Encode for &[u8] {
     ) -> Result<usize> {
         // Encode as either raw or compressed with a 1-bit flag in the header:
         // header = varint((payload_len << 1) | (is_compressed as usize))
-        let compressed = bytes::zstd_compress(self)?;
         let raw_len = self.len();
-        let comp_len = compressed.len();
-        let raw_hdr = bytes::flagged_header_len(raw_len, false);
-        let comp_hdr = bytes::flagged_header_len(comp_len, true);
-        if comp_len + comp_hdr < raw_len + raw_hdr {
-            let mut total = 0;
-            total += Self::encode_len((comp_len << 1) | 1, writer)?;
-            total += writer.write(&compressed)?;
-            Ok(total)
-        } else {
-            let mut total = 0;
-            total += Self::encode_len(raw_len << 1, writer)?;
-            total += writer.write(self)?;
-            Ok(total)
+        // Skip compression for small payloads where overhead outweighs savings
+        if raw_len >= bytes::MIN_COMPRESS_LEN {
+            let compressed = bytes::zstd_compress(self)?;
+            let comp_len = compressed.len();
+            let raw_hdr = bytes::flagged_header_len(raw_len, false);
+            let comp_hdr = bytes::flagged_header_len(comp_len, true);
+            if comp_len + comp_hdr < raw_len + raw_hdr {
+                let mut total = 0;
+                total += Self::encode_len((comp_len << 1) | 1, writer)?;
+                total += writer.write(&compressed)?;
+                return Ok(total);
+            }
         }
+        let mut total = 0;
+        total += Self::encode_len(raw_len << 1, writer)?;
+        total += writer.write(self)?;
+        Ok(total)
     }
 }
 
@@ -732,22 +734,24 @@ impl Encode for &str {
     ) -> Result<usize> {
         // Encode as either raw UTF-8 bytes or compressed with a 1-bit flag in header
         let bytes = self.as_bytes();
-        let compressed = bytes::zstd_compress(bytes)?;
         let raw_len = bytes.len();
-        let comp_len = compressed.len();
-        let raw_hdr = bytes::flagged_header_len(raw_len, false);
-        let comp_hdr = bytes::flagged_header_len(comp_len, true);
-        if comp_len + comp_hdr < raw_len + raw_hdr {
-            let mut total = 0;
-            total += Self::encode_len((comp_len << 1) | 1, writer)?;
-            total += writer.write(&compressed)?;
-            Ok(total)
-        } else {
-            let mut total = 0;
-            total += Self::encode_len(raw_len << 1, writer)?;
-            total += writer.write(bytes)?;
-            Ok(total)
+        // Skip compression for small payloads where overhead outweighs savings
+        if raw_len >= bytes::MIN_COMPRESS_LEN {
+            let compressed = bytes::zstd_compress(bytes)?;
+            let comp_len = compressed.len();
+            let raw_hdr = bytes::flagged_header_len(raw_len, false);
+            let comp_hdr = bytes::flagged_header_len(comp_len, true);
+            if comp_len + comp_hdr < raw_len + raw_hdr {
+                let mut total = 0;
+                total += Self::encode_len((comp_len << 1) | 1, writer)?;
+                total += writer.write(&compressed)?;
+                return Ok(total);
+            }
         }
+        let mut total = 0;
+        total += Self::encode_len(raw_len << 1, writer)?;
+        total += writer.write(bytes)?;
+        Ok(total)
     }
 }
 
@@ -772,6 +776,16 @@ impl Decode for String {
         let is_compressed = (flagged & 1) == 1;
         let payload_len = flagged >> 1;
         if is_compressed {
+            // Zero-copy fast path
+            if let Some(slice) = reader.buf() {
+                if slice.len() >= payload_len {
+                    let comp = &slice[..payload_len];
+                    let orig_len = bytes::zstd_content_size(comp)?;
+                    let out = bytes::zstd_decompress(comp, orig_len)?;
+                    reader.advance(payload_len);
+                    return String::from_utf8(out).map_err(|_| Error::InvalidData);
+                }
+            }
             let mut comp = vec![0u8; payload_len];
             let mut read = 0usize;
             while read < payload_len {
@@ -781,6 +795,21 @@ impl Decode for String {
             let out = bytes::zstd_decompress(&comp, orig_len)?;
             String::from_utf8(out).map_err(|_| Error::InvalidData)
         } else {
+            // Zero-copy fast path
+            if let Some(slice) = reader.buf() {
+                if slice.len() >= payload_len {
+                    let mut buf = vec![0u8; payload_len];
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            slice.as_ptr(),
+                            buf.as_mut_ptr(),
+                            payload_len,
+                        );
+                    }
+                    reader.advance(payload_len);
+                    return String::from_utf8(buf).map_err(|_| Error::InvalidData);
+                }
+            }
             let mut buf = vec![0u8; payload_len];
             let mut read = 0usize;
             while read < payload_len {
@@ -870,13 +899,28 @@ impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
     }
 }
 
-impl<const N: usize, T: Encode> Encode for [T; N] {
+impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
     #[inline(always)]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
         mut dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
+        // Fast path: bulk copy for u8 arrays
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let bytes: &[u8] =
+                unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, N) };
+            if let Some(buf) = writer.buf_mut() {
+                if buf.len() >= N {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr(), N);
+                    }
+                    writer.advance_mut(N);
+                    return Ok(N);
+                }
+            }
+            return writer.write(bytes);
+        }
         let mut total_written = 0;
         for item in self {
             total_written += item.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
@@ -885,12 +929,38 @@ impl<const N: usize, T: Encode> Encode for [T; N] {
     }
 }
 
-impl<const N: usize, T: Decode> Decode for [T; N] {
+impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
         mut dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
+        // Fast path: bulk copy for u8 arrays
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let mut arr = MaybeUninit::<[T; N]>::uninit();
+            if let Some(buf) = reader.buf() {
+                if buf.len() >= N {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            buf.as_ptr(),
+                            arr.as_mut_ptr() as *mut u8,
+                            N,
+                        );
+                    }
+                    reader.advance(N);
+                    return Ok(unsafe { arr.assume_init() });
+                }
+                return Err(Error::ReaderOutOfData);
+            }
+            // Fallback: read through the trait
+            let dst = unsafe { core::slice::from_raw_parts_mut(arr.as_mut_ptr() as *mut u8, N) };
+            let mut read = 0;
+            while read < N {
+                read += reader.read(&mut dst[read..])?;
+            }
+            return Ok(unsafe { arr.assume_init() });
+        }
+
         let mut arr = MaybeUninit::<[T; N]>::uninit();
         let arr_ptr = arr.as_mut_ptr() as *mut T;
         let mut idx = 0;
@@ -932,6 +1002,17 @@ impl<T: Decode + 'static> Decode for Vec<T> {
             let is_compressed = (flagged & 1) == 1;
             let payload_len = flagged >> 1;
             if is_compressed {
+                // Zero-copy fast path for compressed data
+                if let Some(slice) = reader.buf() {
+                    if slice.len() >= payload_len {
+                        let comp = &slice[..payload_len];
+                        let orig_len = bytes::zstd_content_size(comp)?;
+                        let out = bytes::zstd_decompress(comp, orig_len)?;
+                        reader.advance(payload_len);
+                        let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
+                        return Ok(vec_t);
+                    }
+                }
                 let mut comp = vec![0u8; payload_len];
                 let mut read = 0usize;
                 while read < payload_len {
@@ -942,6 +1023,22 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                 let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                 return Ok(vec_t);
             } else {
+                // Zero-copy fast path for raw data
+                if let Some(slice) = reader.buf() {
+                    if slice.len() >= payload_len {
+                        let mut out = vec![0u8; payload_len];
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                slice.as_ptr(),
+                                out.as_mut_ptr(),
+                                payload_len,
+                            );
+                        }
+                        reader.advance(payload_len);
+                        let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
+                        return Ok(vec_t);
+                    }
+                }
                 let mut out = vec![0u8; payload_len];
                 let mut read = 0usize;
                 while read < payload_len {
@@ -973,22 +1070,24 @@ impl<T: Encode + 'static> Encode for Vec<T> {
             // SAFETY: when T == u8, we can view the slice as &[u8]
             let bytes: &[u8] =
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, self.len()) };
-            let compressed = bytes::zstd_compress(bytes)?;
             let raw_len = bytes.len();
-            let comp_len = compressed.len();
-            let raw_hdr = bytes::flagged_header_len(raw_len, false);
-            let comp_hdr = bytes::flagged_header_len(comp_len, true);
-            if comp_len + comp_hdr < raw_len + raw_hdr {
-                let mut total = 0;
-                total += Self::encode_len((comp_len << 1) | 1, writer)?;
-                total += writer.write(&compressed)?;
-                return Ok(total);
-            } else {
-                let mut total = 0;
-                total += Self::encode_len(raw_len << 1, writer)?;
-                total += writer.write(bytes)?;
-                return Ok(total);
+            // Skip compression for small payloads where overhead outweighs savings
+            if raw_len >= bytes::MIN_COMPRESS_LEN {
+                let compressed = bytes::zstd_compress(bytes)?;
+                let comp_len = compressed.len();
+                let raw_hdr = bytes::flagged_header_len(raw_len, false);
+                let comp_hdr = bytes::flagged_header_len(comp_len, true);
+                if comp_len + comp_hdr < raw_len + raw_hdr {
+                    let mut total = 0;
+                    total += Self::encode_len((comp_len << 1) | 1, writer)?;
+                    total += writer.write(&compressed)?;
+                    return Ok(total);
+                }
             }
+            let mut total = 0;
+            total += Self::encode_len(raw_len << 1, writer)?;
+            total += writer.write(bytes)?;
+            return Ok(total);
         }
 
         let mut total_written = 0;
@@ -1084,17 +1183,21 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
                 unsafe { core::slice::from_raw_parts(b.as_ptr() as *const u8, b.len()) };
             tmp.extend_from_slice(a_u8);
             tmp.extend_from_slice(b_u8);
-            let compressed = bytes::zstd_compress(&tmp)?;
             let raw_len = tmp.len();
-            let comp_len = compressed.len();
-            let raw_hdr = bytes::flagged_header_len(raw_len, false);
-            let comp_hdr = bytes::flagged_header_len(comp_len, true);
-            if comp_len + comp_hdr < raw_len + raw_hdr {
-                let mut total_written = 0;
-                total_written += Self::encode_len((comp_len << 1) | 1, writer)?;
-                total_written += writer.write(&compressed)?;
-                return Ok(total_written);
-            } else {
+            // Skip compression for small payloads where overhead outweighs savings
+            if raw_len >= bytes::MIN_COMPRESS_LEN {
+                let compressed = bytes::zstd_compress(&tmp)?;
+                let comp_len = compressed.len();
+                let raw_hdr = bytes::flagged_header_len(raw_len, false);
+                let comp_hdr = bytes::flagged_header_len(comp_len, true);
+                if comp_len + comp_hdr < raw_len + raw_hdr {
+                    let mut total_written = 0;
+                    total_written += Self::encode_len((comp_len << 1) | 1, writer)?;
+                    total_written += writer.write(&compressed)?;
+                    return Ok(total_written);
+                }
+            }
+            {
                 let mut total_written = 0;
                 total_written += Self::encode_len(raw_len << 1, writer)?;
                 total_written += writer.write(&tmp)?;

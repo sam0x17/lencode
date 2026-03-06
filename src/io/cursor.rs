@@ -55,6 +55,22 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
         self.position = pos + to_copy;
         Ok(to_copy)
     }
+
+    #[inline(always)]
+    fn buf(&self) -> Option<&[u8]> {
+        let data = self.stream.as_ref();
+        let pos = self.position;
+        if pos <= data.len() {
+            Some(unsafe { data.get_unchecked(pos..) })
+        } else {
+            Some(&[])
+        }
+    }
+
+    #[inline(always)]
+    fn advance(&mut self, n: usize) {
+        self.position += n;
+    }
 }
 
 impl<T: AsMut<[u8]>> Write for Cursor<T> {
@@ -94,5 +110,21 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
     fn flush(&mut self) -> Result<(), Error> {
         // No-op for an in-memory buffer
         Ok(())
+    }
+
+    #[inline(always)]
+    fn buf_mut(&mut self) -> Option<&mut [u8]> {
+        let pos = self.position;
+        let data = self.stream.as_mut();
+        if pos <= data.len() {
+            Some(unsafe { data.get_unchecked_mut(pos..) })
+        } else {
+            Some(&mut [])
+        }
+    }
+
+    #[inline(always)]
+    fn advance_mut(&mut self, n: usize) {
+        self.position += n;
     }
 }

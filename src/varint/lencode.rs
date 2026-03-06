@@ -22,16 +22,41 @@ pub enum Lencode {}
 impl Lencode {
     #[inline(always)]
     pub(crate) fn encode_varint_u16(val: u16, writer: &mut impl Write) -> Result<usize> {
+        // Zero-copy fast path
+        if let Some(dst) = writer.buf_mut() {
+            if val <= 0x7F {
+                if dst.is_empty() {
+                    return Err(Error::WriterOutOfSpace);
+                }
+                unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                writer.advance_mut(1);
+                return Ok(1);
+            }
+            let n = ((16 - val.leading_zeros() + 7) >> 3) as usize;
+            let total = 1 + n;
+            if dst.len() < total {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe {
+                *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u16 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
+            }
+            writer.advance_mut(total);
+            return Ok(total);
+        }
+        // Fallback
         if val <= 0x7F {
             let byte = val as u8;
             writer.write(core::slice::from_ref(&byte))?;
             return Ok(1);
         }
-
         let n = ((16 - val.leading_zeros() + 7) >> 3) as usize;
-        let first_byte = 0x80 | (n as u8 & 0x7F);
         let mut out = [0u8; 3];
-        out[0] = first_byte;
+        out[0] = 0x80 | (n as u8);
         let bytes = val.to_le_bytes();
         unsafe {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
@@ -42,16 +67,41 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u32(val: u32, writer: &mut impl Write) -> Result<usize> {
+        // Zero-copy fast path
+        if let Some(dst) = writer.buf_mut() {
+            if val <= 0x7F {
+                if dst.is_empty() {
+                    return Err(Error::WriterOutOfSpace);
+                }
+                unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                writer.advance_mut(1);
+                return Ok(1);
+            }
+            let n = ((32 - val.leading_zeros() + 7) >> 3) as usize;
+            let total = 1 + n;
+            if dst.len() < total {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe {
+                *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u32 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
+            }
+            writer.advance_mut(total);
+            return Ok(total);
+        }
+        // Fallback
         if val <= 0x7F {
             let byte = val as u8;
             writer.write(core::slice::from_ref(&byte))?;
             return Ok(1);
         }
-
         let n = ((32 - val.leading_zeros() + 7) >> 3) as usize;
-        let first_byte = 0x80 | (n as u8 & 0x7F);
         let mut out = [0u8; 5];
-        out[0] = first_byte;
+        out[0] = 0x80 | (n as u8);
         let bytes = val.to_le_bytes();
         unsafe {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
@@ -62,16 +112,41 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u64(val: u64, writer: &mut impl Write) -> Result<usize> {
+        // Zero-copy fast path
+        if let Some(dst) = writer.buf_mut() {
+            if val <= 0x7F {
+                if dst.is_empty() {
+                    return Err(Error::WriterOutOfSpace);
+                }
+                unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                writer.advance_mut(1);
+                return Ok(1);
+            }
+            let n = ((64 - val.leading_zeros() + 7) >> 3) as usize;
+            let total = 1 + n;
+            if dst.len() < total {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe {
+                *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u64 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
+            }
+            writer.advance_mut(total);
+            return Ok(total);
+        }
+        // Fallback
         if val <= 0x7F {
             let byte = val as u8;
             writer.write(core::slice::from_ref(&byte))?;
             return Ok(1);
         }
-
         let n = ((64 - val.leading_zeros() + 7) >> 3) as usize;
-        let first_byte = 0x80 | (n as u8 & 0x7F);
         let mut out = [0u8; 9];
-        out[0] = first_byte;
+        out[0] = 0x80 | (n as u8);
         let bytes = val.to_le_bytes();
         unsafe {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
@@ -82,16 +157,41 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u128(val: u128, writer: &mut impl Write) -> Result<usize> {
+        // Zero-copy fast path
+        if let Some(dst) = writer.buf_mut() {
+            if val <= 0x7F {
+                if dst.is_empty() {
+                    return Err(Error::WriterOutOfSpace);
+                }
+                unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                writer.advance_mut(1);
+                return Ok(1);
+            }
+            let n = ((128 - val.leading_zeros() + 7) >> 3) as usize;
+            let total = 1 + n;
+            if dst.len() < total {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe {
+                *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u128 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
+            }
+            writer.advance_mut(total);
+            return Ok(total);
+        }
+        // Fallback
         if val <= 0x7F {
             let byte = val as u8;
             writer.write(core::slice::from_ref(&byte))?;
             return Ok(1);
         }
-
         let n = ((128 - val.leading_zeros() + 7) >> 3) as usize;
-        let first_byte = 0x80 | (n as u8 & 0x7F);
         let mut out = [0u8; 17];
-        out[0] = first_byte;
+        out[0] = 0x80 | (n as u8);
         let bytes = val.to_le_bytes();
         unsafe {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.as_mut_ptr().add(1), n);
@@ -102,46 +202,140 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_i16(val: i16, writer: &mut impl Write) -> Result<usize> {
-        let unsigned = zigzag_encode(val);
-        Self::encode_varint_u16(unsigned, writer)
+        Self::encode_varint_u16(zigzag_encode(val), writer)
     }
 
     #[inline(always)]
     pub(crate) fn encode_varint_i32(val: i32, writer: &mut impl Write) -> Result<usize> {
-        let unsigned = zigzag_encode(val);
-        Self::encode_varint_u32(unsigned, writer)
+        Self::encode_varint_u32(zigzag_encode(val), writer)
     }
 
     #[inline(always)]
     pub(crate) fn encode_varint_i64(val: i64, writer: &mut impl Write) -> Result<usize> {
-        let unsigned = zigzag_encode(val);
-        Self::encode_varint_u64(unsigned, writer)
+        Self::encode_varint_u64(zigzag_encode(val), writer)
     }
 
     #[inline(always)]
     pub(crate) fn encode_varint_i128(val: i128, writer: &mut impl Write) -> Result<usize> {
-        let unsigned = zigzag_encode(val);
-        Self::encode_varint_u128(unsigned, writer)
+        Self::encode_varint_u128(zigzag_encode(val), writer)
+    }
+
+    #[inline(always)]
+    pub(crate) fn decode_varint_u16(reader: &mut impl Read) -> Result<u16> {
+        // Zero-copy fast path
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let first = unsafe { *slice.get_unchecked(0) };
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(first as u16);
+            }
+            let n = (first & 0x7F) as usize;
+            if 1 + n > slice.len() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let mut val: u16 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut val as *mut u16 as *mut u8,
+                    n,
+                );
+            }
+            reader.advance(1 + n);
+            return Ok(val);
+        }
+        // Fallback
+        let mut first = 0u8;
+        reader.read(core::slice::from_mut(&mut first))?;
+        if first & 0x80 == 0 {
+            return Ok(first as u16);
+        }
+        let n = (first & 0x7F) as usize;
+        let mut val: u16 = 0;
+        let val_bytes =
+            unsafe { core::slice::from_raw_parts_mut(&mut val as *mut u16 as *mut u8, 2) };
+        reader.read(&mut val_bytes[..n])?;
+        Ok(val)
+    }
+
+    #[inline(always)]
+    pub(crate) fn decode_varint_u32(reader: &mut impl Read) -> Result<u32> {
+        // Zero-copy fast path
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let first = unsafe { *slice.get_unchecked(0) };
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(first as u32);
+            }
+            let n = (first & 0x7F) as usize;
+            if 1 + n > slice.len() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let mut val: u32 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut val as *mut u32 as *mut u8,
+                    n,
+                );
+            }
+            reader.advance(1 + n);
+            return Ok(val);
+        }
+        // Fallback
+        let mut first = 0u8;
+        reader.read(core::slice::from_mut(&mut first))?;
+        if first & 0x80 == 0 {
+            return Ok(first as u32);
+        }
+        let n = (first & 0x7F) as usize;
+        let mut val: u32 = 0;
+        let val_bytes =
+            unsafe { core::slice::from_raw_parts_mut(&mut val as *mut u32 as *mut u8, 4) };
+        reader.read(&mut val_bytes[..n])?;
+        Ok(val)
     }
 
     #[inline(always)]
     pub(crate) fn decode_varint_u64(reader: &mut impl Read) -> Result<u64> {
+        // Zero-copy fast path
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let first = unsafe { *slice.get_unchecked(0) };
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(first as u64);
+            }
+            let n = (first & 0x7F) as usize;
+            if 1 + n > slice.len() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let mut val: u64 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut val as *mut u64 as *mut u8,
+                    n,
+                );
+            }
+            reader.advance(1 + n);
+            return Ok(val);
+        }
+        // Fallback: 2-read path
         let mut first = 0u8;
         reader.read(core::slice::from_mut(&mut first))?;
         if first & 0x80 == 0 {
             return Ok(first as u64);
         }
         let n = (first & 0x7F) as usize;
-        if n == 0 {
-            #[cfg(target_endian = "little")]
-            {
-                return Ok(first as u64);
-            }
-            #[cfg(target_endian = "big")]
-            {
-                return Ok(0);
-            }
-        }
         #[cfg(target_endian = "little")]
         {
             let mut val: u64 = 0;
@@ -163,11 +357,105 @@ impl Lencode {
             Ok(val)
         }
     }
+
+    #[inline(always)]
+    pub(crate) fn decode_varint_u128(reader: &mut impl Read) -> Result<u128> {
+        // Zero-copy fast path
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let first = unsafe { *slice.get_unchecked(0) };
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(first as u128);
+            }
+            let n = (first & 0x7F) as usize;
+            if 1 + n > slice.len() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let mut val: u128 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut val as *mut u128 as *mut u8,
+                    n,
+                );
+            }
+            reader.advance(1 + n);
+            return Ok(val);
+        }
+        // Fallback: 2-read path
+        let mut first = 0u8;
+        reader.read(core::slice::from_mut(&mut first))?;
+        if first & 0x80 == 0 {
+            return Ok(first as u128);
+        }
+        let n = (first & 0x7F) as usize;
+        #[cfg(target_endian = "little")]
+        {
+            let mut val: u128 = 0;
+            let val_bytes =
+                unsafe { core::slice::from_raw_parts_mut(&mut val as *mut u128 as *mut u8, 16) };
+            reader.read(&mut val_bytes[..n])?;
+            Ok(val)
+        }
+        #[cfg(target_endian = "big")]
+        {
+            let mut buf = [0u8; 16];
+            reader.read(&mut buf[..n])?;
+            let mut val = 0u128;
+            let mut shift = 0u32;
+            for i in 0..n {
+                val |= (buf[i] as u128) << shift;
+                shift += 8;
+            }
+            Ok(val)
+        }
+    }
 }
 
 impl VarintEncodingScheme for Lencode {
     #[inline(always)]
     fn encode_varint<I: UnsignedInteger>(val: I, writer: &mut impl Write) -> Result<usize> {
+        // Zero-copy fast path
+        if let Some(dst) = writer.buf_mut() {
+            if (val >> 7) == I::ZERO {
+                if dst.is_empty() {
+                    return Err(Error::WriterOutOfSpace);
+                }
+                #[cfg(target_endian = "little")]
+                let byte = val.ne_bytes()[0];
+                #[cfg(target_endian = "big")]
+                let byte = val.le_bytes()[0];
+                unsafe { *dst.get_unchecked_mut(0) = byte };
+                writer.advance_mut(1);
+                return Ok(1);
+            }
+
+            #[cfg(target_endian = "little")]
+            let bytes = val.ne_bytes();
+            #[cfg(target_endian = "big")]
+            let bytes = val.le_bytes();
+            let bytes = bytes.as_slice();
+            let mut n = bytes.len();
+            while n > 1 && unsafe { *bytes.get_unchecked(n - 1) } == 0 {
+                n -= 1;
+            }
+
+            let total = 1 + n;
+            if dst.len() < total {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe {
+                *dst.get_unchecked_mut(0) = 0x80 | (n as u8 & 0x7F);
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), dst.as_mut_ptr().add(1), n);
+            }
+            writer.advance_mut(total);
+            return Ok(total);
+        }
+
+        // Fallback: write through trait
         if (val >> 7) == I::ZERO {
             #[cfg(target_endian = "little")]
             let byte = val.ne_bytes()[0];
@@ -206,9 +494,77 @@ impl VarintEncodingScheme for Lencode {
 
     #[inline(always)]
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I> {
+        // Zero-copy fast path
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let first = unsafe { *slice.get_unchecked(0) };
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                // Build value from the single byte
+                let mut val = I::ZERO;
+                let val_bytes = unsafe {
+                    core::slice::from_raw_parts_mut(
+                        &mut val as *mut I as *mut u8,
+                        core::mem::size_of::<I>(),
+                    )
+                };
+                unsafe { *val_bytes.get_unchecked_mut(0) = first };
+                return Ok(val);
+            }
+            let n = (first & 0x7F) as usize;
+            if 1 + n > slice.len() {
+                return Err(Error::ReaderOutOfData);
+            }
+            #[cfg(target_endian = "little")]
+            {
+                let mut val = I::ZERO;
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        slice.as_ptr().add(1),
+                        &mut val as *mut I as *mut u8,
+                        n,
+                    );
+                }
+                reader.advance(1 + n);
+                return Ok(val);
+            }
+            #[cfg(target_endian = "big")]
+            {
+                let mut buf = [0u8; 32];
+                unsafe {
+                    core::ptr::copy_nonoverlapping(slice.as_ptr().add(1), buf.as_mut_ptr(), n);
+                }
+                reader.advance(1 + n);
+                let mut val = I::ZERO;
+                let mut base = I::ONE;
+                for i in 0..n {
+                    let byte = buf[i];
+                    if byte != 0 {
+                        let mut part = I::ZERO;
+                        let mut factor = base;
+                        let mut c = byte;
+                        while c != 0 {
+                            if (c & 1) != 0 {
+                                part += factor;
+                            }
+                            factor = factor << 1;
+                            c >>= 1;
+                        }
+                        val += part;
+                    }
+                    if i + 1 < n {
+                        base = base << 8;
+                    }
+                }
+                return Ok(val);
+            }
+        }
+
+        // Fallback: 2-read path
         #[cfg(target_endian = "little")]
         {
-            // Fast path for little-endian: fill the value's LSB bytes directly.
             let mut val: I = I::ZERO;
             let val_bytes = unsafe {
                 core::slice::from_raw_parts_mut(
@@ -216,11 +572,9 @@ impl VarintEncodingScheme for Lencode {
                     core::mem::size_of::<I>(),
                 )
             };
-            // Read first prefix byte directly into value storage.
             reader.read(&mut val_bytes[..1])?;
             let first = unsafe { *val_bytes.get_unchecked(0) };
             if first & 0x80 == 0 {
-                // Small integer already in place
                 return Ok(val);
             }
             let n = (first & 0x7F) as usize;
@@ -230,10 +584,8 @@ impl VarintEncodingScheme for Lencode {
 
         #[cfg(target_endian = "big")]
         {
-            // Read first prefix byte into a local
             let mut first = 0u8;
             reader.read(core::slice::from_mut(&mut first))?;
-            // Portable path for big-endian: build the value arithmetically from LE bytes.
             let mut buf = [0u8; 32];
             let n: usize;
             if first & 0x80 == 0 {
@@ -245,11 +597,10 @@ impl VarintEncodingScheme for Lencode {
             }
 
             let mut val = I::ZERO;
-            let mut base = I::ONE; // 256^0
+            let mut base = I::ONE;
             for i in 0..n {
                 let byte = buf[i];
                 if byte != 0 {
-                    // Multiply by small u8 via double-and-add
                     let mut part = I::ZERO;
                     let mut factor = base;
                     let mut c = byte;
@@ -263,7 +614,7 @@ impl VarintEncodingScheme for Lencode {
                     val += part;
                 }
                 if i + 1 < n {
-                    base = base << 8; // next power of 256
+                    base = base << 8;
                 }
             }
             return Ok(val);
@@ -272,11 +623,32 @@ impl VarintEncodingScheme for Lencode {
 
     #[inline(always)]
     fn encode_bool(val: bool, writer: &mut impl Write) -> Result<usize> {
-        writer.write(&[if val { 1u8 } else { 0u8 }])
+        let byte = val as u8;
+        if let Some(dst) = writer.buf_mut() {
+            if dst.is_empty() {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe { *dst.get_unchecked_mut(0) = byte };
+            writer.advance_mut(1);
+            return Ok(1);
+        }
+        writer.write(core::slice::from_ref(&byte))
     }
 
     #[inline(always)]
     fn decode_bool(reader: &mut impl Read) -> Result<bool> {
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let byte = unsafe { *slice.get_unchecked(0) };
+            reader.advance(1);
+            return match byte {
+                0 => Ok(false),
+                1 => Ok(true),
+                _ => Err(Error::InvalidData),
+            };
+        }
         let mut byte = 0u8;
         reader.read(core::slice::from_mut(&mut byte))?;
         match byte {
@@ -295,7 +667,15 @@ impl Encode for u8 {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
     ) -> Result<usize> {
-        writer.write(&[*self])
+        if let Some(dst) = writer.buf_mut() {
+            if dst.is_empty() {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe { *dst.get_unchecked_mut(0) = *self };
+            writer.advance_mut(1);
+            return Ok(1);
+        }
+        writer.write(core::slice::from_ref(self))
     }
 }
 
@@ -305,6 +685,14 @@ impl Decode for u8 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let byte = unsafe { *slice.get_unchecked(0) };
+            reader.advance(1);
+            return Ok(byte);
+        }
         let mut buf = [0u8; 1];
         reader.read(&mut buf)?;
         Ok(buf[0])
@@ -319,6 +707,14 @@ impl Encode for i8 {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
     ) -> Result<usize> {
+        if let Some(dst) = writer.buf_mut() {
+            if dst.is_empty() {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe { *dst.get_unchecked_mut(0) = *self as u8 };
+            writer.advance_mut(1);
+            return Ok(1);
+        }
         writer.write(&[*self as u8])
     }
 }
@@ -329,6 +725,14 @@ impl Decode for i8 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
     ) -> Result<Self> {
+        if let Some(slice) = reader.buf() {
+            if slice.is_empty() {
+                return Err(Error::ReaderOutOfData);
+            }
+            let byte = unsafe { *slice.get_unchecked(0) };
+            reader.advance(1);
+            return Ok(byte as i8);
+        }
         let mut buf = [0u8; 1];
         reader.read(&mut buf)?;
         Ok(buf[0] as i8)

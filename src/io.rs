@@ -88,6 +88,18 @@ pub trait Read {
     /// Fills `buf` with bytes from the underlying source, returning the number
     /// of bytes read or an error if no data is available.
     fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+
+    /// Returns the remaining unread bytes as a slice, if the reader supports
+    /// zero‑copy access. Returns `None` by default.
+    #[inline(always)]
+    fn buf(&self) -> Option<&[u8]> {
+        None
+    }
+
+    /// Advances the read position by `n` bytes without copying data.
+    /// Only valid when `buf()` returned `Some` with at least `n` bytes.
+    #[inline(always)]
+    fn advance(&mut self, _n: usize) {}
 }
 
 /// Minimal write abstraction used by this crate in both std and no‑std modes.
@@ -97,6 +109,18 @@ pub trait Write {
     fn write(&mut self, buf: &[u8]) -> Result<usize>;
     /// Flushes any internal buffers, if applicable.
     fn flush(&mut self) -> Result<()>;
+
+    /// Returns a mutable slice of the spare capacity available for writing,
+    /// if the writer supports direct access. Returns `None` by default.
+    #[inline(always)]
+    fn buf_mut(&mut self) -> Option<&mut [u8]> {
+        None
+    }
+
+    /// Marks `n` bytes as written after writing directly to `buf_mut()`.
+    /// Only valid when `buf_mut()` returned `Some` with at least `n` bytes.
+    #[inline(always)]
+    fn advance_mut(&mut self, _n: usize) {}
 }
 
 #[cfg(feature = "std")]
@@ -122,11 +146,92 @@ impl<W: std::io::Write> Write for W {
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
+
+#[cfg(feature = "std")]
+extern crate alloc;
+
+/// A fast writer wrapping a `Vec<u8>` with zero‑copy `buf_mut()`/`advance_mut()` support.
+///
+/// In `std` mode the blanket `impl<W: std::io::Write> Write for W` covers `Vec<u8>` but
+/// cannot provide `buf_mut()`, so every varint write goes through `extend_from_slice`.
+/// `VecWriter` bypasses that blanket and writes directly into spare capacity.
+pub struct VecWriter(pub alloc::vec::Vec<u8>);
+
+impl VecWriter {
+    /// Creates a new empty `VecWriter`.
+    #[inline(always)]
+    pub fn new() -> Self {
+        Self(alloc::vec::Vec::new())
+    }
+
+    /// Creates a `VecWriter` with the given capacity.
+    #[inline(always)]
+    pub fn with_capacity(cap: usize) -> Self {
+        Self(alloc::vec::Vec::with_capacity(cap))
+    }
+
+    /// Consumes the writer and returns the inner `Vec<u8>`.
+    #[inline(always)]
+    pub fn into_inner(self) -> alloc::vec::Vec<u8> {
+        self.0
+    }
+
+    /// Returns a reference to the inner `Vec<u8>`.
+    #[inline(always)]
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Write for VecWriter {
+    #[inline(always)]
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let len = self.0.len();
+        let add = buf.len();
+        if add == 0 {
+            return Ok(0);
+        }
+        self.0.reserve(add);
+        unsafe {
+            let dst = self.0.as_mut_ptr().add(len);
+            core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, add);
+            self.0.set_len(len + add);
+        }
+        Ok(add)
+    }
+
+    #[inline(always)]
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn buf_mut(&mut self) -> Option<&mut [u8]> {
+        let len = self.0.len();
+        let cap = self.0.capacity();
+        let spare = cap - len;
+        if spare < 17 {
+            // Amortize allocation: reserve enough for many writes at once
+            self.0.reserve(256);
+        }
+        let cap = self.0.capacity();
+        unsafe {
+            Some(core::slice::from_raw_parts_mut(
+                self.0.as_mut_ptr().add(len),
+                cap - len,
+            ))
+        }
+    }
+
+    #[inline(always)]
+    fn advance_mut(&mut self, n: usize) {
+        let new_len = self.0.len() + n;
+        unsafe { self.0.set_len(new_len) };
+    }
+}
 
 #[cfg(not(feature = "std"))]
-impl Write for Vec<u8> {
+impl Write for alloc::vec::Vec<u8> {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let len = self.len();
@@ -135,7 +240,6 @@ impl Write for Vec<u8> {
             return Ok(0);
         }
         self.reserve(add);
-        // SAFETY: we reserved enough space for `add` bytes and set_len after copy.
         unsafe {
             let dst = self.as_mut_ptr().add(len);
             core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, add);
@@ -146,14 +250,36 @@ impl Write for Vec<u8> {
 
     #[inline(always)]
     fn flush(&mut self) -> Result<()> {
-        // No-op for Vec, as it doesn't have an underlying buffer to flush
         Ok(())
+    }
+
+    #[inline(always)]
+    fn buf_mut(&mut self) -> Option<&mut [u8]> {
+        let len = self.len();
+        let cap = self.capacity();
+        let spare = cap - len;
+        if spare < 17 {
+            self.reserve(256);
+        }
+        let cap = self.capacity();
+        unsafe {
+            Some(core::slice::from_raw_parts_mut(
+                self.as_mut_ptr().add(len),
+                cap - len,
+            ))
+        }
+    }
+
+    #[inline(always)]
+    fn advance_mut(&mut self, n: usize) {
+        let new_len = self.len() + n;
+        unsafe { self.set_len(new_len) };
     }
 }
 
 #[test]
 fn test_write_vec() {
-    let mut my_vec = Vec::new();
+    let mut my_vec = alloc::vec::Vec::new();
     let data = b"Hello, world!";
 
     // Test writing

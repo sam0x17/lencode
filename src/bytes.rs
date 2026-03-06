@@ -11,7 +11,11 @@ use crate::prelude::*;
 use alloc::vec::Vec;
 
 /// zstd compression level used for byte-collections.
-const ZSTD_LEVEL: i32 = 3;
+const ZSTD_LEVEL: i32 = 1;
+
+/// Minimum payload size to attempt compression. Below this threshold,
+/// raw bytes are always used because compression overhead outweighs savings.
+pub(crate) const MIN_COMPRESS_LEN: usize = 64;
 
 /// Compresses `input` with zstd, returning the compressed bytes.
 #[inline(always)]

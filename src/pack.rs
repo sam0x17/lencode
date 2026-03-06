@@ -14,9 +14,24 @@ pub trait Pack: Sized {
     fn unpack(reader: &mut impl Read) -> Result<Self>;
 }
 
-impl<const N: usize, T: Pack> Pack for [T; N] {
-    #[inline]
+impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
+    #[inline(always)]
     fn pack(&self, writer: &mut impl Write) -> Result<usize> {
+        // Fast path: bulk copy for u8 arrays
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let bytes: &[u8] =
+                unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, N) };
+            if let Some(buf) = writer.buf_mut() {
+                if buf.len() >= N {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.as_mut_ptr(), N);
+                    }
+                    writer.advance_mut(N);
+                    return Ok(N);
+                }
+            }
+            return writer.write(bytes);
+        }
         let mut total_bytes = 0;
         for item in self.iter() {
             total_bytes += item.pack(writer)?;
@@ -24,8 +39,34 @@ impl<const N: usize, T: Pack> Pack for [T; N] {
         Ok(total_bytes)
     }
 
-    #[inline]
+    #[inline(always)]
     fn unpack(reader: &mut impl Read) -> Result<Self> {
+        // Fast path: bulk copy for u8 arrays
+        if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            let mut arr: core::mem::MaybeUninit<[T; N]> = core::mem::MaybeUninit::uninit();
+            if let Some(buf) = reader.buf() {
+                if buf.len() >= N {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            buf.as_ptr(),
+                            arr.as_mut_ptr() as *mut u8,
+                            N,
+                        );
+                    }
+                    reader.advance(N);
+                    return Ok(unsafe { arr.assume_init() });
+                }
+                return Err(Error::ReaderOutOfData);
+            }
+            // Fallback: read through the trait
+            let dst = unsafe { core::slice::from_raw_parts_mut(arr.as_mut_ptr() as *mut u8, N) };
+            let mut read = 0;
+            while read < N {
+                read += reader.read(&mut dst[read..])?;
+            }
+            return Ok(unsafe { arr.assume_init() });
+        }
+
         let mut arr: core::mem::MaybeUninit<[T; N]> = core::mem::MaybeUninit::uninit();
         let ptr = arr.as_mut_ptr() as *mut T;
         for i in 0..N {
@@ -819,7 +860,10 @@ fn test_array_pack_insufficient_space() {
 #[test]
 fn test_array_round_trip_consistency() {
     // Test that pack followed by unpack is identity for array types
-    fn test_array_round_trip<T: Pack + PartialEq + core::fmt::Debug + Copy, const N: usize>(
+    fn test_array_round_trip<
+        T: Pack + PartialEq + core::fmt::Debug + Copy + 'static,
+        const N: usize,
+    >(
         value: [T; N],
     ) {
         let mut buffer = Vec::new();

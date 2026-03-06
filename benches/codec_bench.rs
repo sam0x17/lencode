@@ -229,20 +229,20 @@ impl<'a> WincodeReader<'a> for WincodeStdCursorReader<'a> {
 }
 
 #[inline(always)]
-fn encode_lencode_into<T: Encode>(value: &T, cursor: &mut Cursor<Vec<u8>>) {
-    value.encode_ext(cursor, None).unwrap();
+fn encode_lencode_into<T: Encode>(value: &T, writer: &mut lencode::io::VecWriter) {
+    value.encode_ext(writer, None).unwrap();
 }
 
 #[inline(always)]
 fn encode_lencode<T: Encode>(value: &T) -> Vec<u8> {
-    let mut cursor = Cursor::new(Vec::new());
-    encode_lencode_into(value, &mut cursor);
-    cursor.into_inner()
+    let mut writer = lencode::io::VecWriter::new();
+    encode_lencode_into(value, &mut writer);
+    writer.into_inner()
 }
 
 #[inline(always)]
 fn decode_lencode<T: Decode>(bytes: &[u8]) -> T {
-    let mut cursor = Cursor::new(bytes);
+    let mut cursor = lencode::io::Cursor::new(bytes);
     T::decode_ext(&mut cursor, None).unwrap()
 }
 
@@ -349,10 +349,10 @@ where
     });
     group.bench_function("lencode", |b| {
         b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_lencode_into(value, &mut cursor);
-                black_box(cursor.into_inner());
+            lencode::io::VecWriter::new,
+            |mut writer| {
+                encode_lencode_into(value, &mut writer);
+                black_box(writer.into_inner());
             },
             BatchSize::SmallInput,
         )

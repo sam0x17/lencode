@@ -213,42 +213,42 @@ impl<'a> WincodeReader<'a> for WincodeStdCursorReader<'a> {
 }
 
 #[inline(always)]
-fn encode_lencode_into<T: Encode>(value: &T, cursor: &mut Cursor<Vec<u8>>) {
-    value.encode_ext(cursor, None).unwrap();
+fn encode_lencode_into<T: Encode>(value: &T, writer: &mut lencode::io::VecWriter) {
+    value.encode_ext(writer, None).unwrap();
 }
 
 #[inline(always)]
 fn encode_lencode<T: Encode>(value: &T) -> Vec<u8> {
-    let mut cursor = Cursor::new(Vec::new());
-    encode_lencode_into(value, &mut cursor);
-    cursor.into_inner()
+    let mut writer = lencode::io::VecWriter::new();
+    encode_lencode_into(value, &mut writer);
+    writer.into_inner()
 }
 
 #[inline(always)]
 fn encode_lencode_dedupe_into<T: Encode>(
     value: &T,
     encoder: &mut DedupeEncoder,
-    cursor: &mut Cursor<Vec<u8>>,
+    writer: &mut lencode::io::VecWriter,
 ) {
-    value.encode_ext(cursor, Some(encoder)).unwrap();
+    value.encode_ext(writer, Some(encoder)).unwrap();
 }
 
 #[inline(always)]
 fn encode_lencode_dedupe<T: Encode>(value: &T, encoder: &mut DedupeEncoder) -> Vec<u8> {
-    let mut cursor = Cursor::new(Vec::new());
-    encode_lencode_dedupe_into(value, encoder, &mut cursor);
-    cursor.into_inner()
+    let mut writer = lencode::io::VecWriter::new();
+    encode_lencode_dedupe_into(value, encoder, &mut writer);
+    writer.into_inner()
 }
 
 #[inline(always)]
 fn decode_lencode<T: Decode>(bytes: &[u8]) -> T {
-    let mut cursor = Cursor::new(bytes);
+    let mut cursor = lencode::io::Cursor::new(bytes);
     T::decode_ext(&mut cursor, None).unwrap()
 }
 
 #[inline(always)]
 fn decode_lencode_dedupe<T: Decode>(bytes: &[u8], decoder: &mut DedupeDecoder) -> T {
-    let mut cursor = Cursor::new(bytes);
+    let mut cursor = lencode::io::Cursor::new(bytes);
     T::decode_ext(&mut cursor, Some(decoder)).unwrap()
 }
 
@@ -325,10 +325,10 @@ where
     let mut group = c.comparison_benchmark_group(format!("{name}_encode"));
     group.bench_function("lencode", |b| {
         b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_lencode_into(value, &mut cursor);
-                black_box(cursor.into_inner());
+            lencode::io::VecWriter::new,
+            |mut writer| {
+                encode_lencode_into(value, &mut writer);
+                black_box(writer.into_inner());
             },
             BatchSize::SmallInput,
         )
@@ -572,10 +572,10 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let mut group = c.comparison_benchmark_group(format!("{label}_encode"));
     group.bench_function("lencode", |b| {
         b.iter_batched(
-            || Cursor::new(Vec::new()),
-            |mut cursor| {
-                encode_lencode_into(&pubkeys, &mut cursor);
-                black_box(cursor.into_inner());
+            lencode::io::VecWriter::new,
+            |mut writer| {
+                encode_lencode_into(&pubkeys, &mut writer);
+                black_box(writer.into_inner());
             },
             BatchSize::SmallInput,
         )
@@ -584,13 +584,13 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
         b.iter_batched(
             || {
                 (
-                    Cursor::new(Vec::new()),
+                    lencode::io::VecWriter::new(),
                     DedupeEncoder::with_capacity(capacity, 1),
                 )
             },
-            |(mut cursor, mut encoder)| {
-                encode_lencode_dedupe_into(&pubkeys, &mut encoder, &mut cursor);
-                black_box(cursor.into_inner());
+            |(mut writer, mut encoder)| {
+                encode_lencode_dedupe_into(&pubkeys, &mut encoder, &mut writer);
+                black_box(writer.into_inner());
             },
             BatchSize::SmallInput,
         )
