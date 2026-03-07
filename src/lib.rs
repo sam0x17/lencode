@@ -702,6 +702,16 @@ impl Encode for f32 {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
+        if let Some(dst) = writer.buf_mut() {
+            if dst.len() < 4 {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe {
+                (dst.as_mut_ptr() as *mut [u8; 4]).write_unaligned(self.to_le_bytes());
+            }
+            writer.advance_mut(4);
+            return Ok(4);
+        }
         let bytes = self.to_le_bytes();
         writer.write(&bytes)
     }
@@ -713,6 +723,14 @@ impl Decode for f32 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
+        if let Some(slice) = reader.buf() {
+            if slice.len() < 4 {
+                return Err(Error::ReaderOutOfData);
+            }
+            let val = unsafe { (slice.as_ptr() as *const [u8; 4]).read_unaligned() };
+            reader.advance(4);
+            return Ok(f32::from_le_bytes(val));
+        }
         let mut buf = [0u8; 4];
         if reader.read(&mut buf)? != 4 {
             return Err(Error::ReaderOutOfData);
@@ -732,6 +750,16 @@ impl Encode for f64 {
         writer: &mut impl Write,
         _dedupe_encoder: Option<&mut DedupeEncoder>,
     ) -> Result<usize> {
+        if let Some(dst) = writer.buf_mut() {
+            if dst.len() < 8 {
+                return Err(Error::WriterOutOfSpace);
+            }
+            unsafe {
+                (dst.as_mut_ptr() as *mut [u8; 8]).write_unaligned(self.to_le_bytes());
+            }
+            writer.advance_mut(8);
+            return Ok(8);
+        }
         let bytes = self.to_le_bytes();
         writer.write(&bytes)
     }
@@ -743,6 +771,14 @@ impl Decode for f64 {
         reader: &mut impl Read,
         _dedupe_decoder: Option<&mut DedupeDecoder>,
     ) -> Result<Self> {
+        if let Some(slice) = reader.buf() {
+            if slice.len() < 8 {
+                return Err(Error::ReaderOutOfData);
+            }
+            let val = unsafe { (slice.as_ptr() as *const [u8; 8]).read_unaligned() };
+            reader.advance(8);
+            return Ok(f64::from_le_bytes(val));
+        }
         let mut buf = [0u8; 8];
         if reader.read(&mut buf)? != 8 {
             return Err(Error::ReaderOutOfData);
