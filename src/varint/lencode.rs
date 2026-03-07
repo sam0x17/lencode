@@ -22,8 +22,23 @@ pub enum Lencode {}
 impl Lencode {
     #[inline(always)]
     pub(crate) fn encode_varint_u16(val: u16, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(dst) = writer.buf_mut() {
+            if dst.len() >= 3 {
+                if val <= 0x7F {
+                    unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                    writer.advance_mut(1);
+                    return Ok(1);
+                }
+                let n = ((16 - val.leading_zeros() + 7) >> 3) as usize;
+                unsafe {
+                    *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                    (dst.as_mut_ptr().add(1) as *mut [u8; 2]).write_unaligned(val.to_le_bytes());
+                }
+                writer.advance_mut(1 + n);
+                return Ok(1 + n);
+            }
+            // Short buffer path
             if val <= 0x7F {
                 if dst.is_empty() {
                     return Err(Error::WriterOutOfSpace);
@@ -39,16 +54,11 @@ impl Lencode {
             }
             unsafe {
                 *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                if dst.len() >= 3 {
-                    let le = val.to_le_bytes();
-                    (dst.as_mut_ptr().add(1) as *mut [u8; 2]).write_unaligned(le);
-                } else {
-                    core::ptr::copy_nonoverlapping(
-                        &val as *const u16 as *const u8,
-                        dst.as_mut_ptr().add(1),
-                        n,
-                    );
-                }
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u16 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
             }
             writer.advance_mut(total);
             return Ok(total);
@@ -72,8 +82,23 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u32(val: u32, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(dst) = writer.buf_mut() {
+            if dst.len() >= 5 {
+                if val <= 0x7F {
+                    unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                    writer.advance_mut(1);
+                    return Ok(1);
+                }
+                let n = ((32 - val.leading_zeros() + 7) >> 3) as usize;
+                unsafe {
+                    *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                    (dst.as_mut_ptr().add(1) as *mut [u8; 4]).write_unaligned(val.to_le_bytes());
+                }
+                writer.advance_mut(1 + n);
+                return Ok(1 + n);
+            }
+            // Short buffer path
             if val <= 0x7F {
                 if dst.is_empty() {
                     return Err(Error::WriterOutOfSpace);
@@ -89,16 +114,11 @@ impl Lencode {
             }
             unsafe {
                 *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                if dst.len() >= 5 {
-                    let le = val.to_le_bytes();
-                    (dst.as_mut_ptr().add(1) as *mut [u8; 4]).write_unaligned(le);
-                } else {
-                    core::ptr::copy_nonoverlapping(
-                        &val as *const u32 as *const u8,
-                        dst.as_mut_ptr().add(1),
-                        n,
-                    );
-                }
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u32 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
             }
             writer.advance_mut(total);
             return Ok(total);
@@ -122,8 +142,23 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u64(val: u64, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(dst) = writer.buf_mut() {
+            if dst.len() >= 9 {
+                if val <= 0x7F {
+                    unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                    writer.advance_mut(1);
+                    return Ok(1);
+                }
+                let n = ((64 - val.leading_zeros() + 7) >> 3) as usize;
+                unsafe {
+                    *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                    (dst.as_mut_ptr().add(1) as *mut [u8; 8]).write_unaligned(val.to_le_bytes());
+                }
+                writer.advance_mut(1 + n);
+                return Ok(1 + n);
+            }
+            // Short buffer path
             if val <= 0x7F {
                 if dst.is_empty() {
                     return Err(Error::WriterOutOfSpace);
@@ -139,17 +174,11 @@ impl Lencode {
             }
             unsafe {
                 *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                if dst.len() >= 9 {
-                    // Fast: write all 8 LE bytes at once (avoids variable-length copy).
-                    let le = val.to_le_bytes();
-                    (dst.as_mut_ptr().add(1) as *mut [u8; 8]).write_unaligned(le);
-                } else {
-                    core::ptr::copy_nonoverlapping(
-                        &val as *const u64 as *const u8,
-                        dst.as_mut_ptr().add(1),
-                        n,
-                    );
-                }
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u64 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
             }
             writer.advance_mut(total);
             return Ok(total);
@@ -173,8 +202,24 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u128(val: u128, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(dst) = writer.buf_mut() {
+            if dst.len() >= 17 {
+                if val <= 0x7F {
+                    unsafe { *dst.get_unchecked_mut(0) = val as u8 };
+                    writer.advance_mut(1);
+                    return Ok(1);
+                }
+                let n = ((128 - val.leading_zeros() + 7) >> 3) as usize;
+                unsafe {
+                    *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
+                    (dst.as_mut_ptr().add(1) as *mut [u8; 16])
+                        .write_unaligned(val.to_le_bytes());
+                }
+                writer.advance_mut(1 + n);
+                return Ok(1 + n);
+            }
+            // Short buffer path
             if val <= 0x7F {
                 if dst.is_empty() {
                     return Err(Error::WriterOutOfSpace);
@@ -190,16 +235,11 @@ impl Lencode {
             }
             unsafe {
                 *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                if dst.len() >= 17 {
-                    let le = val.to_le_bytes();
-                    (dst.as_mut_ptr().add(1) as *mut [u8; 16]).write_unaligned(le);
-                } else {
-                    core::ptr::copy_nonoverlapping(
-                        &val as *const u128 as *const u8,
-                        dst.as_mut_ptr().add(1),
-                        n,
-                    );
-                }
+                core::ptr::copy_nonoverlapping(
+                    &val as *const u128 as *const u8,
+                    dst.as_mut_ptr().add(1),
+                    n,
+                );
             }
             writer.advance_mut(total);
             return Ok(total);
@@ -243,8 +283,25 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn decode_varint_u16(reader: &mut impl Read) -> Result<u16> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check
         if let Some(slice) = reader.buf() {
+            if slice.len() >= 3 {
+                let first = unsafe { *slice.get_unchecked(0) };
+                if first & 0x80 == 0 {
+                    reader.advance(1);
+                    return Ok(first as u16);
+                }
+                let n = (first & 0x7F) as usize;
+                let raw = unsafe { (slice.as_ptr().add(1) as *const u16).read_unaligned() };
+                let val = if n < 2 {
+                    raw & ((1u16 << (n << 3)) - 1)
+                } else {
+                    raw
+                };
+                reader.advance(1 + n);
+                return Ok(val);
+            }
+            // Short buffer path
             if slice.is_empty() {
                 return Err(Error::ReaderOutOfData);
             }
@@ -257,26 +314,16 @@ impl Lencode {
             if 1 + n > slice.len() {
                 return Err(Error::ReaderOutOfData);
             }
-            let val: u16 = if slice.len() >= 3 {
-                let raw = unsafe { (slice.as_ptr().add(1) as *const u16).read_unaligned() };
-                if n < 2 {
-                    raw & ((1u16 << (n << 3)) - 1)
-                } else {
-                    raw
-                }
-            } else {
-                let mut v: u16 = 0;
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        slice.as_ptr().add(1),
-                        &mut v as *mut u16 as *mut u8,
-                        n,
-                    );
-                }
-                v
-            };
+            let mut v: u16 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut v as *mut u16 as *mut u8,
+                    n,
+                );
+            }
             reader.advance(1 + n);
-            return Ok(val);
+            return Ok(v);
         }
         // Fallback
         let mut first = 0u8;
@@ -294,8 +341,25 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn decode_varint_u32(reader: &mut impl Read) -> Result<u32> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(slice) = reader.buf() {
+            if slice.len() >= 5 {
+                let first = unsafe { *slice.get_unchecked(0) };
+                if first & 0x80 == 0 {
+                    reader.advance(1);
+                    return Ok(first as u32);
+                }
+                let n = (first & 0x7F) as usize;
+                let raw = unsafe { (slice.as_ptr().add(1) as *const u32).read_unaligned() };
+                let val = if n < 4 {
+                    raw & ((1u32 << (n << 3)) - 1)
+                } else {
+                    raw
+                };
+                reader.advance(1 + n);
+                return Ok(val);
+            }
+            // Short buffer path
             if slice.is_empty() {
                 return Err(Error::ReaderOutOfData);
             }
@@ -308,26 +372,16 @@ impl Lencode {
             if 1 + n > slice.len() {
                 return Err(Error::ReaderOutOfData);
             }
-            let val: u32 = if slice.len() >= 5 {
-                let raw = unsafe { (slice.as_ptr().add(1) as *const u32).read_unaligned() };
-                if n < 4 {
-                    raw & ((1u32 << (n << 3)) - 1)
-                } else {
-                    raw
-                }
-            } else {
-                let mut v: u32 = 0;
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        slice.as_ptr().add(1),
-                        &mut v as *mut u32 as *mut u8,
-                        n,
-                    );
-                }
-                v
-            };
+            let mut v: u32 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut v as *mut u32 as *mut u8,
+                    n,
+                );
+            }
             reader.advance(1 + n);
-            return Ok(val);
+            return Ok(v);
         }
         // Fallback
         let mut first = 0u8;
@@ -345,8 +399,25 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn decode_varint_u64(reader: &mut impl Read) -> Result<u64> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(slice) = reader.buf() {
+            if slice.len() >= 9 {
+                let first = unsafe { *slice.get_unchecked(0) };
+                if first & 0x80 == 0 {
+                    reader.advance(1);
+                    return Ok(first as u64);
+                }
+                let n = (first & 0x7F) as usize;
+                let raw = unsafe { (slice.as_ptr().add(1) as *const u64).read_unaligned() };
+                let val = if n < 8 {
+                    raw & ((1u64 << (n << 3)) - 1)
+                } else {
+                    raw
+                };
+                reader.advance(1 + n);
+                return Ok(val);
+            }
+            // Short buffer path
             if slice.is_empty() {
                 return Err(Error::ReaderOutOfData);
             }
@@ -359,27 +430,16 @@ impl Lencode {
             if 1 + n > slice.len() {
                 return Err(Error::ReaderOutOfData);
             }
-            let val: u64 = if slice.len() >= 9 {
-                // Fast: read full 8 bytes and mask to n bytes
-                let raw = unsafe { (slice.as_ptr().add(1) as *const u64).read_unaligned() };
-                if n < 8 {
-                    raw & ((1u64 << (n << 3)) - 1)
-                } else {
-                    raw
-                }
-            } else {
-                let mut v: u64 = 0;
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        slice.as_ptr().add(1),
-                        &mut v as *mut u64 as *mut u8,
-                        n,
-                    );
-                }
-                v
-            };
+            let mut v: u64 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut v as *mut u64 as *mut u8,
+                    n,
+                );
+            }
             reader.advance(1 + n);
-            return Ok(val);
+            return Ok(v);
         }
         // Fallback: 2-read path
         let mut first = 0u8;
@@ -412,8 +472,25 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn decode_varint_u128(reader: &mut impl Read) -> Result<u128> {
-        // Zero-copy fast path
+        // Zero-copy fast path — single upfront length check
         if let Some(slice) = reader.buf() {
+            if slice.len() >= 17 {
+                let first = unsafe { *slice.get_unchecked(0) };
+                if first & 0x80 == 0 {
+                    reader.advance(1);
+                    return Ok(first as u128);
+                }
+                let n = (first & 0x7F) as usize;
+                let raw = unsafe { (slice.as_ptr().add(1) as *const u128).read_unaligned() };
+                let val = if n < 16 {
+                    raw & (!0u128 >> ((16 - n) << 3))
+                } else {
+                    raw
+                };
+                reader.advance(1 + n);
+                return Ok(val);
+            }
+            // Short buffer path
             if slice.is_empty() {
                 return Err(Error::ReaderOutOfData);
             }
@@ -426,26 +503,16 @@ impl Lencode {
             if 1 + n > slice.len() {
                 return Err(Error::ReaderOutOfData);
             }
-            let val: u128 = if slice.len() >= 17 {
-                let raw = unsafe { (slice.as_ptr().add(1) as *const u128).read_unaligned() };
-                if n < 16 {
-                    raw & (!0u128 >> ((16 - n) << 3))
-                } else {
-                    raw
-                }
-            } else {
-                let mut v: u128 = 0;
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        slice.as_ptr().add(1),
-                        &mut v as *mut u128 as *mut u8,
-                        n,
-                    );
-                }
-                v
-            };
+            let mut v: u128 = 0;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    slice.as_ptr().add(1),
+                    &mut v as *mut u128 as *mut u8,
+                    n,
+                );
+            }
             reader.advance(1 + n);
-            return Ok(val);
+            return Ok(v);
         }
         // Fallback: 2-read path
         let mut first = 0u8;

@@ -59,12 +59,9 @@ impl<T: AsRef<[u8]>> Read for Cursor<T> {
     #[inline(always)]
     fn buf(&self) -> Option<&[u8]> {
         let data = self.stream.as_ref();
-        let pos = self.position;
-        if pos <= data.len() {
-            Some(unsafe { data.get_unchecked(pos..) })
-        } else {
-            Some(&[])
-        }
+        // SAFETY: position is always maintained <= data.len() by advance()
+        // which only increments after successful bounds checks in encode/decode.
+        Some(unsafe { data.get_unchecked(self.position..) })
     }
 
     #[inline(always)]
@@ -116,11 +113,8 @@ impl<T: AsMut<[u8]>> Write for Cursor<T> {
     fn buf_mut(&mut self) -> Option<&mut [u8]> {
         let pos = self.position;
         let data = self.stream.as_mut();
-        if pos <= data.len() {
-            Some(unsafe { data.get_unchecked_mut(pos..) })
-        } else {
-            Some(&mut [])
-        }
+        // SAFETY: position is always maintained <= data.len() by advance_mut()
+        Some(unsafe { data.get_unchecked_mut(pos..) })
     }
 
     #[inline(always)]

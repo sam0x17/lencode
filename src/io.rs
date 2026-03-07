@@ -223,13 +223,12 @@ impl Write for VecWriter {
     #[inline(always)]
     fn buf_mut(&mut self) -> Option<&mut [u8]> {
         let len = self.0.len();
-        let cap = self.0.capacity();
-        let spare = cap - len;
-        if spare < 17 {
+        let mut cap = self.0.capacity();
+        if cap - len < 17 {
             // Amortize allocation: use doubling strategy for smooth growth
             self.0.reserve(cap.max(256));
+            cap = self.0.capacity();
         }
-        let cap = self.0.capacity();
         unsafe {
             Some(core::slice::from_raw_parts_mut(
                 self.0.as_mut_ptr().add(len),
@@ -276,12 +275,11 @@ impl Write for alloc::vec::Vec<u8> {
     #[inline(always)]
     fn buf_mut(&mut self) -> Option<&mut [u8]> {
         let len = self.len();
-        let cap = self.capacity();
-        let spare = cap - len;
-        if spare < 17 {
+        let mut cap = self.capacity();
+        if cap - len < 17 {
             self.reserve(cap.max(256));
+            cap = self.capacity();
         }
-        let cap = self.capacity();
         unsafe {
             Some(core::slice::from_raw_parts_mut(
                 self.as_mut_ptr().add(len),

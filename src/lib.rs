@@ -1172,13 +1172,14 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                 if let Some(slice) = reader.buf()
                     && slice.len() >= payload_len
                 {
-                    let mut out = vec![0u8; payload_len];
+                    let mut out = Vec::<u8>::with_capacity(payload_len);
                     unsafe {
                         core::ptr::copy_nonoverlapping(
                             slice.as_ptr(),
                             out.as_mut_ptr(),
                             payload_len,
                         );
+                        out.set_len(payload_len);
                     }
                     reader.advance(payload_len);
                     let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
