@@ -218,16 +218,16 @@ fn encode_lencode<T: Encode>(value: &T) -> Vec<u8> {
 #[inline(always)]
 fn encode_lencode_dedupe_into<T: Encode>(
     value: &T,
-    encoder: &mut DedupeEncoder,
+    ctx: &mut EncoderContext,
     writer: &mut lencode::io::VecWriter,
 ) {
-    value.encode_ext(writer, Some(encoder)).unwrap();
+    value.encode_ext(writer, Some(ctx)).unwrap();
 }
 
 #[inline(always)]
-fn encode_lencode_dedupe<T: Encode>(value: &T, encoder: &mut DedupeEncoder) -> Vec<u8> {
+fn encode_lencode_dedupe<T: Encode>(value: &T, ctx: &mut EncoderContext) -> Vec<u8> {
     let mut writer = lencode::io::VecWriter::new();
-    encode_lencode_dedupe_into(value, encoder, &mut writer);
+    encode_lencode_dedupe_into(value, ctx, &mut writer);
     writer.into_inner()
 }
 
@@ -238,9 +238,9 @@ fn decode_lencode<T: Decode>(bytes: &[u8]) -> T {
 }
 
 #[inline(always)]
-fn decode_lencode_dedupe<T: Decode>(bytes: &[u8], decoder: &mut DedupeDecoder) -> T {
+fn decode_lencode_dedupe<T: Decode>(bytes: &[u8], ctx: &mut DecoderContext) -> T {
     let mut cursor = lencode::io::Cursor::new(bytes);
-    T::decode_ext(&mut cursor, Some(decoder)).unwrap()
+    T::decode_ext(&mut cursor, Some(ctx)).unwrap()
 }
 
 #[inline(always)]
@@ -576,7 +576,10 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
             || {
                 (
                     lencode::io::VecWriter::new(),
-                    DedupeEncoder::with_capacity(capacity, 1),
+                    EncoderContext {
+                        dedupe: Some(DedupeEncoder::with_capacity(capacity, 1)),
+                        diff: None,
+                    },
                 )
             },
             |(mut writer, mut encoder)| {
@@ -620,7 +623,10 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
 
     let lencode_bytes = encode_lencode(&pubkeys);
     let lencode_dedupe_bytes = {
-        let mut encoder = DedupeEncoder::with_capacity(capacity, 1);
+        let mut encoder = EncoderContext {
+            dedupe: Some(DedupeEncoder::with_capacity(capacity, 1)),
+            diff: None,
+        };
         encode_lencode_dedupe(&pubkeys, &mut encoder)
     };
     let bincode_bytes = encode_bincode(&pubkeys);
@@ -635,8 +641,13 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     let mut size_bincode_total = 0usize;
     let mut size_borsh_total = 0usize;
     let mut size_wincode_total = 0usize;
-    let mut size_encoder =
-        DedupeEncoder::with_capacity(capacity.saturating_mul(size_batch_count), 1);
+    let mut size_encoder = EncoderContext {
+        dedupe: Some(DedupeEncoder::with_capacity(
+            capacity.saturating_mul(size_batch_count),
+            1,
+        )),
+        diff: None,
+    };
     for _ in 0..size_batch_count {
         let batch = make_pubkeys_with_hotset_from(&mut size_rng, count, &size_hotset, hotset_pct);
         size_lencode_total += encode_lencode(&batch).len();
@@ -662,7 +673,10 @@ fn bench_pubkey_vec_dupes(c: &mut Criterion) {
     });
     group.bench_function("lencode_dedupe", |b| {
         b.iter_batched(
-            || DedupeDecoder::with_capacity(capacity),
+            || DecoderContext {
+                dedupe: Some(DedupeDecoder::with_capacity(capacity)),
+                diff: None,
+            },
             |mut decoder| {
                 black_box(decode_lencode_dedupe::<Vec<BenchPubkey>>(
                     &lencode_dedupe_bytes,

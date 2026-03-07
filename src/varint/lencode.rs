@@ -213,8 +213,7 @@ impl Lencode {
                 let n = ((128 - val.leading_zeros() + 7) >> 3) as usize;
                 unsafe {
                     *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                    (dst.as_mut_ptr().add(1) as *mut [u8; 16])
-                        .write_unaligned(val.to_le_bytes());
+                    (dst.as_mut_ptr().add(1) as *mut [u8; 16]).write_unaligned(val.to_le_bytes());
                 }
                 writer.advance_mut(1 + n);
                 return Ok(1 + n);
@@ -792,7 +791,7 @@ impl Encode for u8 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _ctx: Option<&mut crate::context::EncoderContext>,
     ) -> Result<usize> {
         if let Some(dst) = writer.buf_mut() {
             if dst.is_empty() {
@@ -810,7 +809,7 @@ impl Decode for u8 {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _ctx: Option<&mut crate::context::DecoderContext>,
     ) -> Result<Self> {
         if let Some(slice) = reader.buf() {
             if slice.is_empty() {
@@ -832,7 +831,7 @@ impl Encode for i8 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        _ctx: Option<&mut crate::context::EncoderContext>,
     ) -> Result<usize> {
         if let Some(dst) = writer.buf_mut() {
             if dst.is_empty() {
@@ -850,7 +849,7 @@ impl Decode for i8 {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        _ctx: Option<&mut crate::context::DecoderContext>,
     ) -> Result<Self> {
         if let Some(slice) = reader.buf() {
             if slice.is_empty() {

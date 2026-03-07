@@ -66,14 +66,14 @@ fn test_struct_with_deduplication() {
     };
 
     let mut buffer = Vec::new();
-    let mut encoder = DedupeEncoder::new();
+    let mut encoder = EncoderContext::with_dedupe();
     let bytes_written = original
         .encode_ext(&mut buffer, Some(&mut encoder))
         .unwrap();
     assert!(bytes_written > 0);
 
     let mut cursor = Cursor::new(&buffer);
-    let mut decoder = DedupeDecoder::new();
+    let mut decoder = DecoderContext::with_dedupe();
     let decoded: Foo = Foo::decode_ext(&mut cursor, Some(&mut decoder)).unwrap();
 
     assert_eq!(original, decoded);
@@ -87,14 +87,14 @@ fn test_enum_with_deduplication() {
     };
 
     let mut buffer = Vec::new();
-    let mut encoder = DedupeEncoder::new();
+    let mut encoder = EncoderContext::with_dedupe();
     let bytes_written = original
         .encode_ext(&mut buffer, Some(&mut encoder))
         .unwrap();
     assert!(bytes_written > 0);
 
     let mut cursor = Cursor::new(&buffer);
-    let mut decoder = DedupeDecoder::new();
+    let mut decoder = DecoderContext::with_dedupe();
     let decoded: Bar = Bar::decode_ext(&mut cursor, Some(&mut decoder)).unwrap();
 
     assert_eq!(original, decoded);
@@ -163,11 +163,11 @@ fn test_derive_pack_transparent_dedupe_roundtrip() {
         MyKey([1; 32]),
     ];
 
-    let mut enc = DedupeEncoder::new();
+    let mut enc = EncoderContext::with_dedupe();
     let mut buf = VecWriter::new();
     encode_ext(&keys, &mut buf, Some(&mut enc)).unwrap();
 
-    let mut dec = DedupeDecoder::new();
+    let mut dec = DecoderContext::with_dedupe();
     let decoded: Vec<MyKey> = decode_ext(&mut Cursor::new(buf.as_slice()), Some(&mut dec)).unwrap();
     assert_eq!(keys, decoded);
 }

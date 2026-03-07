@@ -89,14 +89,14 @@
 //! encode(&vals, &mut plain).unwrap();
 //!
 //! // Encode with deduplication enabled
-//! let mut enc = DedupeEncoder::new();
+//! let mut ctx = EncoderContext::with_dedupe();
 //! let mut deduped = Vec::new();
-//! encode_ext(&vals, &mut deduped, Some(&mut enc)).unwrap();
+//! encode_ext(&vals, &mut deduped, Some(&mut ctx)).unwrap();
 //! assert!(deduped.len() < plain.len());
 //!
-//! // Round-trip decoding with a DedupeDecoder
-//! let mut dec = DedupeDecoder::new();
-//! let rt: Vec<MyId> = decode_ext(&mut Cursor::new(&deduped), Some(&mut dec)).unwrap();
+//! // Round-trip decoding with a DecoderContext
+//! let mut ctx_dec = DecoderContext::with_dedupe();
+//! let rt: Vec<MyId> = decode_ext(&mut Cursor::new(&deduped), Some(&mut ctx_dec)).unwrap();
 //! assert_eq!(rt, vals);
 //! ```
 
@@ -114,7 +114,9 @@ use alloc::vec::Vec;
 use std::collections;
 
 mod bytes;
+pub mod context;
 pub mod dedupe;
+pub mod diff;
 pub mod io;
 pub mod pack;
 pub mod tuples;
@@ -127,7 +129,9 @@ pub mod solana;
 /// Convenience re‑exports for common traits, modules and derive macros.
 pub mod prelude {
     pub use super::*;
+    pub use crate::context::*;
     pub use crate::dedupe::*;
+    pub use crate::diff::*;
     pub use crate::io::*;
     pub use crate::pack::*;
     pub use crate::u256::*;
@@ -158,31 +162,25 @@ pub fn decode<T: Decode>(reader: &mut impl Read) -> Result<T> {
     T::decode_ext(reader, None)
 }
 
-/// Encodes `value` with optional deduplication via [`DedupeEncoder`].
-///
-/// Pass `Some(&mut DedupeEncoder)` to enable value deduplication for supported
-/// types (those that implement [`Pack`] and the dedupe marker traits). When
-/// `None`, encoding proceeds normally.
+/// Encodes `value` with an optional [`EncoderContext`] for deduplication and/or
+/// diff encoding.
 #[inline(always)]
 pub fn encode_ext(
     value: &impl Encode,
     writer: &mut impl Write,
-    dedupe_encoder: Option<&mut DedupeEncoder>,
+    ctx: Option<&mut EncoderContext>,
 ) -> Result<usize> {
-    value.encode_ext(writer, dedupe_encoder)
+    value.encode_ext(writer, ctx)
 }
 
-/// Decodes a value with optional deduplication via [`DedupeDecoder`].
-///
-/// Pass `Some(&mut DedupeDecoder)` to enable table‑based decoding that
-/// reconstructs repeated values from compact IDs. When `None`, decoding
-/// proceeds normally.
+/// Decodes a value with an optional [`DecoderContext`] for deduplication and/or
+/// diff decoding.
 #[inline(always)]
 pub fn decode_ext<T: Decode>(
     reader: &mut impl Read,
-    dedupe_decoder: Option<&mut DedupeDecoder>,
+    ctx: Option<&mut DecoderContext>,
 ) -> Result<T> {
-    T::decode_ext(reader, dedupe_decoder)
+    T::decode_ext(reader, ctx)
 }
 
 // Provide a Result alias that defaults to this crate's [`Error`] type while still allowing
@@ -200,11 +198,11 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 /// sensible defaults but can be overridden for performance (e.g. bulk `memcpy`
 /// for fixed‑size types).
 pub trait Encode {
-    /// Encodes `self` to `writer`, optionally using [`DedupeEncoder`].
+    /// Encodes `self` to `writer`, optionally using an [`EncoderContext`].
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize>;
 
     /// Encodes a collection length in a compact form.
@@ -233,7 +231,7 @@ pub trait Encode {
     /// fixed‑size byte sequence (e.g. `[u8; N]`) override this to perform a
     /// single bulk write, which is significantly faster for large collections.
     ///
-    /// Called automatically by `Vec<T>::encode_ext` when no [`DedupeEncoder`] is
+    /// Called automatically by `Vec<T>::encode_ext` when no dedupe context is
     /// active.
     #[inline(always)]
     fn encode_slice(items: &[Self], writer: &mut impl Write) -> Result<usize>
@@ -254,11 +252,8 @@ pub trait Encode {
 /// sensible defaults but can be overridden for performance (e.g. bulk `memcpy`
 /// for fixed‑size types).
 pub trait Decode {
-    /// Decodes `Self` from `reader`, optionally using [`DedupeDecoder`].
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self>
+    /// Decodes `Self` from `reader`, optionally using a [`DecoderContext`].
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self>
     where
         Self: Sized;
 
@@ -291,7 +286,7 @@ pub trait Decode {
     /// fixed‑size byte sequence (e.g. `[u8; N]`) override this to perform a
     /// single bulk read, which is significantly faster for large collections.
     ///
-    /// Called automatically by `Vec<T>::decode_ext` when no [`DedupeDecoder`] is
+    /// Called automatically by `Vec<T>::decode_ext` when no dedupe context is
     /// active.
     #[inline(always)]
     fn decode_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>>
@@ -311,14 +306,14 @@ macro_rules! impl_encode_decode_unsigned_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode_ext(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut DedupeEncoder>) -> Result<usize> {
+                fn encode_ext(&self, writer: &mut impl Write, _ctx: Option<&mut EncoderContext>) -> Result<usize> {
                     Lencode::encode_varint(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode_ext(reader: &mut impl Read, _dedupe_decoder: Option<&mut DedupeDecoder>) -> Result<Self> {
+                fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
                     Lencode::decode_varint(reader)
                 }
 
@@ -338,7 +333,7 @@ impl Encode for u16 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_u16(*self, writer)
     }
@@ -346,10 +341,7 @@ impl Encode for u16 {
 
 impl Decode for u16 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Lencode::decode_varint_u16(reader)
     }
 
@@ -364,7 +356,7 @@ impl Encode for u32 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_u32(*self, writer)
     }
@@ -372,10 +364,7 @@ impl Encode for u32 {
 
 impl Decode for u32 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Lencode::decode_varint_u32(reader)
     }
 
@@ -390,7 +379,7 @@ impl Encode for u64 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_u64(*self, writer)
     }
@@ -398,10 +387,7 @@ impl Encode for u64 {
 
 impl Decode for u64 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Lencode::decode_varint_u64(reader)
     }
 
@@ -416,7 +402,7 @@ impl Encode for u128 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_u128(*self, writer)
     }
@@ -424,10 +410,7 @@ impl Encode for u128 {
 
 impl Decode for u128 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Lencode::decode_varint_u128(reader)
     }
 
@@ -442,7 +425,7 @@ impl Encode for usize {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_u64(*self as u64, writer)
     }
@@ -450,10 +433,7 @@ impl Encode for usize {
 
 impl Decode for usize {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Lencode::decode_varint_u64(reader).map(|v| v as usize)
     }
 
@@ -468,14 +448,14 @@ macro_rules! impl_encode_decode_signed_primitive {
         $(
             impl Encode for $t {
                 #[inline(always)]
-                fn encode_ext(&self, writer: &mut impl Write, _dedupe_encoder: Option<&mut DedupeEncoder>) -> Result<usize> {
+                fn encode_ext(&self, writer: &mut impl Write, _ctx: Option<&mut EncoderContext>) -> Result<usize> {
                     Lencode::encode_varint_signed(*self, writer)
                 }
             }
 
             impl Decode for $t {
                 #[inline(always)]
-                fn decode_ext(reader: &mut impl Read, _dedupe_decoder: Option<&mut DedupeDecoder>) -> Result<Self> {
+                fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
                     Lencode::decode_varint_signed(reader)
                 }
 
@@ -495,7 +475,7 @@ impl Encode for i16 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_i16(*self, writer)
     }
@@ -503,10 +483,7 @@ impl Encode for i16 {
 
 impl Decode for i16 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(zigzag_decode(Lencode::decode_varint_u16(reader)?))
     }
 
@@ -521,7 +498,7 @@ impl Encode for i32 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_i32(*self, writer)
     }
@@ -529,10 +506,7 @@ impl Encode for i32 {
 
 impl Decode for i32 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(zigzag_decode(Lencode::decode_varint_u32(reader)?))
     }
 
@@ -547,7 +521,7 @@ impl Encode for i64 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_i64(*self, writer)
     }
@@ -555,10 +529,7 @@ impl Encode for i64 {
 
 impl Decode for i64 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(zigzag_decode(Lencode::decode_varint_u64(reader)?))
     }
 
@@ -573,7 +544,7 @@ impl Encode for i128 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_i128(*self, writer)
     }
@@ -581,10 +552,7 @@ impl Encode for i128 {
 
 impl Decode for i128 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(zigzag_decode(Lencode::decode_varint_u128(reader)?))
     }
 
@@ -599,7 +567,7 @@ impl Encode for isize {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_varint_i64(*self as i64, writer)
     }
@@ -607,10 +575,7 @@ impl Encode for isize {
 
 impl Decode for isize {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(zigzag_decode(Lencode::decode_varint_u64(reader)?) as isize)
     }
 
@@ -628,10 +593,10 @@ macro_rules! impl_encode_decode_nonzero {
                 fn encode_ext(
                     &self,
                     writer: &mut impl Write,
-                    dedupe_encoder: Option<&mut DedupeEncoder>,
+                    ctx: Option<&mut EncoderContext>,
                 ) -> Result<usize> {
                     let value: $inner = self.get();
-                    value.encode_ext(writer, dedupe_encoder)
+                    value.encode_ext(writer, ctx)
                 }
             }
 
@@ -639,9 +604,9 @@ macro_rules! impl_encode_decode_nonzero {
                 #[inline(always)]
                 fn decode_ext(
                     reader: &mut impl Read,
-                    dedupe_decoder: Option<&mut DedupeDecoder>,
+                    ctx: Option<&mut DecoderContext>,
                 ) -> Result<Self> {
-                    let value: $inner = <$inner as Decode>::decode_ext(reader, dedupe_decoder)?;
+                    let value: $inner = <$inner as Decode>::decode_ext(reader, ctx)?;
                     Self::new(value).ok_or(Error::InvalidData)
                 }
 
@@ -674,7 +639,7 @@ impl Encode for bool {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Lencode::encode_bool(*self, writer)
     }
@@ -682,10 +647,7 @@ impl Encode for bool {
 
 impl Decode for bool {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Lencode::decode_bool(reader)
     }
 
@@ -700,7 +662,7 @@ impl Encode for f32 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         if let Some(dst) = writer.buf_mut() {
             if dst.len() < 4 {
@@ -719,10 +681,7 @@ impl Encode for f32 {
 
 impl Decode for f32 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         if let Some(slice) = reader.buf() {
             if slice.len() < 4 {
                 return Err(Error::ReaderOutOfData);
@@ -748,7 +707,7 @@ impl Encode for f64 {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         if let Some(dst) = writer.buf_mut() {
             if dst.len() < 8 {
@@ -767,10 +726,7 @@ impl Encode for f64 {
 
 impl Decode for f64 {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         if let Some(slice) = reader.buf() {
             if slice.len() < 8 {
                 return Err(Error::ReaderOutOfData);
@@ -796,7 +752,7 @@ impl Encode for &[u8] {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         // Encode as either raw or compressed with a 1-bit flag in the header:
         // header = varint((payload_len << 1) | (is_compressed as usize))
@@ -826,7 +782,7 @@ impl Encode for &str {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         // Encode as either raw UTF-8 bytes or compressed with a 1-bit flag in header
         let bytes = self.as_bytes();
@@ -856,7 +812,7 @@ impl Encode for String {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         self.as_str().encode_ext(writer, None)
     }
@@ -864,10 +820,7 @@ impl Encode for String {
 
 impl Decode for String {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let flagged = Self::decode_len(reader)?;
         let is_compressed = (flagged & 1) == 1;
         let payload_len = flagged >> 1;
@@ -917,13 +870,13 @@ impl<T: Encode> Encode for Option<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         match self {
             Some(value) => {
                 let mut total_written = 0;
                 total_written += Lencode::encode_bool(true, writer)?;
-                total_written += value.encode_ext(writer, dedupe_encoder)?;
+                total_written += value.encode_ext(writer, ctx)?;
                 Ok(total_written)
             }
             None => Lencode::encode_bool(false, writer),
@@ -933,12 +886,9 @@ impl<T: Encode> Encode for Option<T> {
 
 impl<T: Decode> Decode for Option<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
         if Lencode::decode_bool(reader)? {
-            Ok(Some(T::decode_ext(reader, dedupe_decoder)?))
+            Ok(Some(T::decode_ext(reader, ctx)?))
         } else {
             Ok(None)
         }
@@ -954,19 +904,19 @@ impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         match self {
             Ok(value) => {
                 let mut total_written = 0;
                 total_written += Lencode::encode_bool(true, writer)?;
-                total_written += value.encode_ext(writer, dedupe_encoder)?;
+                total_written += value.encode_ext(writer, ctx)?;
                 Ok(total_written)
             }
             Err(err) => {
                 let mut total_written = 0;
                 total_written += Lencode::encode_bool(false, writer)?;
-                total_written += err.encode_ext(writer, dedupe_encoder)?;
+                total_written += err.encode_ext(writer, ctx)?;
                 Ok(total_written)
             }
         }
@@ -975,14 +925,11 @@ impl<T: Encode, E: Encode> Encode for core::result::Result<T, E> {
 
 impl<T: Decode, E: Decode> Decode for core::result::Result<T, E> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
         if Lencode::decode_bool(reader)? {
-            Ok(Ok(T::decode_ext(reader, dedupe_decoder)?))
+            Ok(Ok(T::decode_ext(reader, ctx)?))
         } else {
-            Ok(Err(E::decode_ext(reader, dedupe_decoder)?))
+            Ok(Err(E::decode_ext(reader, ctx)?))
         }
     }
 
@@ -996,7 +943,7 @@ impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         // Fast path: bulk copy for u8 arrays
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
@@ -1015,7 +962,7 @@ impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
         }
         let mut total_written = 0;
         for item in self {
-            total_written += item.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += item.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1038,10 +985,7 @@ impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
 
 impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         // Fast path: bulk copy for u8 arrays
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
             let mut arr = MaybeUninit::<[T; N]>::uninit();
@@ -1072,7 +1016,7 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
         let arr_ptr = arr.as_mut_ptr() as *mut T;
         let mut idx = 0;
         while idx < N {
-            match T::decode_ext(reader, dedupe_decoder.as_deref_mut()) {
+            match T::decode_ext(reader, ctx.as_deref_mut()) {
                 Ok(value) => unsafe {
                     ptr::write(arr_ptr.add(idx), value);
                     idx += 1;
@@ -1137,12 +1081,20 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
 
 impl<T: Decode + 'static> Decode for Vec<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         // If T is u8, decode flagged header + payload without a leading element count.
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            // Diff decoding path: when a diff decoder with an active key is present
+            if let Some(ref mut c) = ctx {
+                if let Some(ref mut diff) = c.diff {
+                    if diff.current_key.is_some() {
+                        let out = diff.decode_blob(reader)?;
+                        let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
+                        return Ok(vec_t);
+                    }
+                }
+            }
+
             let flagged = Self::decode_len(reader)?;
             let is_compressed = (flagged & 1) == 1;
             let payload_len = flagged >> 1;
@@ -1196,12 +1148,12 @@ impl<T: Decode + 'static> Decode for Vec<T> {
         }
 
         let len = Self::decode_len(reader)?;
-        if dedupe_decoder.is_none() {
+        if ctx.is_none() {
             return T::decode_vec(reader, len);
         }
         let mut vec = Vec::with_capacity(len);
         for _ in 0..len {
-            vec.push(T::decode_ext(reader, dedupe_decoder.as_deref_mut())?);
+            vec.push(T::decode_ext(reader, ctx.as_deref_mut())?);
         }
         Ok(vec)
     }
@@ -1212,13 +1164,23 @@ impl<T: Encode + 'static> Encode for Vec<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         // If element type is u8, write as raw-or-compressed with flagged header, no element count:
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
             // SAFETY: when T == u8, we can view the slice as &[u8]
             let bytes: &[u8] =
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, self.len()) };
+
+            // Diff encoding path: when a diff encoder with an active key is present
+            if let Some(ref mut c) = ctx {
+                if let Some(ref mut diff) = c.diff {
+                    if diff.current_key.is_some() {
+                        return diff.encode_blob(bytes, writer);
+                    }
+                }
+            }
+
             let raw_len = bytes.len();
             // Skip compression for small payloads where overhead outweighs savings
             if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes) {
@@ -1241,14 +1203,14 @@ impl<T: Encode + 'static> Encode for Vec<T> {
 
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
-        if dedupe_encoder.is_none() {
+        if ctx.is_none() {
             // Pre-reserve to avoid intermediate reallocations
             writer.reserve(self.len() * core::mem::size_of::<T>());
             total_written += T::encode_slice(self, writer)?;
             return Ok(total_written);
         }
         for item in self {
-            total_written += item.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += item.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1259,13 +1221,13 @@ impl<K: Encode, V: Encode> Encode for collections::BTreeMap<K, V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for (key, value) in self {
-            total_written += key.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-            total_written += value.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += key.encode_ext(writer, ctx.as_deref_mut())?;
+            total_written += value.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1273,15 +1235,12 @@ impl<K: Encode, V: Encode> Encode for collections::BTreeMap<K, V> {
 
 impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut map = collections::BTreeMap::new();
         for _ in 0..len {
-            let key = K::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-            let value = V::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+            let key = K::decode_ext(reader, ctx.as_deref_mut())?;
+            let value = V::decode_ext(reader, ctx.as_deref_mut())?;
             map.insert(key, value);
         }
         Ok(map)
@@ -1293,12 +1252,12 @@ impl<V: Encode> Encode for collections::BTreeSet<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += value.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1306,14 +1265,11 @@ impl<V: Encode> Encode for collections::BTreeSet<V> {
 
 impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut set = collections::BTreeSet::new();
         for _ in 0..len {
-            let value = V::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+            let value = V::decode_ext(reader, ctx.as_deref_mut())?;
             set.insert(value);
         }
         Ok(set)
@@ -1325,7 +1281,7 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         if core::any::TypeId::of::<V>() == core::any::TypeId::of::<u8>() {
             // Flatten to contiguous bytes first
@@ -1363,7 +1319,7 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += value.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1371,10 +1327,7 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
 
 impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         if core::any::TypeId::of::<V>() == core::any::TypeId::of::<u8>() {
             let flagged = Self::decode_len(reader)?;
             let is_compressed = (flagged & 1) == 1;
@@ -1408,7 +1361,7 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
         let len = Self::decode_len(reader)?;
         let mut deque = collections::VecDeque::with_capacity(len);
         for _ in 0..len {
-            let value = V::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+            let value = V::decode_ext(reader, ctx.as_deref_mut())?;
             deque.push_back(value);
         }
         Ok(deque)
@@ -1420,12 +1373,12 @@ impl<V: Encode> Encode for collections::LinkedList<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += value.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1433,14 +1386,11 @@ impl<V: Encode> Encode for collections::LinkedList<V> {
 
 impl<V: Decode> Decode for collections::LinkedList<V> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut list = collections::LinkedList::new();
         for _ in 0..len {
-            let value = V::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+            let value = V::decode_ext(reader, ctx.as_deref_mut())?;
             list.push_back(value);
         }
         Ok(list)
@@ -1452,26 +1402,23 @@ impl<T: Encode> Encode for collections::BinaryHeap<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += value.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
 }
 impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut heap = collections::BinaryHeap::with_capacity(len);
         for _ in 0..len {
-            let value = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+            let value = T::decode_ext(reader, ctx.as_deref_mut())?;
             heap.push(value);
         }
         Ok(heap)
@@ -1484,13 +1431,13 @@ impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for (key, value) in self {
-            total_written += key.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-            total_written += value.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += key.encode_ext(writer, ctx.as_deref_mut())?;
+            total_written += value.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1499,15 +1446,12 @@ impl<K: Encode, V: Encode> Encode for std::collections::HashMap<K, V> {
 #[cfg(feature = "std")]
 impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::HashMap<K, V> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut map = std::collections::HashMap::with_capacity(len);
         for _ in 0..len {
-            let key = K::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-            let value = V::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+            let key = K::decode_ext(reader, ctx.as_deref_mut())?;
+            let value = V::decode_ext(reader, ctx.as_deref_mut())?;
             map.insert(key, value);
         }
         Ok(map)
@@ -1520,12 +1464,12 @@ impl<V: Encode> Encode for std::collections::HashSet<V> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
         total_written += Self::encode_len(self.len(), writer)?;
         for value in self {
-            total_written += value.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            total_written += value.encode_ext(writer, ctx.as_deref_mut())?;
         }
         Ok(total_written)
     }
@@ -1534,14 +1478,11 @@ impl<V: Encode> Encode for std::collections::HashSet<V> {
 #[cfg(feature = "std")]
 impl<V: Decode + Eq + std::hash::Hash> Decode for std::collections::HashSet<V> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
         let mut set = std::collections::HashSet::with_capacity(len);
         for _ in 0..len {
-            let value = V::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
+            let value = V::decode_ext(reader, ctx.as_deref_mut())?;
             set.insert(value);
         }
         Ok(set)
@@ -1553,25 +1494,20 @@ impl<T: Encode> Encode for core::ops::Range<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
-        total_written += self
-            .start
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.end.encode_ext(writer, dedupe_encoder)?;
+        total_written += self.start.encode_ext(writer, ctx.as_deref_mut())?;
+        total_written += self.end.encode_ext(writer, ctx)?;
         Ok(total_written)
     }
 }
 
 impl<T: Decode> Decode for core::ops::Range<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let end = T::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let start = T::decode_ext(reader, ctx.as_deref_mut())?;
+        let end = T::decode_ext(reader, ctx)?;
         Ok(core::ops::Range { start, end })
     }
 
@@ -1585,25 +1521,20 @@ impl<T: Encode> Encode for core::ops::RangeInclusive<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut total_written = 0;
-        total_written += self
-            .start()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        total_written += self.end().encode_ext(writer, dedupe_encoder)?;
+        total_written += self.start().encode_ext(writer, ctx.as_deref_mut())?;
+        total_written += self.end().encode_ext(writer, ctx)?;
         Ok(total_written)
     }
 }
 
 impl<T: Decode> Decode for core::ops::RangeInclusive<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let start = T::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let end = T::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let start = T::decode_ext(reader, ctx.as_deref_mut())?;
+        let end = T::decode_ext(reader, ctx)?;
         Ok(core::ops::RangeInclusive::new(start, end))
     }
 
@@ -1617,19 +1548,16 @@ impl<T: Encode> Encode for core::ops::RangeFrom<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        self.start.encode_ext(writer, dedupe_encoder)
+        self.start.encode_ext(writer, ctx)
     }
 }
 
 impl<T: Decode> Decode for core::ops::RangeFrom<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let start = T::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let start = T::decode_ext(reader, ctx)?;
         Ok(core::ops::RangeFrom { start })
     }
 
@@ -1643,19 +1571,16 @@ impl<T: Encode> Encode for core::ops::RangeTo<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        self.end.encode_ext(writer, dedupe_encoder)
+        self.end.encode_ext(writer, ctx)
     }
 }
 
 impl<T: Decode> Decode for core::ops::RangeTo<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let end = T::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let end = T::decode_ext(reader, ctx)?;
         Ok(core::ops::RangeTo { end })
     }
 
@@ -1669,19 +1594,16 @@ impl<T: Encode> Encode for core::ops::RangeToInclusive<T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        self.end.encode_ext(writer, dedupe_encoder)
+        self.end.encode_ext(writer, ctx)
     }
 }
 
 impl<T: Decode> Decode for core::ops::RangeToInclusive<T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let end = T::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let end = T::decode_ext(reader, ctx)?;
         Ok(core::ops::RangeToInclusive { end })
     }
 
@@ -1695,7 +1617,7 @@ impl Encode for core::ops::RangeFull {
     fn encode_ext(
         &self,
         _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Ok(0)
     }
@@ -1703,10 +1625,7 @@ impl Encode for core::ops::RangeFull {
 
 impl Decode for core::ops::RangeFull {
     #[inline(always)]
-    fn decode_ext(
-        _reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(_reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(core::ops::RangeFull {})
     }
 
@@ -1720,7 +1639,7 @@ impl Encode for () {
     fn encode_ext(
         &self,
         _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Ok(0)
     }
@@ -1728,10 +1647,7 @@ impl Encode for () {
 
 impl Decode for () {
     #[inline(always)]
-    fn decode_ext(
-        _reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(_reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(())
     }
 
@@ -1745,7 +1661,7 @@ impl<T: Encode> Encode for core::marker::PhantomData<T> {
     fn encode_ext(
         &self,
         _writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         Ok(0)
     }
@@ -1753,10 +1669,7 @@ impl<T: Encode> Encode for core::marker::PhantomData<T> {
 
 impl<T: Decode> Decode for core::marker::PhantomData<T> {
     #[inline(always)]
-    fn decode_ext(
-        _reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(_reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(core::marker::PhantomData)
     }
 
@@ -1771,23 +1684,17 @@ impl<T: Encode + Clone> Encode for std::borrow::Cow<'_, T> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        self.as_ref().encode_ext(writer, dedupe_encoder)
+        self.as_ref().encode_ext(writer, ctx)
     }
 }
 
 #[cfg(feature = "std")]
 impl<T: Decode + Clone> Decode for std::borrow::Cow<'_, T> {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        Ok(std::borrow::Cow::Owned(T::decode_ext(
-            reader,
-            dedupe_decoder,
-        )?))
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        Ok(std::borrow::Cow::Owned(T::decode_ext(reader, ctx)?))
     }
 
     fn decode_len(_reader: &mut impl Read) -> Result<usize> {
@@ -1887,19 +1794,16 @@ impl Encode for NoDefault {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        self.0.encode_ext(writer, dedupe_encoder)
+        self.0.encode_ext(writer, ctx)
     }
 }
 
 #[cfg(test)]
 impl Decode for NoDefault {
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        Ok(Self(u64::decode_ext(reader, dedupe_decoder)?))
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        Ok(Self(u64::decode_ext(reader, ctx)?))
     }
 }
 

@@ -55,18 +55,15 @@ impl Encode for hash3::Hash {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        self.as_bytes().encode_ext(writer, dedupe_encoder)
+        self.as_bytes().encode_ext(writer, ctx)
     }
 }
 impl Decode for hash3::Hash {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let bytes = <[u8; hash3::HASH_BYTES]>::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let bytes = <[u8; hash3::HASH_BYTES]>::decode_ext(reader, ctx)?;
         Ok(Self::new_from_array(bytes))
     }
 }
@@ -75,17 +72,14 @@ impl Encode for sig3::Signature {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        self.as_array().encode_ext(writer, dedupe_encoder)
+        self.as_array().encode_ext(writer, ctx)
     }
 }
 impl Decode for sig3::Signature {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let sig: [u8; sig3::SIGNATURE_BYTES] = decode(reader)?;
         Ok(Self::from(sig))
     }
@@ -97,7 +91,7 @@ impl Encode for msg3::MessageHeader {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let combined = u32::from_le_bytes([
             self.num_required_signatures,
@@ -105,15 +99,12 @@ impl Encode for msg3::MessageHeader {
             self.num_readonly_unsigned_accounts,
             0,
         ]);
-        combined.encode_ext(writer, dedupe_encoder)
+        combined.encode_ext(writer, ctx)
     }
 }
 impl Decode for msg3::MessageHeader {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let combined: u32 = decode(reader)?;
         let b = combined.to_le_bytes();
         Ok(Self {
@@ -129,28 +120,23 @@ impl Encode for msg3::compiled_instruction::CompiledInstruction {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
         n += self
             .program_id_index
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .accounts
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.data.encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.accounts.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.data.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for msg3::compiled_instruction::CompiledInstruction {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let program_id_index: u8 = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let accounts: Vec<u8> = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let data: Vec<u8> = Decode::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let program_id_index: u8 = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let accounts: Vec<u8> = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let data: Vec<u8> = Decode::decode_ext(reader, ctx)?;
         Ok(Self {
             program_id_index,
             accounts,
@@ -164,32 +150,25 @@ impl Encode for msg3::legacy::Message {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .header
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .account_keys
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        n += self.header.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.account_keys.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .recent_blockhash
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.instructions.encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.instructions.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for msg3::legacy::Message {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let header = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let account_keys = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let recent_blockhash = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let instructions = Decode::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let header = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let account_keys = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let recent_blockhash = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let instructions = Decode::decode_ext(reader, ctx)?;
         Ok(Self {
             header,
             account_keys,
@@ -203,28 +182,23 @@ impl Encode for msg3::v0::MessageAddressTableLookup {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .account_key
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        n += self.account_key.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .writable_indexes
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.readonly_indexes.encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.readonly_indexes.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for msg3::v0::MessageAddressTableLookup {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let account_key = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let writable_indexes = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let readonly_indexes = Decode::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let account_key = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let writable_indexes = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let readonly_indexes = Decode::decode_ext(reader, ctx)?;
         Ok(Self {
             account_key,
             writable_indexes,
@@ -237,38 +211,27 @@ impl Encode for msg3::v0::Message {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .header
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .account_keys
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        n += self.header.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.account_keys.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .recent_blockhash
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .instructions
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .address_table_lookups
-            .encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.instructions.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.address_table_lookups.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for msg3::v0::Message {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let header = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let account_keys = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let recent_blockhash = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let instructions = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let address_table_lookups = Decode::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let header = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let account_keys = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let recent_blockhash = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let instructions = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let address_table_lookups = Decode::decode_ext(reader, ctx)?;
         Ok(Self {
             header,
             account_keys,
@@ -285,27 +248,22 @@ impl Encode for msg3::LegacyMessage<'_> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
         n += self
             .message
             .as_ref()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .is_writable_account_cache
-            .encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.is_writable_account_cache.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for msg3::LegacyMessage<'_> {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let message = msg3::legacy::Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let is_writable_account_cache = Vec::<bool>::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let message = msg3::legacy::Message::decode_ext(reader, ctx.as_deref_mut())?;
+        let is_writable_account_cache = Vec::<bool>::decode_ext(reader, ctx)?;
         Ok(Self {
             message: std::borrow::Cow::Owned(message),
             is_writable_account_cache,
@@ -317,35 +275,32 @@ impl Encode for msg3::SanitizedMessage {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut DedupeEncoder>,
+        ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         match self {
             msg3::SanitizedMessage::Legacy(m) => {
                 let mut n = 0;
                 n += <usize as Encode>::encode_discriminant(0, writer)?;
-                n += m.encode_ext(writer, dedupe_encoder)?;
+                n += m.encode_ext(writer, ctx)?;
                 Ok(n)
             }
             msg3::SanitizedMessage::V0(m) => {
                 let mut n = 0;
                 n += <usize as Encode>::encode_discriminant(1, writer)?;
-                n += m.encode_ext(writer, dedupe_encoder)?;
+                n += m.encode_ext(writer, ctx)?;
                 Ok(n)
             }
         }
     }
 }
 impl Decode for msg3::SanitizedMessage {
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         match <usize as Decode>::decode_discriminant(reader)? {
             0 => Ok(Self::Legacy(Decode::decode_ext(
                 reader,
-                dedupe_decoder.as_deref_mut(),
+                ctx.as_deref_mut(),
             )?)),
-            1 => Ok(Self::V0(Decode::decode_ext(reader, dedupe_decoder)?)),
+            1 => Ok(Self::V0(Decode::decode_ext(reader, ctx)?)),
             _ => Err(Error::InvalidData),
         }
     }
@@ -356,24 +311,19 @@ impl Encode for msg3::v0::LoadedAddresses {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .writable
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.readonly.encode_ext(writer, dedupe_encoder)?;
+        n += self.writable.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.readonly.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for msg3::v0::LoadedAddresses {
     #[inline(always)]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let writable = Vec::<pubkey3::Pubkey>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let readonly = Vec::<pubkey3::Pubkey>::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let writable = Vec::<pubkey3::Pubkey>::decode_ext(reader, ctx.as_deref_mut())?;
+        let readonly = Vec::<pubkey3::Pubkey>::decode_ext(reader, ctx)?;
         Ok(Self { writable, readonly })
     }
 }
@@ -382,32 +332,27 @@ impl<'a> Encode for msg3::v0::LoadedMessage<'a> {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
         n += self
             .message
             .as_ref()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .loaded_addresses
             .as_ref()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .is_writable_account_cache
-            .encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.is_writable_account_cache.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl<'a> Decode for msg3::v0::LoadedMessage<'a> {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let msg = msg3::v0::Message::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let addrs = msg3::v0::LoadedAddresses::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let cache = Vec::<bool>::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let msg = msg3::v0::Message::decode_ext(reader, ctx.as_deref_mut())?;
+        let addrs = msg3::v0::LoadedAddresses::decode_ext(reader, ctx.as_deref_mut())?;
+        let cache = Vec::<bool>::decode_ext(reader, ctx)?;
         Ok(Self {
             message: std::borrow::Cow::Owned(msg),
             loaded_addresses: std::borrow::Cow::Owned(addrs),
@@ -422,17 +367,17 @@ impl Encode for msg3::VersionedMessage {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
         match self {
             msg3::VersionedMessage::Legacy(m) => {
                 n += <usize as Encode>::encode_discriminant(0, writer)?;
-                n += m.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+                n += m.encode_ext(writer, ctx.as_deref_mut())?;
             }
             msg3::VersionedMessage::V0(m) => {
                 n += <usize as Encode>::encode_discriminant(1, writer)?;
-                n += m.encode_ext(writer, dedupe_encoder)?;
+                n += m.encode_ext(writer, ctx)?;
             }
         }
         Ok(n)
@@ -440,16 +385,13 @@ impl Encode for msg3::VersionedMessage {
 }
 impl Decode for msg3::VersionedMessage {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         match <usize as Decode>::decode_discriminant(reader)? {
             0 => Ok(Self::Legacy(Decode::decode_ext(
                 reader,
-                dedupe_decoder.as_deref_mut(),
+                ctx.as_deref_mut(),
             )?)),
-            1 => Ok(Self::V0(Decode::decode_ext(reader, dedupe_decoder)?)),
+            1 => Ok(Self::V0(Decode::decode_ext(reader, ctx)?)),
             _ => Err(Error::InvalidData),
         }
     }
@@ -459,24 +401,19 @@ impl Encode for tx3::versioned::VersionedTransaction {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .signatures
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.message.encode_ext(writer, dedupe_encoder)?;
+        n += self.signatures.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.message.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for tx3::versioned::VersionedTransaction {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let signatures = Vec::<sig3::Signature>::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let message = msg3::VersionedMessage::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let signatures = Vec::<sig3::Signature>::decode_ext(reader, ctx.as_deref_mut())?;
+        let message = msg3::VersionedMessage::decode_ext(reader, ctx)?;
         Ok(Self {
             signatures,
             message,
@@ -488,33 +425,26 @@ impl Encode for tx3::sanitized::SanitizedTransaction {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .message()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .message_hash()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        n += self.message().encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.message_hash().encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .is_simple_vote_transaction()
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
         let sigs: Vec<sig3::Signature> = self.signatures().to_vec();
-        n += sigs.encode_ext(writer, dedupe_encoder)?;
+        n += sigs.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for tx3::sanitized::SanitizedTransaction {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let message = msg3::SanitizedMessage::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let message_hash = hash3::Hash::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let is_simple_vote_tx = bool::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let signatures = Vec::<sig3::Signature>::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let message = msg3::SanitizedMessage::decode_ext(reader, ctx.as_deref_mut())?;
+        let message_hash = hash3::Hash::decode_ext(reader, ctx.as_deref_mut())?;
+        let is_simple_vote_tx = bool::decode_ext(reader, ctx.as_deref_mut())?;
+        let signatures = Vec::<sig3::Signature>::decode_ext(reader, ctx)?;
         tx3::sanitized::SanitizedTransaction::try_new_from_fields(
             message,
             message_hash,
@@ -531,24 +461,19 @@ impl Encode for txstatus3::InnerInstruction {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .instruction
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.stack_height.encode_ext(writer, dedupe_encoder)?;
+        n += self.instruction.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.stack_height.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for txstatus3::InnerInstruction {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let instruction = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let stack_height = Decode::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let instruction = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let stack_height = Decode::decode_ext(reader, ctx)?;
         Ok(Self {
             instruction,
             stack_height,
@@ -560,24 +485,19 @@ impl Encode for txstatus3::InnerInstructions {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .index
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.instructions.encode_ext(writer, dedupe_encoder)?;
+        n += self.index.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.instructions.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for txstatus3::InnerInstructions {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
-        let index = Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?;
-        let instructions = Decode::decode_ext(reader, dedupe_decoder)?;
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let index = Decode::decode_ext(reader, ctx.as_deref_mut())?;
+        let instructions = Decode::decode_ext(reader, ctx)?;
         Ok(Self {
             index,
             instructions,
@@ -589,33 +509,24 @@ impl Encode for acct_dec_client::token::UiTokenAmount {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .ui_amount
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .decimals
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .amount
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.ui_amount_string.encode_ext(writer, dedupe_encoder)?;
+        n += self.ui_amount.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.decimals.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.amount.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.ui_amount_string.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for acct_dec_client::token::UiTokenAmount {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
-            ui_amount: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            decimals: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            amount: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            ui_amount_string: Decode::decode_ext(reader, dedupe_decoder)?,
+            ui_amount: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            decimals: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            amount: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            ui_amount_string: Decode::decode_ext(reader, ctx)?,
         })
     }
 }
@@ -625,37 +536,28 @@ impl Encode for txstatus3::TransactionTokenBalance {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .account_index
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .mint
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        n += self.account_index.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.mint.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .ui_token_amount
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .owner
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.program_id.encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.owner.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.program_id.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for txstatus3::TransactionTokenBalance {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
-            account_index: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            mint: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            ui_token_amount: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            owner: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            program_id: Decode::decode_ext(reader, dedupe_decoder)?,
+            account_index: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            mint: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            ui_token_amount: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            owner: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            program_id: Decode::decode_ext(reader, ctx)?,
         })
     }
 }
@@ -665,7 +567,7 @@ impl Encode for reward_info::RewardType {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let disc = match self {
             reward_info::RewardType::Fee => 0usize,
@@ -678,10 +580,7 @@ impl Encode for reward_info::RewardType {
 }
 impl Decode for reward_info::RewardType {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(match <usize as Decode>::decode_discriminant(reader)? {
             0 => reward_info::RewardType::Fee,
             1 => reward_info::RewardType::Rent,
@@ -696,37 +595,26 @@ impl Encode for txstatus3::Reward {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .pubkey
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .lamports
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .post_balance
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .reward_type
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.commission.encode_ext(writer, dedupe_encoder)?;
+        n += self.pubkey.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.lamports.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.post_balance.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.reward_type.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.commission.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for txstatus3::Reward {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
-            pubkey: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            lamports: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            post_balance: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            reward_type: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            commission: Decode::decode_ext(reader, dedupe_decoder)?,
+            pubkey: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            lamports: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            post_balance: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            reward_type: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            commission: Decode::decode_ext(reader, ctx)?,
         })
     }
 }
@@ -735,25 +623,20 @@ impl Encode for txstatus3::RewardsAndNumPartitions {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .rewards
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.num_partitions.encode_ext(writer, dedupe_encoder)?;
+        n += self.rewards.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.num_partitions.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for txstatus3::RewardsAndNumPartitions {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
-            rewards: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            num_partitions: Decode::decode_ext(reader, dedupe_decoder)?,
+            rewards: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            num_partitions: Decode::decode_ext(reader, ctx)?,
         })
     }
 }
@@ -762,25 +645,20 @@ impl Encode for txctx3::TransactionReturnData {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .program_id
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.data.encode_ext(writer, dedupe_encoder)?;
+        n += self.program_id.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.data.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for txctx3::TransactionReturnData {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
-            program_id: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            data: Decode::decode_ext(reader, dedupe_decoder)?,
+            program_id: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            data: Decode::decode_ext(reader, ctx)?,
         })
     }
 }
@@ -790,7 +668,7 @@ impl Encode for ixerr::InstructionError {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         use ixerr::InstructionError as E;
         let disc: usize = match self {
@@ -860,10 +738,7 @@ impl Encode for ixerr::InstructionError {
 
 impl Decode for ixerr::InstructionError {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         use ixerr::InstructionError as E;
         Ok(match <usize as Decode>::decode_discriminant(reader)? {
             0 => E::GenericError,
@@ -932,7 +807,7 @@ impl Encode for txerr3::TransactionError {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe_encoder: Option<&mut DedupeEncoder>,
+        _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         use txerr3::TransactionError as E;
         let disc: usize = match self {
@@ -999,10 +874,7 @@ impl Encode for txerr3::TransactionError {
 
 impl Decode for txerr3::TransactionError {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        _dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         use txerr3::TransactionError as E;
         Ok(match <usize as Decode>::decode_discriminant(reader)? {
             0 => E::AccountInUse,
@@ -1060,67 +932,52 @@ impl Encode for txstatus3::TransactionStatusMeta {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut dedupe_encoder: Option<&mut DedupeEncoder>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         let mut n = 0;
-        n += self
-            .status
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.fee.encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .pre_balances
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .post_balances
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+        n += self.status.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.fee.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.pre_balances.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.post_balances.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .inner_instructions
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .log_messages
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.log_messages.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .pre_token_balances
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .post_token_balances
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .rewards
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.rewards.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .loaded_addresses
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self
-            .return_data
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.return_data.encode_ext(writer, ctx.as_deref_mut())?;
         n += self
             .compute_units_consumed
-            .encode_ext(writer, dedupe_encoder.as_deref_mut())?;
-        n += self.cost_units.encode_ext(writer, dedupe_encoder)?;
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.cost_units.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
 impl Decode for txstatus3::TransactionStatusMeta {
     #[inline]
-    fn decode_ext(
-        reader: &mut impl Read,
-        mut dedupe_decoder: Option<&mut DedupeDecoder>,
-    ) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
-            status: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            fee: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            pre_balances: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            post_balances: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            inner_instructions: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            log_messages: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            pre_token_balances: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            post_token_balances: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            rewards: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            loaded_addresses: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            return_data: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            compute_units_consumed: Decode::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-            cost_units: Decode::decode_ext(reader, dedupe_decoder)?,
+            status: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            fee: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            pre_balances: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            post_balances: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            inner_instructions: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            log_messages: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            pre_token_balances: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            post_token_balances: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            rewards: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            loaded_addresses: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            return_data: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            compute_units_consumed: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            cost_units: Decode::decode_ext(reader, ctx)?,
         })
     }
 }
@@ -1137,7 +994,7 @@ impl Encode for ifc::SlotStatus {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        mut _dedupe: Option<&mut DedupeEncoder>,
+        mut _dedupe: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         match self {
             ifc::SlotStatus::Processed => <usize as Encode>::encode_discriminant(0, writer),
@@ -1158,7 +1015,7 @@ impl Encode for ifc::SlotStatus {
 }
 impl Decode for ifc::SlotStatus {
     #[inline]
-    fn decode_ext(reader: &mut impl Read, _dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _dedupe: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(match <usize as Decode>::decode_discriminant(reader)? {
             0 => ifc::SlotStatus::Processed,
             1 => ifc::SlotStatus::Rooted,
@@ -1186,7 +1043,7 @@ impl Encode for ifc::GeyserPluginError {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _dedupe: Option<&mut DedupeEncoder>,
+        _dedupe: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         match self {
             ifc::GeyserPluginError::ConfigFileOpenError(e) => {
@@ -1224,7 +1081,7 @@ impl Encode for ifc::GeyserPluginError {
 }
 impl Decode for ifc::GeyserPluginError {
     #[inline]
-    fn decode_ext(reader: &mut impl Read, _dedupe: Option<&mut DedupeDecoder>) -> Result<Self> {
+    fn decode_ext(reader: &mut impl Read, _dedupe: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(match <usize as Decode>::decode_discriminant(reader)? {
             0 => ifc::GeyserPluginError::ConfigFileOpenError(std::io::Error::other(
                 String::decode_ext(reader, None)?,
@@ -1405,16 +1262,16 @@ fn test_versioned_transaction_roundtrip_and_dedupe() {
     tx.encode_ext(&mut buf_plain, None).unwrap();
 
     // Encode with dedupe
-    let mut enc = DedupeEncoder::new();
+    let mut ctx = EncoderContext::with_dedupe();
     let mut buf_dedupe = Vec::new();
-    tx.encode_ext(&mut buf_dedupe, Some(&mut enc)).unwrap();
+    tx.encode_ext(&mut buf_dedupe, Some(&mut ctx)).unwrap();
     assert!(buf_dedupe.len() < buf_plain.len());
 
     // Round-trip with decoder
-    let mut dec = DedupeDecoder::new();
+    let mut ctx_dec = DecoderContext::with_dedupe();
     let tx_dec = tx3::versioned::VersionedTransaction::decode_ext(
         &mut std::io::Cursor::new(&buf_dedupe),
-        Some(&mut dec),
+        Some(&mut ctx_dec),
     )
     .unwrap();
     assert_eq!(tx, tx_dec);
@@ -1684,14 +1541,14 @@ fn test_tx3_versioned_transaction_roundtrip_and_dedupe() {
 
     let mut buf_plain = Vec::new();
     tx.encode_ext(&mut buf_plain, None).unwrap();
-    let mut enc = DedupeEncoder::new();
+    let mut ctx = EncoderContext::with_dedupe();
     let mut buf_dedupe = Vec::new();
-    tx.encode_ext(&mut buf_dedupe, Some(&mut enc)).unwrap();
+    tx.encode_ext(&mut buf_dedupe, Some(&mut ctx)).unwrap();
     assert!(buf_dedupe.len() < buf_plain.len());
-    let mut dec = DedupeDecoder::new();
+    let mut ctx_dec = DecoderContext::with_dedupe();
     let rt = tx3::versioned::VersionedTransaction::decode_ext(
         &mut Cursor::new(&buf_dedupe),
-        Some(&mut dec),
+        Some(&mut ctx_dec),
     )
     .unwrap();
     assert_eq!(tx, rt);
@@ -1969,23 +1826,27 @@ fn test_sanitized_transaction_legacy_with_dedup() {
     )
     .unwrap();
 
-    let mut enc = DedupeEncoder::new();
+    let mut ctx = EncoderContext::with_dedupe();
     let mut buf1 = Vec::new();
-    tx.encode_ext(&mut buf1, Some(&mut enc)).unwrap();
+    tx.encode_ext(&mut buf1, Some(&mut ctx)).unwrap();
 
     // Encoding the same tx with the same encoder should be smaller since pubkeys are deduped
     let mut buf2 = Vec::new();
-    tx.encode_ext(&mut buf2, Some(&mut enc)).unwrap();
+    tx.encode_ext(&mut buf2, Some(&mut ctx)).unwrap();
     assert!(buf2.len() < buf1.len());
 
     // Round-trip decode both using a shared decoder to respect IDs
-    let mut dec = DedupeDecoder::new();
-    let tx1 =
-        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec))
-            .unwrap();
-    let tx2 =
-        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec))
-            .unwrap();
+    let mut ctx_dec = DecoderContext::with_dedupe();
+    let tx1 = tx3::sanitized::SanitizedTransaction::decode_ext(
+        &mut Cursor::new(&buf1),
+        Some(&mut ctx_dec),
+    )
+    .unwrap();
+    let tx2 = tx3::sanitized::SanitizedTransaction::decode_ext(
+        &mut Cursor::new(&buf2),
+        Some(&mut ctx_dec),
+    )
+    .unwrap();
     assert_eq!(tx, tx1);
     assert_eq!(tx, tx2);
 }
@@ -2031,20 +1892,24 @@ fn test_sanitized_transaction_v0_with_dedup() {
     )
     .unwrap();
 
-    let mut enc = DedupeEncoder::new();
+    let mut ctx = EncoderContext::with_dedupe();
     let mut buf1 = Vec::new();
-    tx.encode_ext(&mut buf1, Some(&mut enc)).unwrap();
+    tx.encode_ext(&mut buf1, Some(&mut ctx)).unwrap();
     let mut buf2 = Vec::new();
-    tx.encode_ext(&mut buf2, Some(&mut enc)).unwrap();
+    tx.encode_ext(&mut buf2, Some(&mut ctx)).unwrap();
     assert!(buf2.len() < buf1.len());
 
-    let mut dec = DedupeDecoder::new();
-    let tx1 =
-        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf1), Some(&mut dec))
-            .unwrap();
-    let tx2 =
-        tx3::sanitized::SanitizedTransaction::decode_ext(&mut Cursor::new(&buf2), Some(&mut dec))
-            .unwrap();
+    let mut ctx_dec = DecoderContext::with_dedupe();
+    let tx1 = tx3::sanitized::SanitizedTransaction::decode_ext(
+        &mut Cursor::new(&buf1),
+        Some(&mut ctx_dec),
+    )
+    .unwrap();
+    let tx2 = tx3::sanitized::SanitizedTransaction::decode_ext(
+        &mut Cursor::new(&buf2),
+        Some(&mut ctx_dec),
+    )
+    .unwrap();
     assert_eq!(tx, tx1);
     assert_eq!(tx, tx2);
 }
@@ -2217,7 +2082,7 @@ fn test_encode_decode_compiled_instruction() {
 fn test_encode_decode_pubkey() {
     // Create shared deduper instances that persist across the loop
     let mut buf = Vec::new();
-    let mut dedupe_encoder = DedupeEncoder::new();
+    let mut ctx = EncoderContext::with_dedupe();
     let mut encoded_pubkeys = Vec::<Pubkey>::new();
 
     // Encode some pubkeys, including duplicates to test deduplication
@@ -2230,9 +2095,7 @@ fn test_encode_decode_pubkey() {
         };
 
         let bytes_before = buf.len();
-        pubkey
-            .encode_ext(&mut buf, Some(&mut dedupe_encoder))
-            .unwrap();
+        pubkey.encode_ext(&mut buf, Some(&mut ctx)).unwrap();
         let bytes_written = buf.len() - bytes_before;
 
         if i < 5 {
@@ -2247,11 +2110,11 @@ fn test_encode_decode_pubkey() {
 
     // Decode all pubkeys
     let mut cursor = Cursor::new(&buf);
-    let mut dedupe_decoder = DedupeDecoder::new();
+    let mut ctx_dec = DecoderContext::with_dedupe();
     let mut decoded_pubkeys = Vec::new();
 
     for _ in 0..10 {
-        let decoded_pubkey = Pubkey::decode_ext(&mut cursor, Some(&mut dedupe_decoder)).unwrap();
+        let decoded_pubkey = Pubkey::decode_ext(&mut cursor, Some(&mut ctx_dec)).unwrap();
         decoded_pubkeys.push(decoded_pubkey);
     }
 
@@ -2307,8 +2170,6 @@ fn test_pubkey_pack_roundtrip() {
 
 #[test]
 fn test_pubkey_deduplication() {
-    use {DedupeDecoder, DedupeEncoder};
-
     // Create some test pubkeys, with duplicates
     let pubkey1 = Pubkey::new_unique();
     let pubkey2 = Pubkey::new_unique();
@@ -2317,13 +2178,11 @@ fn test_pubkey_deduplication() {
 
     // Encode with deduplication
     let mut buf = Vec::new();
-    let mut dedupe_encoder = DedupeEncoder::new();
+    let mut ctx = EncoderContext::with_dedupe();
 
     let mut total_bytes = 0;
     for pubkey in &pubkeys {
-        total_bytes += pubkey
-            .encode_ext(&mut buf, Some(&mut dedupe_encoder))
-            .unwrap();
+        total_bytes += pubkey.encode_ext(&mut buf, Some(&mut ctx)).unwrap();
     }
 
     // With deduplication, we should save space by not repeating pubkeys
@@ -2337,37 +2196,32 @@ fn test_pubkey_deduplication() {
 
     // Decode with deduplication
     let mut decode_cursor = Cursor::new(&buf);
-    let mut dedupe_decoder = DedupeDecoder::new();
+    let mut ctx_dec = DecoderContext::with_dedupe();
     let mut decoded_pubkeys = Vec::new();
 
     for _ in 0..pubkeys.len() {
-        decoded_pubkeys
-            .push(Pubkey::decode_ext(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
+        decoded_pubkeys.push(Pubkey::decode_ext(&mut decode_cursor, Some(&mut ctx_dec)).unwrap());
     }
 
     // Verify all pubkeys were decoded correctly
     assert_eq!(decoded_pubkeys, pubkeys);
 
     // Verify deduplication worked - should have only 2 unique pubkeys stored
-    assert_eq!(dedupe_decoder.len(), 2);
+    assert_eq!(ctx_dec.dedupe.as_ref().unwrap().len(), 2);
 }
 
 #[test]
 fn test_pubkey_deduplication_without_duplicates() {
-    use {DedupeDecoder, DedupeEncoder};
-
     // Create unique pubkeys
     let pubkeys: Vec<Pubkey> = (0..5).map(|_| Pubkey::new_unique()).collect();
 
     // Encode with deduplication
     let mut buf = Vec::new();
-    let mut dedupe_encoder = DedupeEncoder::new();
+    let mut ctx = EncoderContext::with_dedupe();
 
     let mut total_bytes = 0;
     for pubkey in &pubkeys {
-        total_bytes += pubkey
-            .encode_ext(&mut buf, Some(&mut dedupe_encoder))
-            .unwrap();
+        total_bytes += pubkey.encode_ext(&mut buf, Some(&mut ctx)).unwrap();
     }
 
     // Without duplicates, each pubkey should take 33 bytes (1 + 32)
@@ -2375,14 +2229,13 @@ fn test_pubkey_deduplication_without_duplicates() {
 
     // Decode and verify
     let mut decode_cursor = Cursor::new(&buf);
-    let mut dedupe_decoder = DedupeDecoder::new();
+    let mut ctx_dec = DecoderContext::with_dedupe();
     let mut decoded_pubkeys = Vec::new();
 
     for _ in 0..pubkeys.len() {
-        decoded_pubkeys
-            .push(Pubkey::decode_ext(&mut decode_cursor, Some(&mut dedupe_decoder)).unwrap());
+        decoded_pubkeys.push(Pubkey::decode_ext(&mut decode_cursor, Some(&mut ctx_dec)).unwrap());
     }
 
     assert_eq!(decoded_pubkeys, pubkeys);
-    assert_eq!(dedupe_decoder.len(), 5);
+    assert_eq!(ctx_dec.dedupe.as_ref().unwrap().len(), 5);
 }

@@ -146,7 +146,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         let fname = &f.ident;
                         let ftype = &f.ty;
                         quote! {
-                            total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(&self.#fname, writer, dedupe_encoder.as_deref_mut())?;
+                            total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(&self.#fname, writer, ctx.as_deref_mut())?;
                         }
                     });
                     quote! {
@@ -158,7 +158,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         let index = syn::Index::from(i);
                         let ftype = &f.ty;
                         quote! {
-                            total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(&self.#index, writer, dedupe_encoder.as_deref_mut())?;
+                            total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(&self.#index, writer, ctx.as_deref_mut())?;
                         }
                     });
                     quote! {
@@ -173,7 +173,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                     fn encode_ext(
                         &self,
                         writer: &mut impl #krate::io::Write,
-                        mut dedupe_encoder: Option<&mut #krate::dedupe::DedupeEncoder>,
+                        mut ctx: Option<&mut #krate::context::EncoderContext>,
                     ) -> #krate::Result<usize> {
                         let mut total_bytes = 0;
                         #encode_body
@@ -204,7 +204,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
 						let field_names: Vec<_> = fields.iter().map(|(ident, _)| ident).collect();
 						let field_encodes = fields.iter().map(|(fname, ftype)| {
 							quote! {
-								total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(#fname, writer, dedupe_encoder.as_deref_mut())?;
+								total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(#fname, writer, ctx.as_deref_mut())?;
 							}
 						});
 						quote! {
@@ -225,7 +225,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
 						let field_indices: Vec<_> = fields.iter().map(|(ident, _)| ident).collect();
 						let field_encodes = fields.iter().map(|(fname, ftype)| {
 							quote! {
-								total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(#fname, writer, dedupe_encoder.as_deref_mut())?;
+								total_bytes += <#ftype as #krate::prelude::Encode>::encode_ext(#fname, writer, ctx.as_deref_mut())?;
 							}
 						});
 						quote! {
@@ -259,7 +259,7 @@ fn derive_encode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                     fn encode_ext(
                         &self,
                         writer: &mut impl #krate::io::Write,
-                        mut dedupe_encoder: Option<&mut #krate::dedupe::DedupeEncoder>,
+                        mut ctx: Option<&mut #krate::context::EncoderContext>,
                     ) -> #krate::Result<usize> {
                         let mut total_bytes = 0;
                         match self {
@@ -308,7 +308,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         let fname = &f.ident;
                         let ftype = &f.ty;
                         quote! {
-                            #fname: <#ftype as #krate::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+                            #fname: <#ftype as #krate::prelude::Decode>::decode_ext(reader, ctx.as_deref_mut())?,
                         }
                     });
                     quote! {
@@ -321,7 +321,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                     let field_decodes = unnamed_fields.unnamed.iter().map(|f| {
                         let ftype = &f.ty;
                         quote! {
-                            <#ftype as #krate::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+                            <#ftype as #krate::prelude::Decode>::decode_ext(reader, ctx.as_deref_mut())?,
                         }
                     });
                     quote! {
@@ -337,7 +337,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                     #[inline(always)]
                     fn decode_ext(
                         reader: &mut impl #krate::io::Read,
-                        mut dedupe_decoder: Option<&mut #krate::dedupe::DedupeDecoder>,
+                        mut ctx: Option<&mut #krate::context::DecoderContext>,
                     ) -> #krate::Result<Self> {
                         #decode_body
                     }
@@ -361,7 +361,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                             let fname = &f.ident;
                             let ftype = &f.ty;
 							quote! {
-								#fname: <#ftype as #krate::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+								#fname: <#ftype as #krate::prelude::Decode>::decode_ext(reader, ctx.as_deref_mut())?,
 							}
 						});
                         quote! {
@@ -372,7 +372,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                         let field_decodes = unnamed_fields.unnamed.iter().map(|f| {
                             let ftype = &f.ty;
                             quote! {
-                                <#ftype as #krate::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+                                <#ftype as #krate::prelude::Decode>::decode_ext(reader, ctx.as_deref_mut())?,
                             }
                         });
                         quote! {
@@ -397,7 +397,7 @@ fn derive_decode_impl(input: impl Into<TokenStream2>) -> Result<TokenStream2> {
                     #[inline(always)]
                     fn decode_ext(
                         reader: &mut impl #krate::io::Read,
-                        mut dedupe_decoder: Option<&mut #krate::dedupe::DedupeDecoder>,
+                        mut ctx: Option<&mut #krate::context::DecoderContext>,
                     ) -> #krate::Result<Self> {
                         let variant_idx = <usize as #krate::prelude::Decode>::decode_discriminant(reader)?;
                         match variant_idx {
@@ -562,18 +562,18 @@ fn test_derive_encode_struct_basic() {
             fn encode_ext(
                 &self,
                 writer: &mut impl ::lencode::io::Write,
-                mut dedupe_encoder: Option<&mut ::lencode::dedupe::DedupeEncoder>,
+                mut ctx: Option<&mut ::lencode::context::EncoderContext>,
             ) -> ::lencode::Result<usize> {
                 let mut total_bytes = 0;
                 total_bytes += <u32 as ::lencode::prelude::Encode>::encode_ext(
                     &self.a,
                     writer,
-                    dedupe_encoder.as_deref_mut()
+                    ctx.as_deref_mut()
                 )?;
                 total_bytes += <String as ::lencode::prelude::Encode>::encode_ext(
                     &self.b,
                     writer,
-                    dedupe_encoder.as_deref_mut()
+                    ctx.as_deref_mut()
                 )?;
                 Ok(total_bytes)
             }
@@ -596,11 +596,11 @@ fn test_derive_decode_struct_basic() {
             #[inline(always)]
             fn decode_ext(
                 reader: &mut impl ::lencode::io::Read,
-                mut dedupe_decoder: Option<&mut ::lencode::dedupe::DedupeDecoder>,
+                mut ctx: Option<&mut ::lencode::context::DecoderContext>,
             ) -> ::lencode::Result<Self> {
                 Ok(TestStruct {
-                    a: <u32 as ::lencode::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
-                    b: <String as ::lencode::prelude::Decode>::decode_ext(reader, dedupe_decoder.as_deref_mut())?,
+                    a: <u32 as ::lencode::prelude::Decode>::decode_ext(reader, ctx.as_deref_mut())?,
+                    b: <String as ::lencode::prelude::Decode>::decode_ext(reader, ctx.as_deref_mut())?,
                 })
             }
         }

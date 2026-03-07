@@ -32,13 +32,14 @@ impl<T: DedupeEncodeable> Encode for T {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        dedupe_encoder: Option<&mut crate::dedupe::DedupeEncoder>,
+        ctx: Option<&mut crate::context::EncoderContext>,
     ) -> Result<usize> {
-        if let Some(encoder) = dedupe_encoder {
-            encoder.encode(self, writer)
-        } else {
-            self.pack(writer)
+        if let Some(ctx) = ctx {
+            if let Some(encoder) = ctx.dedupe.as_mut() {
+                return encoder.encode(self, writer);
+            }
         }
+        self.pack(writer)
     }
 
     #[inline(always)]
@@ -61,13 +62,14 @@ impl<T: DedupeDecodeable> Decode for T {
     #[inline(always)]
     fn decode_ext(
         reader: &mut impl Read,
-        dedupe_decoder: Option<&mut crate::dedupe::DedupeDecoder>,
+        ctx: Option<&mut crate::context::DecoderContext>,
     ) -> Result<Self> {
-        if let Some(decoder) = dedupe_decoder {
-            decoder.decode(reader)
-        } else {
-            T::unpack(reader)
+        if let Some(ctx) = ctx {
+            if let Some(decoder) = ctx.dedupe.as_mut() {
+                return decoder.decode(reader);
+            }
         }
+        T::unpack(reader)
     }
 
     #[inline(always)]
