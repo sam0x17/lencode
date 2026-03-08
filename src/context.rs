@@ -24,7 +24,7 @@ impl Default for EncoderContext {
 impl EncoderContext {
     /// Creates a new context with no features enabled.
     #[inline(always)]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             dedupe: None,
             diff: None,
@@ -79,7 +79,7 @@ impl Default for DecoderContext {
 impl DecoderContext {
     /// Creates a new context with no features enabled.
     #[inline(always)]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             dedupe: None,
             diff: None,

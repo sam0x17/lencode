@@ -208,13 +208,13 @@ impl DiffEncoder {
     /// `encode_blob` to enable delta encoding against the last value seen for
     /// that key.
     #[inline(always)]
-    pub fn set_key(&mut self, key: u64) {
+    pub const fn set_key(&mut self, key: u64) {
         self.current_key = Some(key);
     }
 
     /// Clears the active key.
     #[inline(always)]
-    pub fn clear_key(&mut self) {
+    pub const fn clear_key(&mut self) {
         self.current_key = None;
     }
 
@@ -398,13 +398,13 @@ impl DiffDecoder {
 
     /// Sets the key for the next decode call.
     #[inline(always)]
-    pub fn set_key(&mut self, key: u64) {
+    pub const fn set_key(&mut self, key: u64) {
         self.current_key = Some(key);
     }
 
     /// Clears the active key.
     #[inline(always)]
-    pub fn clear_key(&mut self) {
+    pub const fn clear_key(&mut self) {
         self.current_key = None;
     }
 

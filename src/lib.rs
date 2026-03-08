@@ -772,13 +772,11 @@ impl Encode for &[u8] {
         mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         // Diff encoding path: when a diff encoder with an active key is present
-        if let Some(ref mut c) = ctx {
-            if let Some(ref mut diff) = c.diff {
-                if diff.current_key.is_some() {
+        if let Some(ref mut c) = ctx
+            && let Some(ref mut diff) = c.diff
+                && diff.current_key.is_some() {
                     return diff.encode_blob(self, writer);
                 }
-            }
-        }
 
         // Encode as either raw or compressed with a 1-bit flag in the header:
         // header = varint((payload_len << 1) | (is_compressed as usize))
@@ -977,13 +975,11 @@ impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, N) };
 
             // Diff encoding path
-            if let Some(ref mut c) = ctx {
-                if let Some(ref mut diff) = c.diff {
-                    if diff.current_key.is_some() {
+            if let Some(ref mut c) = ctx
+                && let Some(ref mut diff) = c.diff
+                    && diff.current_key.is_some() {
                         return diff.encode_blob(bytes, writer);
                     }
-                }
-            }
 
             if let Some(buf) = writer.buf_mut()
                 && buf.len() >= N
@@ -1025,9 +1021,9 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
         // Fast path: bulk copy for u8 arrays
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
             // Diff decoding path
-            if let Some(ref mut c) = ctx {
-                if let Some(ref mut diff) = c.diff {
-                    if diff.current_key.is_some() {
+            if let Some(ref mut c) = ctx
+                && let Some(ref mut diff) = c.diff
+                    && diff.current_key.is_some() {
                         let out = diff.decode_blob(reader)?;
                         if out.len() != N {
                             return Err(Error::IncorrectLength);
@@ -1042,8 +1038,6 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
                         }
                         return Ok(unsafe { arr.assume_init() });
                     }
-                }
-            }
 
             let mut arr = MaybeUninit::<[T; N]>::uninit();
             if let Some(buf) = reader.buf() {
@@ -1142,15 +1136,13 @@ impl<T: Decode + 'static> Decode for Vec<T> {
         // If T is u8, decode flagged header + payload without a leading element count.
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
             // Diff decoding path: when a diff decoder with an active key is present
-            if let Some(ref mut c) = ctx {
-                if let Some(ref mut diff) = c.diff {
-                    if diff.current_key.is_some() {
+            if let Some(ref mut c) = ctx
+                && let Some(ref mut diff) = c.diff
+                    && diff.current_key.is_some() {
                         let out = diff.decode_blob(reader)?;
                         let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                         return Ok(vec_t);
                     }
-                }
-            }
 
             let flagged = Self::decode_len(reader)?;
             let is_compressed = (flagged & 1) == 1;
@@ -1230,13 +1222,11 @@ impl<T: Encode + 'static> Encode for Vec<T> {
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, self.len()) };
 
             // Diff encoding path: when a diff encoder with an active key is present
-            if let Some(ref mut c) = ctx {
-                if let Some(ref mut diff) = c.diff {
-                    if diff.current_key.is_some() {
+            if let Some(ref mut c) = ctx
+                && let Some(ref mut diff) = c.diff
+                    && diff.current_key.is_some() {
                         return diff.encode_blob(bytes, writer);
                     }
-                }
-            }
 
             let raw_len = bytes.len();
             // Skip compression for small payloads where overhead outweighs savings
@@ -1349,16 +1339,14 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
                 unsafe { core::slice::from_raw_parts(b.as_ptr() as *const u8, b.len()) };
 
             // Diff encoding path
-            if let Some(ref mut c) = ctx {
-                if let Some(ref mut diff) = c.diff {
-                    if diff.current_key.is_some() {
+            if let Some(ref mut c) = ctx
+                && let Some(ref mut diff) = c.diff
+                    && diff.current_key.is_some() {
                         let mut tmp = Vec::with_capacity(a_u8.len() + b_u8.len());
                         tmp.extend_from_slice(a_u8);
                         tmp.extend_from_slice(b_u8);
                         return diff.encode_blob(&tmp, writer);
                     }
-                }
-            }
             let mut tmp = Vec::with_capacity(a_u8.len() + b_u8.len());
             tmp.extend_from_slice(a_u8);
             tmp.extend_from_slice(b_u8);
@@ -1398,17 +1386,15 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         if core::any::TypeId::of::<V>() == core::any::TypeId::of::<u8>() {
             // Diff decoding path
-            if let Some(ref mut c) = ctx {
-                if let Some(ref mut diff) = c.diff {
-                    if diff.current_key.is_some() {
+            if let Some(ref mut c) = ctx
+                && let Some(ref mut diff) = c.diff
+                    && diff.current_key.is_some() {
                         let out = diff.decode_blob(reader)?;
                         let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
                         let mut deque = collections::VecDeque::with_capacity(out_v.len());
                         deque.extend(out_v);
                         return Ok(deque);
                     }
-                }
-            }
 
             let flagged = Self::decode_len(reader)?;
             let is_compressed = (flagged & 1) == 1;

@@ -34,11 +34,10 @@ impl<T: DedupeEncodeable> Encode for T {
         writer: &mut impl Write,
         ctx: Option<&mut crate::context::EncoderContext>,
     ) -> Result<usize> {
-        if let Some(ctx) = ctx {
-            if let Some(encoder) = ctx.dedupe.as_mut() {
+        if let Some(ctx) = ctx
+            && let Some(encoder) = ctx.dedupe.as_mut() {
                 return encoder.encode(self, writer);
             }
-        }
         self.pack(writer)
     }
 
@@ -64,11 +63,10 @@ impl<T: DedupeDecodeable> Decode for T {
         reader: &mut impl Read,
         ctx: Option<&mut crate::context::DecoderContext>,
     ) -> Result<Self> {
-        if let Some(ctx) = ctx {
-            if let Some(decoder) = ctx.dedupe.as_mut() {
+        if let Some(ctx) = ctx
+            && let Some(decoder) = ctx.dedupe.as_mut() {
                 return decoder.decode(reader);
             }
-        }
         T::unpack(reader)
     }
 
