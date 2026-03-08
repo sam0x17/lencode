@@ -1,17 +1,23 @@
 //! Incremental binary diff encoding/decoding for byte blobs.
 //!
-//! [`DiffEncoder`] computes compact run-length-encoded patches between successive
-//! versions of a keyed byte blob. [`DiffDecoder`] reconstructs the full blob from
-//! the patch stream.
+//! [`DiffEncoder`] computes compact diffs between successive versions of a keyed
+//! byte blob using two strategies and picks whichever is smaller:
+//!
+//! 1. **RLE patches** — run-length-encoded list of changed regions
+//! 2. **XOR + zstd** — XOR the old and new blobs, then zstd-compress the result
+//!    (mostly zeros with sparse non-zero bytes compress extremely well)
+//!
+//! [`DiffDecoder`] reconstructs the full blob from either format.
 //!
 //! ## Wire format
 //!
 //! Each encoded blob starts with a varint **mode flag**:
 //!
 //! - `0` → full blob follows (varint length + raw bytes)
-//! - `1` → patch diff follows
+//! - `1` → RLE patch diff follows
+//! - `2` → XOR + zstd diff follows
 //!
-//! Patch format after flag `1`:
+//! RLE patch format (mode `1`):
 //!
 //! ```text
 //! [new_len: varint]
@@ -21,6 +27,14 @@
 //!     [patch_len: varint]  // number of changed bytes
 //!     [patch_data: bytes]  // the replacement bytes
 //! ```
+//!
+//! XOR + zstd format (mode `2`):
+//!
+//! ```text
+//! [new_len: varint]
+//! [compressed_len: varint]
+//! [compressed_xor: bytes]  // zstd frame of XOR(old, new), zero-padded if lengths differ
+//! ```
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -29,6 +43,7 @@ use alloc::vec::Vec;
 
 use hashbrown::HashMap;
 
+use crate::bytes;
 use crate::prelude::*;
 
 /// A single contiguous region of changed bytes.
@@ -111,6 +126,41 @@ fn compute_patches(old: &[u8], new: &[u8]) -> Option<Vec<Patch>> {
     }
 }
 
+/// Compute XOR of old and new, zero-padding for length differences.
+/// Returns the XOR buffer (length = max(old.len(), new.len())).
+fn compute_xor(old: &[u8], new: &[u8]) -> Vec<u8> {
+    let max_len = old.len().max(new.len());
+    let min_len = old.len().min(new.len());
+    let mut xor = Vec::with_capacity(max_len);
+
+    // XOR the overlapping region
+    for i in 0..min_len {
+        xor.push(old[i] ^ new[i]);
+    }
+
+    // Tail: XOR with 0 = identity, so just copy the longer tail
+    if new.len() > old.len() {
+        xor.extend_from_slice(&new[min_len..]);
+    } else if old.len() > new.len() {
+        xor.extend_from_slice(&old[min_len..]);
+    }
+
+    xor
+}
+
+/// Try XOR + zstd compression. Returns `None` if the compressed result
+/// is not smaller than the full blob.
+fn try_xor_compress(old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
+    let xor = compute_xor(old, new);
+    let compressed = bytes::zstd_compress(&xor).ok()?;
+    // Only use if smaller than raw blob + a small header margin
+    if compressed.len() < new.len() {
+        Some(compressed)
+    } else {
+        None
+    }
+}
+
 /// Stateful encoder that produces compact diffs for keyed byte blobs.
 ///
 /// Call [`set_key`](DiffEncoder::set_key) before encoding a blob to enable
@@ -174,46 +224,91 @@ impl DiffEncoder {
     /// Encodes a byte blob, producing a diff against the previously seen value
     /// for the current key (if any).
     ///
+    /// Tries both RLE patches and XOR+zstd, picking whichever is smaller.
+    /// Falls back to a full blob when neither strategy wins.
+    ///
     /// Returns the number of bytes written.
     pub fn encode_blob(&mut self, data: &[u8], writer: &mut impl Write) -> Result<usize> {
-        let mut total = 0;
-
         if let Some(key) = self.current_key {
             if let Some(old) = self.store.get(&key) {
-                // Try to compute a patch diff
-                if let Some(patches) = compute_patches(old, data) {
-                    // Write mode flag: 1 = patch diff
-                    total += Lencode::encode_varint_u64(1, writer)?;
-                    // New length (needed if blob size changed)
-                    total += Lencode::encode_varint_u64(data.len() as u64, writer)?;
-                    // Number of patches
-                    total += Lencode::encode_varint_u64(patches.len() as u64, writer)?;
+                // Try RLE first (cheap)
+                let rle_candidate = self.encode_rle_to_buf(old, data);
 
-                    let mut cursor = 0usize; // tracks position after last patch end
-                    for patch in &patches {
-                        let gap = patch.offset - cursor;
-                        total += Lencode::encode_varint_u64(gap as u64, writer)?;
-                        total += Lencode::encode_varint_u64(patch.data.len() as u64, writer)?;
-                        total += writer.write(&patch.data)?;
-                        cursor = patch.offset + patch.data.len();
+                // Skip the expensive XOR+zstd when RLE is already compact (< 10% of blob)
+                let rle_is_tiny = rle_candidate
+                    .as_ref()
+                    .is_some_and(|buf| buf.len() * 10 <= data.len());
+
+                let xor_candidate = if rle_is_tiny {
+                    None
+                } else {
+                    self.encode_xor_to_buf(old, data)
+                };
+
+                let winner = match (&rle_candidate, &xor_candidate) {
+                    (Some(rle), Some(xor)) => {
+                        if rle.len() <= xor.len() {
+                            rle_candidate.as_ref()
+                        } else {
+                            xor_candidate.as_ref()
+                        }
                     }
+                    (Some(_), None) => rle_candidate.as_ref(),
+                    (None, Some(_)) => xor_candidate.as_ref(),
+                    (None, None) => None,
+                };
 
-                    // Update stored blob
+                if let Some(buf) = winner {
+                    let n = writer.write(buf)?;
                     self.store.insert(key, data.to_vec());
-                    return Ok(total);
+                    return Ok(n);
                 }
             }
 
-            // No previous value or patches too large — write full blob
-            // Update stored blob
+            // No previous value or neither strategy wins — write full blob
             self.store.insert(key, data.to_vec());
         }
 
         // Full blob: mode flag 0 + length + data
+        let mut total = 0;
         total += Lencode::encode_varint_u64(0, writer)?;
         total += Lencode::encode_varint_u64(data.len() as u64, writer)?;
         total += writer.write(data)?;
         Ok(total)
+    }
+
+    /// Encode RLE patches into a temporary buffer. Returns `None` if patches
+    /// are too large (would exceed half the blob size).
+    pub fn encode_rle_to_buf(&self, old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
+        let patches = compute_patches(old, new)?;
+        let mut buf = Vec::new();
+        // Mode 1 = RLE patches
+        Lencode::encode_varint_u64(1, &mut buf).ok()?;
+        Lencode::encode_varint_u64(new.len() as u64, &mut buf).ok()?;
+        Lencode::encode_varint_u64(patches.len() as u64, &mut buf).ok()?;
+
+        let mut cursor = 0usize;
+        for patch in &patches {
+            let gap = patch.offset - cursor;
+            Lencode::encode_varint_u64(gap as u64, &mut buf).ok()?;
+            Lencode::encode_varint_u64(patch.data.len() as u64, &mut buf).ok()?;
+            buf.extend_from_slice(&patch.data);
+            cursor = patch.offset + patch.data.len();
+        }
+        Some(buf)
+    }
+
+    /// Encode XOR+zstd into a temporary buffer. Returns `None` if the
+    /// compressed result isn't smaller than the raw blob.
+    pub fn encode_xor_to_buf(&self, old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
+        let compressed = try_xor_compress(old, new)?;
+        let mut buf = Vec::new();
+        // Mode 2 = XOR + zstd
+        Lencode::encode_varint_u64(2, &mut buf).ok()?;
+        Lencode::encode_varint_u64(new.len() as u64, &mut buf).ok()?;
+        Lencode::encode_varint_u64(compressed.len() as u64, &mut buf).ok()?;
+        buf.extend_from_slice(&compressed);
+        Some(buf)
     }
 }
 
@@ -336,6 +431,46 @@ impl DiffDecoder {
                 if remaining > 0 && old_cursor < old.len() {
                     let tail_end = old_cursor + remaining;
                     result.extend_from_slice(&old[old_cursor..tail_end.min(old.len())]);
+                }
+
+                if result.len() != new_len {
+                    return Err(Error::InvalidData);
+                }
+
+                self.store.insert(key, result.clone());
+                Ok(result)
+            }
+            2 => {
+                // XOR + zstd diff
+                let new_len = Lencode::decode_varint_u64(reader)? as usize;
+                let compressed_len = Lencode::decode_varint_u64(reader)? as usize;
+
+                let key = self.current_key.ok_or(Error::InvalidData)?;
+                let old = self.store.get(&key).ok_or(Error::InvalidData)?;
+
+                // Read compressed XOR data
+                let mut compressed = Vec::with_capacity(compressed_len);
+                if compressed_len > 0 {
+                    unsafe { compressed.set_len(compressed_len) };
+                    let n = reader.read(&mut compressed)?;
+                    if n != compressed_len {
+                        return Err(Error::ReaderOutOfData);
+                    }
+                }
+
+                // Decompress the XOR buffer
+                let xor_len = old.len().max(new_len);
+                let xor = bytes::zstd_decompress(&compressed, xor_len)?;
+
+                // Reconstruct: new[i] = old[i] ^ xor[i] for overlapping region
+                let mut result = Vec::with_capacity(new_len);
+                let min_len = old.len().min(new_len);
+                for i in 0..min_len {
+                    result.push(old[i] ^ xor[i]);
+                }
+                // If new is longer, tail of XOR is the new bytes (XOR with 0 = identity)
+                if new_len > old.len() {
+                    result.extend_from_slice(&xor[min_len..new_len]);
                 }
 
                 if result.len() != new_len {
