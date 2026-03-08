@@ -1,6 +1,6 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use lencode::prelude::*;
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use std::hint::black_box;
 #[allow(unused_imports)]
 use wincode::SchemaWrite;

@@ -5,7 +5,7 @@ use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use lencode::prelude::*;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use serde::{Deserialize, Serialize};
 use solana_message::compiled_instruction::CompiledInstruction;
 use solana_pubkey::Pubkey;

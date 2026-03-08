@@ -5,7 +5,7 @@ use lencode::{
     prelude::*,
 };
 #[cfg(feature = "solana")]
-use rand::Rng;
+use rand::RngExt;
 #[cfg(feature = "solana")]
 use solana_hash::Hash;
 #[cfg(feature = "solana")]

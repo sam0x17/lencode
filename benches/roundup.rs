@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lencode::{Decode, Encode};
 use rand::seq::SliceRandom;
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use std::hint::black_box;
 use std::io::Cursor;
 
