@@ -28,6 +28,19 @@
 //! This keeps headers minimal while improving size significantly for repetitive content, and
 //! is `no_std` compatible via `zstd-safe`.
 //!
+//! ## Incremental diff encoding
+//!
+//! [`DiffEncoder`]/[`DiffDecoder`] provide stateful delta encoding for keyed byte blobs.
+//! When a blob is re-encoded under the same key, only the diff is emitted. Two strategies
+//! are tried and the smaller output is picked automatically:
+//!
+//! - **RLE patches** (mode 1): run-length-encoded list of changed regions
+//! - **XOR + zstd** (mode 2): XOR old and new blobs, then zstd-compress the result
+//!
+//! This is especially useful for streaming scenarios where successive versions of a blob
+//! share most of their content. Enable via [`EncoderContext::with_diff`] /
+//! [`DecoderContext::with_diff`] and call `set_key()` before each encode/decode.
+//!
 //! ## Bulk encoding
 //!
 //! Collections of fixed‑size elements (e.g. `Vec<[u8; 32]>`) are encoded via bulk

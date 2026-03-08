@@ -729,6 +729,290 @@ mod tests {
     }
 
     #[test]
+    fn test_diff_xor_roundtrip_scattered_changes() {
+        // Scattered changes across a large blob should trigger XOR+zstd (mode 2)
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+        let key = 200u64;
+
+        // 4KB blob
+        let data1: Vec<u8> = (0..4096).map(|i| (i % 256) as u8).collect();
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data1, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data1);
+
+        // Scatter ~40% of bytes (well above RLE half-blob cutoff, should use XOR)
+        let mut data2 = data1.clone();
+        for i in (0..data2.len()).step_by(3) {
+            data2[i] = data2[i].wrapping_add(1);
+        }
+        buf.clear();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data2, &mut buf).unwrap();
+
+        // Verify mode byte is 2 (XOR+zstd)
+        assert_eq!(buf[0], 2, "expected mode 2 (XOR+zstd) for scattered changes");
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data2);
+    }
+
+    #[test]
+    fn test_diff_rle_mode_for_small_changes() {
+        // A single small change should use RLE (mode 1)
+        let mut encoder = DiffEncoder::new();
+        let key = 300u64;
+
+        let data1 = vec![0xAAu8; 2048];
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        encoder.encode_blob(&data1, &mut buf).unwrap();
+
+        let mut data2 = data1.clone();
+        data2[1000] = 0xBB;
+        buf.clear();
+        encoder.set_key(key);
+        encoder.encode_blob(&data2, &mut buf).unwrap();
+
+        assert_eq!(buf[0], 1, "expected mode 1 (RLE) for single byte change");
+    }
+
+    #[test]
+    fn test_diff_xor_with_append() {
+        // XOR path with new blob longer than old
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+        let key = 400u64;
+
+        let data1: Vec<u8> = (0..2048).map(|i| (i % 256) as u8).collect();
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data1, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        decoder.decode_blob(&mut cursor).unwrap();
+
+        // Scatter changes AND append 512 bytes
+        let mut data2 = data1.clone();
+        for i in (0..data2.len()).step_by(3) {
+            data2[i] = data2[i].wrapping_add(5);
+        }
+        data2.extend_from_slice(&[0xCC; 512]);
+
+        buf.clear();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data2, &mut buf).unwrap();
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data2);
+    }
+
+    #[test]
+    fn test_diff_xor_with_truncate() {
+        // XOR path with new blob shorter than old
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+        let key = 500u64;
+
+        let data1: Vec<u8> = (0..4096).map(|i| (i % 256) as u8).collect();
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data1, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        decoder.decode_blob(&mut cursor).unwrap();
+
+        // Scatter changes AND truncate to 2048
+        let mut data2: Vec<u8> = data1[..2048].to_vec();
+        for i in (0..data2.len()).step_by(3) {
+            data2[i] = data2[i].wrapping_add(7);
+        }
+
+        buf.clear();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data2, &mut buf).unwrap();
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data2);
+    }
+
+    #[test]
+    fn test_diff_empty_blob() {
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+        let key = 600u64;
+
+        // Empty blob
+        let data: Vec<u8> = vec![];
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data, &mut buf).unwrap();
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data);
+
+        // Non-empty second blob after empty first
+        let data2 = vec![1u8; 100];
+        buf.clear();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data2, &mut buf).unwrap();
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data2);
+
+        // Back to empty
+        buf.clear();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&[], &mut buf).unwrap();
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_diff_multi_key() {
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+
+        let key_a = 10u64;
+        let key_b = 20u64;
+
+        // First blob for key A
+        let data_a1 = vec![0xAAu8; 512];
+        let mut buf = Vec::new();
+        encoder.set_key(key_a);
+        decoder.set_key(key_a);
+        encoder.encode_blob(&data_a1, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data_a1);
+
+        // First blob for key B
+        let data_b1 = vec![0xBBu8; 512];
+        buf.clear();
+        encoder.set_key(key_b);
+        decoder.set_key(key_b);
+        encoder.encode_blob(&data_b1, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data_b1);
+
+        // Diff for key A (change 1 byte)
+        let mut data_a2 = data_a1.clone();
+        data_a2[100] = 0xFF;
+        buf.clear();
+        encoder.set_key(key_a);
+        decoder.set_key(key_a);
+        encoder.encode_blob(&data_a2, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data_a2);
+
+        // Diff for key B (change 1 byte)
+        let mut data_b2 = data_b1.clone();
+        data_b2[200] = 0xFF;
+        buf.clear();
+        encoder.set_key(key_b);
+        decoder.set_key(key_b);
+        encoder.encode_blob(&data_b2, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data_b2);
+    }
+
+    #[test]
+    fn test_diff_clear_resets_state() {
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+        let key = 700u64;
+
+        let data1 = vec![0xAAu8; 256];
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data1, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        decoder.decode_blob(&mut cursor).unwrap();
+
+        // Clear encoder state
+        encoder.clear();
+        decoder.clear();
+
+        // Next encode for same key should be full blob (no prior state)
+        let mut data2 = data1.clone();
+        data2[0] = 0xFF;
+        buf.clear();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data2, &mut buf).unwrap();
+
+        assert_eq!(buf[0], 0, "after clear(), should emit full blob (mode 0)");
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data2);
+    }
+
+    #[test]
+    fn test_diff_successive_chain() {
+        // Verify a chain of successive diffs roundtrips correctly
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+        let key = 800u64;
+
+        let mut data: Vec<u8> = (0..1024).map(|i| (i % 256) as u8).collect();
+
+        // Initial full blob
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
+        assert_eq!(result, data);
+
+        // 10 successive small mutations
+        for i in 0..10 {
+            let idx = (i * 100) % data.len();
+            data[idx] = (i as u8).wrapping_mul(37);
+            buf.clear();
+            encoder.set_key(key);
+            decoder.set_key(key);
+            encoder.encode_blob(&data, &mut buf).unwrap();
+
+            let mut cursor = Cursor::new(&buf[..]);
+            let result = decoder.decode_blob(&mut cursor).unwrap();
+            assert_eq!(result, data, "mismatch at iteration {i}");
+        }
+    }
+
+    #[test]
+    fn test_diff_invalid_mode_byte() {
+        let mut decoder = DiffDecoder::new();
+        // Mode byte 3 is invalid
+        let mut buf = Vec::new();
+        Lencode::encode_varint_u64(3, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        assert!(decoder.decode_blob(&mut cursor).is_err());
+    }
+
+    #[test]
     fn test_diff_without_key_falls_through() {
         use crate::context::{DecoderContext, EncoderContext};
         use crate::{Decode, Encode};

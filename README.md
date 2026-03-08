@@ -117,6 +117,43 @@ impl DedupeEncodeable for MyPubkey {}
 impl DedupeDecodeable for MyPubkey {}
 ```
 
+### Incremental diff encoding
+
+`DiffEncoder`/`DiffDecoder` provide stateful delta encoding for keyed byte blobs. When the same key is re‑encoded, only the diff is emitted. Two strategies are tried automatically and the smaller output is picked:
+
+- **RLE patches** — run‑length‑encoded list of changed regions (fast, best for sparse changes)
+- **XOR + zstd** — XOR old and new blobs, then zstd‑compress the result (best for scattered changes)
+
+```rust
+use lencode::prelude::*;
+use lencode::context::{EncoderContext, DecoderContext};
+use lencode::diff::{DiffEncoder, DiffDecoder};
+
+let key = 1u64;
+let mut enc_ctx = EncoderContext { dedupe: None, diff: Some(DiffEncoder::new()) };
+let mut dec_ctx = DecoderContext { dedupe: None, diff: Some(DiffDecoder::new()) };
+
+// First encode (full blob)
+let data1: Vec<u8> = vec![0xAA; 2048];
+let mut buf = Vec::new();
+enc_ctx.diff.as_mut().unwrap().set_key(key);
+dec_ctx.diff.as_mut().unwrap().set_key(key);
+data1.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+
+// Second encode (only the diff is written)
+let mut data2 = data1.clone();
+data2[100] = 0xFF;
+buf.clear();
+enc_ctx.diff.as_mut().unwrap().set_key(key);
+dec_ctx.diff.as_mut().unwrap().set_key(key);
+data2.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+assert!(buf.len() < data2.len() / 2); // diff is much smaller
+
+let mut cursor = Cursor::new(&buf[..]);
+let result: Vec<u8> = Vec::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
+assert_eq!(result, data2);
+```
+
 ### Writer pre‑allocation
 
 The `Write` trait provides a `reserve(additional)` hint. Growable writers like `VecWriter` use this to pre‑allocate capacity before encoding large collections, reducing intermediate reallocations.
@@ -154,6 +191,9 @@ cargo bench --all-features
 
 # Compare against borsh/bincode
 cargo bench --bench roundup --features std
+
+# Diff encoder (RLE vs XOR+zstd strategies)
+cargo bench --bench diff_bench --features std
 
 # Solana‑specific
 cargo bench --bench solana_bench --features solana
