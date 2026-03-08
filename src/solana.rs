@@ -1136,10 +1136,7 @@ fn test_agave_geyser_plugin_error_roundtrip() {
         ifc::GeyserPluginError::ConfigFileReadError { msg: "bad".into() },
         ifc::GeyserPluginError::AccountsUpdateError { msg: "acc".into() },
         ifc::GeyserPluginError::SlotStatusUpdateError { msg: "slot".into() },
-        ifc::GeyserPluginError::Custom(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "custom",
-        ))),
+        ifc::GeyserPluginError::Custom(Box::new(std::io::Error::other("custom"))),
         ifc::GeyserPluginError::TransactionUpdateError { msg: "tx".into() },
     ];
     for e in errs {
@@ -2091,7 +2088,7 @@ fn test_encode_decode_pubkey() {
             Pubkey::new_unique()
         } else {
             // Reuse some pubkeys to test deduplication
-            encoded_pubkeys[i - 5].clone()
+            encoded_pubkeys[i - 5]
         };
 
         let bytes_before = buf.len();

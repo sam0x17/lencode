@@ -22,7 +22,7 @@ fn benchmark_roundup(c: &mut Criterion) {
         .chain((0..1000).map(|_| rng3.random_range(0..u64::MAX) as u128))
         .chain((0..1000).map(|_| rng4.random_range(0..u128::MAX)))
         .chain(0..1000)
-        .map(|_| 0 as u128)
+        .map(|_| 0u128)
         .collect();
     values.shuffle(&mut rand::rng());
 
@@ -30,7 +30,7 @@ fn benchmark_roundup(c: &mut Criterion) {
     group.bench_with_input(BenchmarkId::new("borsh", "vec"), &values, |b, values| {
         let mut cursor = Cursor::new(vec![0u8; values.len() * 32]);
         b.iter(|| {
-            black_box(values.serialize(&mut cursor).unwrap());
+            values.serialize(&mut cursor).unwrap();
         });
     });
 

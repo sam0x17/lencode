@@ -157,7 +157,7 @@ struct WincodeStdCursorReader<'a> {
 
 impl<'a> WincodeStdCursorReader<'a> {
     #[inline(always)]
-    fn new(bytes: &'a [u8]) -> Self {
+    const fn new(bytes: &'a [u8]) -> Self {
         Self {
             cursor: Cursor::new(bytes),
         }

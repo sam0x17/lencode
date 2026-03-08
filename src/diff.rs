@@ -503,8 +503,7 @@ impl DiffDecoder {
 
                     // Read patch data
                     let start = result.len();
-                    result.reserve(patch_len);
-                    unsafe { result.set_len(start + patch_len) };
+                    result.resize(start + patch_len, 0);
                     let n = reader.read(&mut result[start..start + patch_len])?;
                     if n != patch_len {
                         return Err(Error::ReaderOutOfData);

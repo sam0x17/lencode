@@ -248,7 +248,7 @@ mod tests {
     fn test_macro_usage() {
         // Test that the macro was used correctly for built-in types
         let value: u32 = 0x12345678;
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
 
         // This should work because we used the macro to implement Pack for u32
@@ -264,7 +264,7 @@ mod tests {
 #[test]
 fn test_pack_unpack_u8() {
     let original: u8 = 42;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -281,7 +281,7 @@ fn test_pack_unpack_u8() {
 #[test]
 fn test_pack_unpack_u16() {
     let original: u16 = 0x1234;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -300,7 +300,7 @@ fn test_pack_unpack_u16() {
 #[test]
 fn test_pack_unpack_u32() {
     let original: u32 = 0x12345678;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -321,7 +321,7 @@ fn test_pack_unpack_u32() {
 #[test]
 fn test_pack_unpack_u64() {
     let original: u64 = 0x123456789abcdef0;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -346,7 +346,7 @@ fn test_pack_unpack_u64() {
 #[test]
 fn test_pack_unpack_u128() {
     let original: u128 = 0x123456789abcdef0fedcba9876543210;
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -362,7 +362,7 @@ fn test_pack_unpack_u128() {
 #[test]
 fn test_pack_unpack_i8() {
     let original: i8 = -42;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -378,7 +378,7 @@ fn test_pack_unpack_i8() {
 #[test]
 fn test_pack_unpack_i16() {
     let original: i16 = -12345;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -394,7 +394,7 @@ fn test_pack_unpack_i16() {
 #[test]
 fn test_pack_unpack_i32() {
     let original: i32 = -123456789;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -410,7 +410,7 @@ fn test_pack_unpack_i32() {
 #[test]
 fn test_pack_unpack_i64() {
     let original: i64 = -1234567890123456789;
-    let mut buffer = vec![0u8; 10];
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -426,7 +426,7 @@ fn test_pack_unpack_i64() {
 #[test]
 fn test_pack_unpack_i128() {
     let original: i128 = -123456789012345678901234567890123456789;
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -441,8 +441,8 @@ fn test_pack_unpack_i128() {
 
 #[test]
 fn test_pack_unpack_f32() {
-    let original: f32 = 3.14159;
-    let mut buffer = vec![0u8; 10];
+    let original: f32 = 1.23456;
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -457,8 +457,8 @@ fn test_pack_unpack_f32() {
 
 #[test]
 fn test_pack_unpack_f64() {
-    let original: f64 = 3.141592653589793;
-    let mut buffer = vec![0u8; 10];
+    let original: f64 = 1.234567890123456;
+    let mut buffer = [0u8; 10];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -475,7 +475,7 @@ fn test_pack_unpack_f64() {
 fn test_pack_unpack_extreme_values() {
     // Test u8 extremes
     for &value in &[u8::MIN, u8::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -484,7 +484,7 @@ fn test_pack_unpack_extreme_values() {
 
     // Test u16 extremes
     for &value in &[u16::MIN, u16::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -493,7 +493,7 @@ fn test_pack_unpack_extreme_values() {
 
     // Test u32 extremes
     for &value in &[u32::MIN, u32::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -502,7 +502,7 @@ fn test_pack_unpack_extreme_values() {
 
     // Test u64 extremes
     for &value in &[u64::MIN, u64::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -514,7 +514,7 @@ fn test_pack_unpack_extreme_values() {
 fn test_pack_unpack_signed_extremes() {
     // Test i8 extremes
     for &value in &[i8::MIN, -1, 0, 1, i8::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -523,7 +523,7 @@ fn test_pack_unpack_signed_extremes() {
 
     // Test i16 extremes
     for &value in &[i16::MIN, -1, 0, 1, i16::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -532,7 +532,7 @@ fn test_pack_unpack_signed_extremes() {
 
     // Test i32 extremes
     for &value in &[i32::MIN, -1, 0, 1, i32::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -541,7 +541,7 @@ fn test_pack_unpack_signed_extremes() {
 
     // Test i64 extremes
     for &value in &[i64::MIN, -1, 0, 1, i64::MAX] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -553,7 +553,7 @@ fn test_pack_unpack_signed_extremes() {
 fn test_pack_unpack_floating_point_special_values() {
     // Test f32 special values
     for &value in &[f32::NEG_INFINITY, -0.0, 0.0, f32::INFINITY, f32::NAN] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -567,7 +567,7 @@ fn test_pack_unpack_floating_point_special_values() {
 
     // Test f64 special values
     for &value in &[f64::NEG_INFINITY, -0.0, 0.0, f64::INFINITY, f64::NAN] {
-        let mut buffer = vec![0u8; 10];
+        let mut buffer = [0u8; 10];
         let mut cursor = Cursor::new(&mut buffer[..]);
         value.pack(&mut cursor).unwrap();
         let mut read_cursor = Cursor::new(&buffer[..]);
@@ -582,13 +582,13 @@ fn test_pack_unpack_floating_point_special_values() {
 
 #[test]
 fn test_pack_multiple_values() {
-    let mut buffer = vec![0u8; 100];
+    let mut buffer = [0u8; 100];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     let val1: u8 = 42;
     let val2: u16 = 0x1234;
     let val3: u32 = 0x12345678;
-    let val4: f32 = 3.14159;
+    let val4: f32 = 1.23456;
 
     // Pack multiple values
     let mut total_bytes = 0;
@@ -615,7 +615,7 @@ fn test_pack_multiple_values() {
 #[test]
 fn test_unpack_insufficient_data() {
     // Try to unpack u32 from buffer with only 2 bytes
-    let buffer = vec![0x12, 0x34];
+    let buffer = [0x12, 0x34];
     let mut cursor = Cursor::new(&buffer[..]);
 
     let result = u32::unpack(&mut cursor);
@@ -629,7 +629,7 @@ fn test_unpack_insufficient_data() {
 #[test]
 fn test_pack_insufficient_space() {
     // Try to pack u32 into buffer with only 2 bytes
-    let mut buffer = vec![0u8; 2];
+    let mut buffer = [0u8; 2];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     let value: u32 = 0x12345678;
@@ -716,7 +716,7 @@ fn test_round_trip_consistency() {
 #[test]
 fn test_pack_unpack_usize() {
     let original: usize = 0x123456789abcdef0usize;
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -733,7 +733,7 @@ fn test_pack_unpack_usize() {
 #[test]
 fn test_pack_unpack_usize() {
     let original: usize = 0x12345678usize;
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -748,8 +748,8 @@ fn test_pack_unpack_usize() {
 
 #[test]
 fn test_pack_unpack_isize() {
-    let original: isize = -123456789 as isize;
-    let mut buffer = vec![0u8; 20];
+    let original: isize = -123456789;
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -766,7 +766,7 @@ fn test_pack_unpack_isize() {
 #[test]
 fn test_pack_unpack_array_u8() {
     let original: [u8; 4] = [0x12, 0x34, 0x56, 0x78];
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -786,7 +786,7 @@ fn test_pack_unpack_array_u8() {
 #[test]
 fn test_pack_unpack_array_u16() {
     let original: [u16; 3] = [0x1234, 0x5678, 0x9abc];
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -810,7 +810,7 @@ fn test_pack_unpack_array_u16() {
 #[test]
 fn test_pack_unpack_array_u32() {
     let original: [u32; 2] = [0x12345678, 0x9abcdef0];
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -831,7 +831,7 @@ fn test_pack_unpack_array_mixed_sizes() {
     let arr10: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
     // Test single element array
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
     let bytes_written = arr1.pack(&mut cursor).unwrap();
     assert_eq!(bytes_written, 1);
@@ -840,7 +840,7 @@ fn test_pack_unpack_array_mixed_sizes() {
     assert_eq!(unpacked, arr1);
 
     // Test 5-element array
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
     let bytes_written = arr5.pack(&mut cursor).unwrap();
     assert_eq!(bytes_written, 5);
@@ -849,7 +849,7 @@ fn test_pack_unpack_array_mixed_sizes() {
     assert_eq!(unpacked, arr5);
 
     // Test 10-element array
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
     let bytes_written = arr10.pack(&mut cursor).unwrap();
     assert_eq!(bytes_written, 10);
@@ -860,8 +860,8 @@ fn test_pack_unpack_array_mixed_sizes() {
 
 #[test]
 fn test_pack_unpack_array_floating_point() {
-    let original: [f32; 3] = [3.14159, -2.71828, 0.0];
-    let mut buffer = vec![0u8; 20];
+    let original: [f32; 3] = [1.23456, -2.34567, 0.0];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -877,7 +877,7 @@ fn test_pack_unpack_array_floating_point() {
 #[test]
 fn test_pack_unpack_array_signed_integers() {
     let original: [i32; 4] = [-1000000, 0, 1000000, i32::MAX];
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -893,7 +893,7 @@ fn test_pack_unpack_array_signed_integers() {
 #[test]
 fn test_pack_unpack_empty_array() {
     let original: [u8; 0] = [];
-    let mut buffer = vec![0u8; 20];
+    let mut buffer = [0u8; 20];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -932,7 +932,7 @@ fn test_array_pack_with_vec_writer() {
 #[test]
 fn test_array_unpack_insufficient_data() {
     // Try to unpack [u32; 2] from buffer with only enough data for one u32
-    let buffer = vec![0x12, 0x34, 0x56, 0x78]; // Only 4 bytes, need 8
+    let buffer = [0x12, 0x34, 0x56, 0x78]; // Only 4 bytes, need 8
     let mut cursor = Cursor::new(&buffer[..]);
 
     let result = <[u32; 2]>::unpack(&mut cursor);
@@ -947,7 +947,7 @@ fn test_array_unpack_insufficient_data() {
 fn test_array_pack_insufficient_space() {
     // Try to pack [u32; 2] into buffer with only 4 bytes
     let original: [u32; 2] = [0x12345678, 0x9abcdef0];
-    let mut buffer = vec![0u8; 4]; // Only 4 bytes, need 8
+    let mut buffer = [0u8; 4]; // Only 4 bytes, need 8
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     let result = original.pack(&mut cursor);
@@ -992,7 +992,7 @@ fn test_array_round_trip_consistency() {
 fn test_large_array() {
     // Test a larger array to ensure the implementation scales
     let original: [u8; 100] = [42; 100];
-    let mut buffer = vec![0u8; 200];
+    let mut buffer = [0u8; 200];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing
@@ -1000,8 +1000,8 @@ fn test_large_array() {
     assert_eq!(bytes_written, 100);
 
     // Verify all bytes are 42
-    for i in 0..100 {
-        assert_eq!(buffer[i], 42);
+    for b in &buffer[..100] {
+        assert_eq!(*b, 42);
     }
 
     // Test unpacking
@@ -1024,7 +1024,7 @@ fn test_nested_array_concepts() {
         0x5555555555555555,
         0xaaaaaaaaaaaaaaaa,
     ];
-    let mut buffer = vec![0u8; 100];
+    let mut buffer = [0u8; 100];
     let mut cursor = Cursor::new(&mut buffer[..]);
 
     // Test packing

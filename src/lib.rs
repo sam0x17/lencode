@@ -1775,8 +1775,7 @@ fn test_encode_decode_unit_type() {
     let mut buf = [0u8; 1];
     let n = val.encode(&mut Cursor::new(&mut buf[..])).unwrap();
     assert_eq!(n, 0);
-    let decoded = <()>::decode(&mut Cursor::new(&buf[..n])).unwrap();
-    assert_eq!(decoded, val);
+    <()>::decode(&mut Cursor::new(&buf[..n])).unwrap();
 }
 
 #[test]
@@ -2090,7 +2089,7 @@ fn test_string_flag_raw_small_ascii() {
 fn test_string_flag_compressed_repetitive_ascii() {
     use crate::prelude::*;
     // Highly compressible ASCII
-    let s = core::iter::repeat('A').take(32 * 1024).collect::<String>();
+    let s = "A".repeat(32 * 1024);
     let mut buf = Vec::new();
     s.encode(&mut buf).unwrap();
 
@@ -2122,7 +2121,7 @@ fn test_string_flag_compressed_repetitive_ascii() {
 fn test_string_flag_compressed_unicode() {
     use crate::prelude::*;
     // Compressible Unicode string (multi-byte UTF-8)
-    let s = core::iter::repeat("😀").take(8192).collect::<String>();
+    let s = "😀".repeat(8192);
     let mut buf = Vec::new();
     s.encode(&mut buf).unwrap();
 
@@ -2140,7 +2139,7 @@ fn test_string_flag_compressed_unicode() {
 fn test_string_flag_corrupted_compressed_payload_errors() {
     use crate::prelude::*;
     // Ensure compression path is used
-    let s = core::iter::repeat('X').take(4096).collect::<String>();
+    let s = "X".repeat(4096);
     let mut buf = Vec::new();
     s.encode(&mut buf).unwrap();
 

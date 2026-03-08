@@ -28,7 +28,7 @@ macro_rules! bench_type {
                         || [0u8; 32],
                         |mut buf| {
                             let mut writer: &mut [u8] = &mut buf;
-                            black_box(wincode::serialize_into(&mut writer, &value).unwrap());
+                            wincode::serialize_into(&mut writer, &value).unwrap();
                         },
                         criterion::BatchSize::SmallInput,
                     )
@@ -103,7 +103,7 @@ fn bench_bool(c: &mut Criterion) {
             || [0u8; 1],
             |mut buf| {
                 let mut writer: &mut [u8] = &mut buf;
-                black_box(wincode::serialize_into(&mut writer, &value).unwrap());
+                wincode::serialize_into(&mut writer, &value).unwrap();
             },
             criterion::BatchSize::SmallInput,
         )
@@ -165,7 +165,7 @@ fn bench_float(c: &mut Criterion) {
                 || [0u8; 4],
                 |mut buf| {
                     let mut writer: &mut [u8] = &mut buf;
-                    black_box(wincode::serialize_into(&mut writer, &value).unwrap());
+                    wincode::serialize_into(&mut writer, &value).unwrap();
                 },
                 criterion::BatchSize::SmallInput,
             )
@@ -224,7 +224,7 @@ fn bench_float(c: &mut Criterion) {
                 || [0u8; 8],
                 |mut buf| {
                     let mut writer: &mut [u8] = &mut buf;
-                    black_box(wincode::serialize_into(&mut writer, &value).unwrap());
+                    wincode::serialize_into(&mut writer, &value).unwrap();
                 },
                 criterion::BatchSize::SmallInput,
             )

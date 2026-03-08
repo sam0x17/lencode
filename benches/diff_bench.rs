@@ -8,6 +8,8 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use std::hint::black_box;
 
+type MutateScenario = (&'static str, usize, Box<dyn Fn(&mut Vec<u8>, &mut StdRng)>);
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -75,12 +77,12 @@ fn report_compression_ratios(_c: &mut Criterion) {
     println!();
     println!("=== Diff compression ratios (RLE vs XOR+zstd vs auto) ===");
     println!(
-        "{:<40} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}  {}",
-        "scenario", "blob", "full", "rle", "rle%", "xor", "xor%", "auto", "winner"
+        "{:<40} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6} {:>6}  winner",
+        "scenario", "blob", "full", "rle", "rle%", "xor", "xor%", "auto",
     );
     println!("{}", "-".repeat(105));
 
-    let scenarios: Vec<(&str, usize, Box<dyn Fn(&mut Vec<u8>, &mut StdRng)>)> = vec![
+    let scenarios: Vec<MutateScenario> = vec![
         (
             "1KB_1byte_change",
             1024,
