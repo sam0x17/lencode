@@ -1,6 +1,6 @@
 [workspace]
 members = ["macros", "."]
-package.version = "0.1.6"
+package.version = "1.0.0"
 
 [package]
 name = "lencode"
@@ -36,7 +36,7 @@ hashbrown = "0"
 smallbox = { version = "0.8", default-features = false }
 zstd-safe = { version = "7", default-features = false }
 
-lencode-macros = { path = "macros", version = "0.1.6" }
+lencode-macros = { path = "macros", version = "1.0.0" }
 
 # Serialization helpers: keep bincode only for benches/examples
 bincode = { version = "2", features = ["serde"], optional = true }
