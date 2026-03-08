@@ -1,5 +1,6 @@
 #[cfg(feature = "solana")]
 use lencode::{
+    context::{DecoderContext, EncoderContext},
     dedupe::{DedupeDecoder, DedupeEncoder},
     prelude::*,
 };
@@ -33,11 +34,12 @@ fn main() {
     let borsh_data = borsh::to_vec(&all_pubkeys).unwrap();
 
     // Encode with lencode + deduplication
-    let mut encoder = DedupeEncoder::with_capacity(1000, 1);
+    let mut ctx = EncoderContext {
+        dedupe: Some(DedupeEncoder::with_capacity(1000, 1)),
+        diff: None,
+    };
     let mut cursor = Cursor::new(Vec::new());
-    all_pubkeys
-        .encode_ext(&mut cursor, Some(&mut encoder))
-        .unwrap();
+    all_pubkeys.encode_ext(&mut cursor, Some(&mut ctx)).unwrap();
     let lencode_data = cursor.into_inner();
 
     println!("Vector size: {} pubkeys", all_pubkeys.len());
@@ -49,14 +51,17 @@ fn main() {
     );
     println!(
         "Unique values stored: {} out of {} total",
-        encoder.len(),
+        ctx.dedupe.as_ref().unwrap().len(),
         all_pubkeys.len()
     );
 
     // Verify we can decode correctly
-    let mut decoder = DedupeDecoder::with_capacity(1000);
+    let mut dec_ctx = DecoderContext {
+        dedupe: Some(DedupeDecoder::with_capacity(1000)),
+        diff: None,
+    };
     let mut cursor = Cursor::new(&lencode_data);
-    let decoded: Vec<Pubkey> = Vec::decode_ext(&mut cursor, Some(&mut decoder)).unwrap();
+    let decoded: Vec<Pubkey> = Vec::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
 
     assert_eq!(all_pubkeys.len(), decoded.len());
     assert_eq!(all_pubkeys, decoded);

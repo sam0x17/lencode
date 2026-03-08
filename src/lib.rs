@@ -37,9 +37,9 @@
 //! - **RLE patches** (mode 1): run-length-encoded list of changed regions
 //! - **XOR + zstd** (mode 2): XOR old and new blobs, then zstd-compress the result
 //!
-//! This is especially useful for streaming scenarios where successive versions of a blob
-//! share most of their content. Enable via [`EncoderContext::with_diff`] /
-//! [`DecoderContext::with_diff`] and call `set_key()` before each encode/decode.
+//! Supported byte types: `Vec<u8>`, `&[u8]`, `[u8; N]`, `VecDeque<u8>`. Enable via
+//! [`EncoderContext::with_diff`] / [`DecoderContext::with_diff`] and call `set_key()`
+//! before each encode/decode to opt in for a given field.
 //!
 //! ## Bulk encoding
 //!
@@ -765,8 +765,17 @@ impl Encode for &[u8] {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
-        _ctx: Option<&mut EncoderContext>,
+        mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
+        // Diff encoding path: when a diff encoder with an active key is present
+        if let Some(ref mut c) = ctx {
+            if let Some(ref mut diff) = c.diff {
+                if diff.current_key.is_some() {
+                    return diff.encode_blob(self, writer);
+                }
+            }
+        }
+
         // Encode as either raw or compressed with a 1-bit flag in the header:
         // header = varint((payload_len << 1) | (is_compressed as usize))
         let raw_len = self.len();
@@ -962,6 +971,16 @@ impl<const N: usize, T: Encode + 'static> Encode for [T; N] {
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
             let bytes: &[u8] =
                 unsafe { core::slice::from_raw_parts(self.as_ptr() as *const u8, N) };
+
+            // Diff encoding path
+            if let Some(ref mut c) = ctx {
+                if let Some(ref mut diff) = c.diff {
+                    if diff.current_key.is_some() {
+                        return diff.encode_blob(bytes, writer);
+                    }
+                }
+            }
+
             if let Some(buf) = writer.buf_mut()
                 && buf.len() >= N
             {
@@ -1001,6 +1020,27 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         // Fast path: bulk copy for u8 arrays
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
+            // Diff decoding path
+            if let Some(ref mut c) = ctx {
+                if let Some(ref mut diff) = c.diff {
+                    if diff.current_key.is_some() {
+                        let out = diff.decode_blob(reader)?;
+                        if out.len() != N {
+                            return Err(Error::IncorrectLength);
+                        }
+                        let mut arr = MaybeUninit::<[T; N]>::uninit();
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                out.as_ptr(),
+                                arr.as_mut_ptr() as *mut u8,
+                                N,
+                            );
+                        }
+                        return Ok(unsafe { arr.assume_init() });
+                    }
+                }
+            }
+
             let mut arr = MaybeUninit::<[T; N]>::uninit();
             if let Some(buf) = reader.buf() {
                 if buf.len() >= N {
@@ -1299,12 +1339,23 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
         if core::any::TypeId::of::<V>() == core::any::TypeId::of::<u8>() {
             // Flatten to contiguous bytes first
             let (a, b) = self.as_slices();
-            // Compress concatenated bytes into a temporary buffer
-            let mut tmp = Vec::with_capacity(a.len() + b.len());
             let a_u8: &[u8] =
                 unsafe { core::slice::from_raw_parts(a.as_ptr() as *const u8, a.len()) };
             let b_u8: &[u8] =
                 unsafe { core::slice::from_raw_parts(b.as_ptr() as *const u8, b.len()) };
+
+            // Diff encoding path
+            if let Some(ref mut c) = ctx {
+                if let Some(ref mut diff) = c.diff {
+                    if diff.current_key.is_some() {
+                        let mut tmp = Vec::with_capacity(a_u8.len() + b_u8.len());
+                        tmp.extend_from_slice(a_u8);
+                        tmp.extend_from_slice(b_u8);
+                        return diff.encode_blob(&tmp, writer);
+                    }
+                }
+            }
+            let mut tmp = Vec::with_capacity(a_u8.len() + b_u8.len());
             tmp.extend_from_slice(a_u8);
             tmp.extend_from_slice(b_u8);
             let raw_len = tmp.len();
@@ -1342,6 +1393,19 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         if core::any::TypeId::of::<V>() == core::any::TypeId::of::<u8>() {
+            // Diff decoding path
+            if let Some(ref mut c) = ctx {
+                if let Some(ref mut diff) = c.diff {
+                    if diff.current_key.is_some() {
+                        let out = diff.decode_blob(reader)?;
+                        let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
+                        let mut deque = collections::VecDeque::with_capacity(out_v.len());
+                        deque.extend(out_v);
+                        return Ok(deque);
+                    }
+                }
+            }
+
             let flagged = Self::decode_len(reader)?;
             let is_compressed = (flagged & 1) == 1;
             let payload_len = flagged >> 1;

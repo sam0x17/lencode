@@ -9,6 +9,10 @@
 //!
 //! [`DiffDecoder`] reconstructs the full blob from either format.
 //!
+//! Diff encoding is automatically wired into `Encode`/`Decode` for `Vec<u8>`,
+//! `&[u8]`, `[u8; N]`, and `VecDeque<u8>` when an [`EncoderContext`]/[`DecoderContext`]
+//! with an active diff key is provided via `encode_ext`/`decode_ext`.
+//!
 //! ## Wire format
 //!
 //! Each encoded blob starts with a varint **mode flag**:
@@ -756,7 +760,10 @@ mod tests {
         encoder.encode_blob(&data2, &mut buf).unwrap();
 
         // Verify mode byte is 2 (XOR+zstd)
-        assert_eq!(buf[0], 2, "expected mode 2 (XOR+zstd) for scattered changes");
+        assert_eq!(
+            buf[0], 2,
+            "expected mode 2 (XOR+zstd) for scattered changes"
+        );
 
         let mut cursor = Cursor::new(&buf[..]);
         let result = decoder.decode_blob(&mut cursor).unwrap();
@@ -1010,6 +1017,132 @@ mod tests {
         Lencode::encode_varint_u64(3, &mut buf).unwrap();
         let mut cursor = Cursor::new(&buf[..]);
         assert!(decoder.decode_blob(&mut cursor).is_err());
+    }
+
+    #[test]
+    fn test_diff_u8_array_roundtrip() {
+        use crate::context::{DecoderContext, EncoderContext};
+        use crate::{Decode, Encode};
+
+        let key = 900u64;
+        let mut enc_ctx = EncoderContext {
+            dedupe: None,
+            diff: Some(DiffEncoder::new()),
+        };
+        let mut dec_ctx = DecoderContext {
+            dedupe: None,
+            diff: Some(DiffDecoder::new()),
+        };
+
+        // First encode: full blob
+        let data1: [u8; 256] = core::array::from_fn(|i| i as u8);
+        let mut buf = Vec::new();
+        enc_ctx.diff.as_mut().unwrap().set_key(key);
+        dec_ctx.diff.as_mut().unwrap().set_key(key);
+        data1.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result: [u8; 256] = <[u8; 256]>::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
+        assert_eq!(result, data1);
+
+        // Second encode: small diff
+        let mut data2 = data1;
+        data2[50] = 0xFF;
+        data2[200] = 0xFE;
+        buf.clear();
+        enc_ctx.diff.as_mut().unwrap().set_key(key);
+        dec_ctx.diff.as_mut().unwrap().set_key(key);
+        data2.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+
+        assert!(
+            buf.len() < 256,
+            "diff should be smaller than full array: {} vs 256",
+            buf.len()
+        );
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result: [u8; 256] = <[u8; 256]>::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
+        assert_eq!(result, data2);
+    }
+
+    #[test]
+    fn test_diff_u8_slice_encode() {
+        use crate::Encode;
+        use crate::context::EncoderContext;
+
+        let key = 1000u64;
+        let mut enc_ctx = EncoderContext {
+            dedupe: None,
+            diff: Some(DiffEncoder::new()),
+        };
+
+        // First encode: full blob
+        let data1: &[u8] = &[0xAA; 512];
+        let mut buf = Vec::new();
+        enc_ctx.diff.as_mut().unwrap().set_key(key);
+        data1.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+
+        // Second encode: small diff
+        let mut data2_vec = vec![0xAA; 512];
+        data2_vec[100] = 0xBB;
+        let data2: &[u8] = &data2_vec;
+        buf.clear();
+        enc_ctx.diff.as_mut().unwrap().set_key(key);
+        data2.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+
+        // Mode byte should be 1 (RLE)
+        assert_eq!(buf[0], 1, "expected diff mode for &[u8]");
+        assert!(buf.len() < 512, "diff should be smaller than full slice");
+    }
+
+    #[test]
+    fn test_diff_vecdeque_roundtrip() {
+        use crate::context::{DecoderContext, EncoderContext};
+        use crate::{Decode, Encode};
+        #[cfg(not(feature = "std"))]
+        use alloc::collections::VecDeque;
+        #[cfg(feature = "std")]
+        use std::collections::VecDeque;
+
+        let key = 1100u64;
+        let mut enc_ctx = EncoderContext {
+            dedupe: None,
+            diff: Some(DiffEncoder::new()),
+        };
+        let mut dec_ctx = DecoderContext {
+            dedupe: None,
+            diff: Some(DiffDecoder::new()),
+        };
+
+        // First encode
+        let data1: VecDeque<u8> = (0..512).map(|i| (i % 256) as u8).collect();
+        let mut buf = Vec::new();
+        enc_ctx.diff.as_mut().unwrap().set_key(key);
+        dec_ctx.diff.as_mut().unwrap().set_key(key);
+        data1.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result: VecDeque<u8> = VecDeque::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
+        assert_eq!(result, data1);
+
+        // Second encode: small diff
+        let mut data2 = data1.clone();
+        data2[50] = 0xFF;
+        data2[400] = 0xFE;
+        buf.clear();
+        enc_ctx.diff.as_mut().unwrap().set_key(key);
+        dec_ctx.diff.as_mut().unwrap().set_key(key);
+        data2.encode_ext(&mut buf, Some(&mut enc_ctx)).unwrap();
+
+        assert!(
+            buf.len() < 512,
+            "diff should be smaller: {} vs 512",
+            buf.len()
+        );
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result: VecDeque<u8> = VecDeque::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
+        assert_eq!(result, data2);
     }
 
     #[test]

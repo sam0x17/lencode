@@ -1,5 +1,6 @@
 #[cfg(feature = "solana")]
 use lencode::{
+    context::{DecoderContext, EncoderContext},
     dedupe::{DedupeDecoder, DedupeEncoder},
     prelude::*,
 };
@@ -121,7 +122,10 @@ fn main() {
 
     // lencode: enable dedupe across the entire set
     let mut lencode_buf = Vec::new();
-    let mut enc = DedupeEncoder::with_capacity(4096, 8);
+    let mut enc = EncoderContext {
+        dedupe: Some(DedupeEncoder::with_capacity(4096, 8)),
+        diff: None,
+    };
     let t1 = Instant::now();
     vtxs.encode_ext(&mut lencode_buf, Some(&mut enc)).unwrap();
     let t_lencode = t1.elapsed();
@@ -140,12 +144,18 @@ fn main() {
     println!("lencode size: {} bytes (dedupe on)", lencode_len);
     println!("compression ratio (lencode/bincode): {:.3}", ratio);
     println!("space savings vs bincode: {:.1}%", savings);
-    println!("unique values captured by dedupe: {}", enc.len());
+    println!(
+        "unique values captured by dedupe: {}",
+        enc.dedupe.as_ref().unwrap().len()
+    );
     println!("bincode encode time: {:?}", t_bincode);
     println!("lencode encode time: {:?}", t_lencode);
 
     // Verify we can decode the lencode stream
-    let mut dec = DedupeDecoder::with_capacity(4096);
+    let mut dec = DecoderContext {
+        dedupe: Some(DedupeDecoder::with_capacity(4096)),
+        diff: None,
+    };
     let decoded: Vec<VersionedTransaction> =
         Vec::decode_ext(&mut Cursor::new(&lencode_buf), Some(&mut dec)).unwrap();
     assert_eq!(decoded, vtxs);

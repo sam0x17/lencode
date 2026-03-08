@@ -124,6 +124,8 @@ impl DedupeDecodeable for MyPubkey {}
 - **RLE patches** — run‑length‑encoded list of changed regions (fast, best for sparse changes)
 - **XOR + zstd** — XOR old and new blobs, then zstd‑compress the result (best for scattered changes)
 
+Supported byte types: `Vec<u8>`, `&[u8]`, `[u8; N]`, `VecDeque<u8>`. Set a key via `set_key()` on the diff encoder/decoder before each `encode_ext`/`decode_ext` call to opt in.
+
 ```rust
 use lencode::prelude::*;
 use lencode::context::{EncoderContext, DecoderContext};
