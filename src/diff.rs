@@ -501,9 +501,17 @@ impl DiffDecoder {
                     }
                     result.extend_from_slice(&old[old_cursor..copy_end]);
 
-                    // Read patch data
+                    // Read patch data directly into the vec without zero-filling.
+                    // SAFETY: we immediately read exactly patch_len bytes into the
+                    // uninitialized region; if the read is short we return an error
+                    // (the vec is not observed in the error path since we return Err).
                     let start = result.len();
-                    result.resize(start + patch_len, 0);
+                    result.reserve(patch_len);
+                    #[allow(clippy::uninit_vec)]
+                    // perf: avoid zero-fill before overwrite
+                    unsafe {
+                        result.set_len(start + patch_len);
+                    }
                     let n = reader.read(&mut result[start..start + patch_len])?;
                     if n != patch_len {
                         return Err(Error::ReaderOutOfData);

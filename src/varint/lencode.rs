@@ -213,7 +213,10 @@ impl Lencode {
                 let n = ((128 - val.leading_zeros() + 7) >> 3) as usize;
                 unsafe {
                     *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                    (dst.as_mut_ptr().add(1) as *mut [u8; 16]).write_unaligned(val.to_le_bytes());
+                    // Write as two u64s — avoids slow u128 write_unaligned on aarch64
+                    let ptr = dst.as_mut_ptr().add(1);
+                    (ptr as *mut u64).write_unaligned(val as u64);
+                    (ptr.add(8) as *mut u64).write_unaligned((val >> 64) as u64);
                 }
                 writer.advance_mut(1 + n);
                 return Ok(1 + n);
@@ -480,7 +483,11 @@ impl Lencode {
                     return Ok(first as u128);
                 }
                 let n = (first & 0x7F) as usize;
-                let raw = unsafe { (slice.as_ptr().add(1) as *const u128).read_unaligned() };
+                // Load as two u64s — avoids slow u128 read_unaligned on aarch64
+                let ptr = unsafe { slice.as_ptr().add(1) };
+                let lo = unsafe { (ptr as *const u64).read_unaligned() } as u128;
+                let hi = unsafe { (ptr.add(8) as *const u64).read_unaligned() } as u128;
+                let raw = lo | (hi << 64);
                 let val = if n < 16 {
                     raw & (!0u128 >> ((16 - n) << 3))
                 } else {

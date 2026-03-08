@@ -35,9 +35,10 @@ impl<T: DedupeEncodeable> Encode for T {
         ctx: Option<&mut crate::context::EncoderContext>,
     ) -> Result<usize> {
         if let Some(ctx) = ctx
-            && let Some(encoder) = ctx.dedupe.as_mut() {
-                return encoder.encode(self, writer);
-            }
+            && let Some(encoder) = ctx.dedupe.as_mut()
+        {
+            return encoder.encode(self, writer);
+        }
         self.pack(writer)
     }
 
@@ -64,9 +65,10 @@ impl<T: DedupeDecodeable> Decode for T {
         ctx: Option<&mut crate::context::DecoderContext>,
     ) -> Result<Self> {
         if let Some(ctx) = ctx
-            && let Some(decoder) = ctx.dedupe.as_mut() {
-                return decoder.decode(reader);
-            }
+            && let Some(decoder) = ctx.dedupe.as_mut()
+        {
+            return decoder.decode(reader);
+        }
         T::unpack(reader)
     }
 
