@@ -115,6 +115,7 @@ fn compute_patches(old: &[u8], new: &[u8]) -> Option<Vec<Patch>> {
 ///
 /// Call [`set_key`](DiffEncoder::set_key) before encoding a blob to enable
 /// delta encoding against the previously seen value for that key.
+#[derive(Clone)]
 pub struct DiffEncoder {
     /// Last seen blob per key.
     store: HashMap<u64, Vec<u8>>,
@@ -220,6 +221,7 @@ impl DiffEncoder {
 ///
 /// Call [`set_key`](DiffDecoder::set_key) before decoding to match the key
 /// used during encoding.
+#[derive(Clone)]
 pub struct DiffDecoder {
     /// Cached blobs per key.
     store: HashMap<u64, Vec<u8>>,

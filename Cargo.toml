@@ -112,6 +112,11 @@ harness = false
 required-features = ["std"]
 
 [[bench]]
+name = "diff_bench"
+harness = false
+required-features = ["std"]
+
+[[bench]]
 name = "codec_bench"
 harness = false
 required-features = ["std", "comparison-bench"]
