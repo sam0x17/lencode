@@ -225,6 +225,49 @@ impl DiffEncoder {
         self.current_key = None;
     }
 
+    /// Returns the number of keys with cached blobs.
+    #[inline(always)]
+    pub fn num_keys(&self) -> usize {
+        self.store.len()
+    }
+
+    /// Returns `true` if a cached blob exists for the given key.
+    #[inline(always)]
+    pub fn contains_key(&self, key: u64) -> bool {
+        self.store.contains_key(&key)
+    }
+
+    /// Returns an iterator over all cached keys.
+    #[inline(always)]
+    pub fn keys(&self) -> impl Iterator<Item = u64> + '_ {
+        self.store.keys().copied()
+    }
+
+    /// Removes the cached blob for a specific key.
+    ///
+    /// The next encode for this key will emit a full blob instead of a diff.
+    #[inline(always)]
+    pub fn remove_key(&mut self, key: u64) {
+        self.store.remove(&key);
+    }
+
+    /// Returns the total number of cached bytes across all keys.
+    #[inline]
+    pub fn cached_bytes(&self) -> usize {
+        self.store.values().map(|v| v.len()).sum()
+    }
+
+    /// Returns an estimate of the heap memory (in bytes) used by the encoder.
+    #[inline]
+    pub fn memory_usage(&self) -> usize {
+        use core::mem::size_of;
+        // HashMap bucket overhead
+        let map_overhead = self.store.capacity() * (size_of::<u64>() + size_of::<Vec<u8>>());
+        // Actual cached blob data
+        let blob_bytes: usize = self.store.values().map(|v| v.capacity()).sum();
+        map_overhead + blob_bytes
+    }
+
     /// Encodes a byte blob, producing a diff against the previously seen value
     /// for the current key (if any).
     ///
@@ -370,6 +413,47 @@ impl DiffDecoder {
     pub fn clear(&mut self) {
         self.store.clear();
         self.current_key = None;
+    }
+
+    /// Returns the number of keys with cached blobs.
+    #[inline(always)]
+    pub fn num_keys(&self) -> usize {
+        self.store.len()
+    }
+
+    /// Returns `true` if a cached blob exists for the given key.
+    #[inline(always)]
+    pub fn contains_key(&self, key: u64) -> bool {
+        self.store.contains_key(&key)
+    }
+
+    /// Returns an iterator over all cached keys.
+    #[inline(always)]
+    pub fn keys(&self) -> impl Iterator<Item = u64> + '_ {
+        self.store.keys().copied()
+    }
+
+    /// Removes the cached blob for a specific key.
+    ///
+    /// The next decode for this key will expect a full blob.
+    #[inline(always)]
+    pub fn remove_key(&mut self, key: u64) {
+        self.store.remove(&key);
+    }
+
+    /// Returns the total number of cached bytes across all keys.
+    #[inline]
+    pub fn cached_bytes(&self) -> usize {
+        self.store.values().map(|v| v.len()).sum()
+    }
+
+    /// Returns an estimate of the heap memory (in bytes) used by the decoder.
+    #[inline]
+    pub fn memory_usage(&self) -> usize {
+        use core::mem::size_of;
+        let map_overhead = self.store.capacity() * (size_of::<u64>() + size_of::<Vec<u8>>());
+        let blob_bytes: usize = self.store.values().map(|v| v.capacity()).sum();
+        map_overhead + blob_bytes
     }
 
     /// Decodes a byte blob, applying patches if the stream contains a diff.
@@ -1142,6 +1226,107 @@ mod tests {
 
         let mut cursor = Cursor::new(&buf[..]);
         let result: VecDeque<u8> = VecDeque::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
+        assert_eq!(result, data2);
+    }
+
+    #[test]
+    fn test_diff_encoder_convenience_methods() {
+        let mut encoder = DiffEncoder::new();
+
+        assert_eq!(encoder.num_keys(), 0);
+        assert_eq!(encoder.cached_bytes(), 0);
+        assert!(!encoder.contains_key(1));
+
+        // Store a blob for key 1
+        encoder.set_key(1);
+        encoder.encode_blob(&[0xAA; 256], &mut Vec::new()).unwrap();
+
+        assert_eq!(encoder.num_keys(), 1);
+        assert!(encoder.contains_key(1));
+        assert!(!encoder.contains_key(2));
+        assert_eq!(encoder.cached_bytes(), 256);
+
+        // Store a blob for key 2
+        encoder.set_key(2);
+        encoder.encode_blob(&[0xBB; 128], &mut Vec::new()).unwrap();
+
+        assert_eq!(encoder.num_keys(), 2);
+        assert_eq!(encoder.cached_bytes(), 384);
+
+        // Remove key 1
+        encoder.remove_key(1);
+        assert_eq!(encoder.num_keys(), 1);
+        assert!(!encoder.contains_key(1));
+        assert_eq!(encoder.cached_bytes(), 128);
+
+        // Memory usage should be positive
+        assert!(encoder.memory_usage() > 0);
+    }
+
+    #[test]
+    fn test_diff_decoder_convenience_methods() {
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+
+        assert_eq!(decoder.num_keys(), 0);
+        assert_eq!(decoder.cached_bytes(), 0);
+
+        // Encode + decode a blob
+        let key = 10u64;
+        encoder.set_key(key);
+        decoder.set_key(key);
+        let mut buf = Vec::new();
+        encoder.encode_blob(&[0xCC; 512], &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        decoder.decode_blob(&mut cursor).unwrap();
+
+        assert_eq!(decoder.num_keys(), 1);
+        assert!(decoder.contains_key(key));
+        assert_eq!(decoder.cached_bytes(), 512);
+
+        // Remove key
+        decoder.remove_key(key);
+        assert_eq!(decoder.num_keys(), 0);
+        assert!(!decoder.contains_key(key));
+        assert_eq!(decoder.cached_bytes(), 0);
+
+        let _usage = decoder.memory_usage();
+    }
+
+    #[test]
+    fn test_diff_remove_key_forces_full_blob() {
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+        let key = 50u64;
+
+        // First encode (full)
+        let data1 = vec![0xAA; 256];
+        let mut buf = Vec::new();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data1, &mut buf).unwrap();
+        let mut cursor = Cursor::new(&buf[..]);
+        decoder.decode_blob(&mut cursor).unwrap();
+
+        // Remove key from both
+        encoder.remove_key(key);
+        decoder.remove_key(key);
+
+        // Next encode should be full blob (mode 0)
+        let mut data2 = data1.clone();
+        data2[0] = 0xFF;
+        buf.clear();
+        encoder.set_key(key);
+        decoder.set_key(key);
+        encoder.encode_blob(&data2, &mut buf).unwrap();
+
+        assert_eq!(
+            buf[0], 0,
+            "after remove_key(), should emit full blob (mode 0)"
+        );
+
+        let mut cursor = Cursor::new(&buf[..]);
+        let result = decoder.decode_blob(&mut cursor).unwrap();
         assert_eq!(result, data2);
     }
 

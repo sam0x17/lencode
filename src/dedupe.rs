@@ -137,6 +137,87 @@ impl DedupeEncoder {
         self.next_id == 1
     }
 
+    /// Returns the number of distinct types that have been stored.
+    #[inline(always)]
+    pub fn num_types(&self) -> usize {
+        self.type_stores.len()
+    }
+
+    /// Returns an iterator over the [`TypeId`]s of all stored types.
+    #[inline(always)]
+    pub fn type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.type_stores.keys().copied()
+    }
+
+    /// Returns `true` if any entries exist for type `T`.
+    #[inline]
+    pub fn contains_type<T: 'static>(&self) -> bool {
+        self.type_stores.contains_key(&TypeId::of::<T>())
+    }
+
+    /// Returns the number of unique values stored for type `T`.
+    ///
+    /// Returns `0` if no values of type `T` have been seen.
+    #[inline]
+    pub fn len_for_type<T: Hash + Eq + Send + Sync + 'static>(&self) -> usize {
+        let type_id = TypeId::of::<T>();
+        match self.type_stores.get(&type_id) {
+            Some(store) => store
+                .downcast_ref::<HashMap<T, usize>>()
+                .map_or(0, |m| m.len()),
+            None => 0,
+        }
+    }
+
+    /// Returns an iterator over the unique values stored for type `T`.
+    ///
+    /// Returns an empty iterator if no values of type `T` have been seen.
+    #[inline]
+    pub fn values_for_type<T: Hash + Eq + Send + Sync + 'static>(
+        &self,
+    ) -> impl Iterator<Item = &T> {
+        let type_id = TypeId::of::<T>();
+        self.type_stores
+            .get(&type_id)
+            .and_then(|store| store.downcast_ref::<HashMap<T, usize>>())
+            .into_iter()
+            .flat_map(|m| m.keys())
+    }
+
+    /// Removes all cached entries for a specific type `T`.
+    ///
+    /// Other types' entries and their IDs are unaffected.
+    /// **Warning:** clearing a single type invalidates existing IDs for that type,
+    /// so the encoder and decoder must be kept in sync.
+    #[inline]
+    pub fn clear_type<T: Hash + Eq + Send + Sync + 'static>(&mut self) {
+        let type_id = TypeId::of::<T>();
+        self.type_stores.remove(&type_id);
+    }
+
+    /// Returns an estimate of the heap memory (in bytes) used by the encoder's
+    /// internal tables.
+    ///
+    /// This is a rough lower bound: it accounts for the hashmap overhead and
+    /// stored key/value sizes but not allocator metadata.
+    #[inline]
+    pub fn memory_usage(&self) -> usize {
+        use core::mem::size_of;
+        // Outer HashMap overhead
+        let mut total = self.type_stores.capacity()
+            * (size_of::<TypeId>() + size_of::<SmallBox<dyn Any + Send + Sync, S8>>());
+
+        // We can't inspect the typed hashmaps generically, but we know the
+        // total entry count from next_id, plus the HashMap overhead per store.
+        // Each entry is at least (key_size + sizeof(usize)) in the inner map.
+        // Since we can't know key_size generically, report a conservative
+        // per-entry overhead of size_of::<usize>() * 3 (hash + key-ptr + value).
+        let entry_count = self.len();
+        total += entry_count * size_of::<usize>() * 3;
+
+        total
+    }
+
     /// Encodes a value with deduplication.
     ///
     /// If the value has been seen before, only its ID is encoded. Otherwise, the value is
@@ -235,6 +316,15 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
+    }
+
+    /// Returns an estimate of the heap memory (in bytes) used by the decoder's
+    /// value cache.
+    #[inline]
+    pub fn memory_usage(&self) -> usize {
+        use core::mem::size_of;
+        // Vec overhead + per-element Box overhead
+        self.values.capacity() * size_of::<Box<dyn Any + Send + Sync>>()
     }
 
     /// Decodes a value with deduplication.
@@ -337,6 +427,65 @@ mod tests {
 
         assert_eq!(decoded1, 42u32);
         assert_eq!(decoded2, 42u32);
+    }
+
+    #[test]
+    fn test_dedupe_len_for_type() {
+        let mut encoder = DedupeEncoder::new();
+        let mut buffer = Vec::new();
+
+        assert_eq!(encoder.len_for_type::<u32>(), 0);
+        assert_eq!(encoder.num_types(), 0);
+
+        encoder.encode(&42u32, &mut buffer).unwrap();
+        encoder.encode(&42u32, &mut buffer).unwrap(); // duplicate, not a new entry
+        encoder.encode(&99u32, &mut buffer).unwrap();
+        encoder.encode(&7u64, &mut buffer).unwrap();
+
+        assert_eq!(encoder.len_for_type::<u32>(), 2);
+        assert_eq!(encoder.len_for_type::<u64>(), 1);
+        assert_eq!(encoder.len_for_type::<u16>(), 0);
+        assert_eq!(encoder.num_types(), 2);
+        assert_eq!(encoder.len(), 3);
+    }
+
+    #[test]
+    fn test_dedupe_clear_type() {
+        let mut encoder = DedupeEncoder::new();
+        let mut buffer = Vec::new();
+
+        encoder.encode(&42u32, &mut buffer).unwrap();
+        encoder.encode(&7u64, &mut buffer).unwrap();
+        assert_eq!(encoder.num_types(), 2);
+
+        encoder.clear_type::<u32>();
+        assert_eq!(encoder.len_for_type::<u32>(), 0);
+        assert_eq!(encoder.len_for_type::<u64>(), 1);
+        assert_eq!(encoder.num_types(), 1);
+    }
+
+    #[test]
+    fn test_dedupe_memory_usage() {
+        let mut encoder = DedupeEncoder::new();
+        let mut buffer = Vec::new();
+
+        let initial = encoder.memory_usage();
+
+        encoder.encode(&42u32, &mut buffer).unwrap();
+        encoder.encode(&99u32, &mut buffer).unwrap();
+
+        let after = encoder.memory_usage();
+        assert!(
+            after > initial,
+            "memory usage should increase after storing entries"
+        );
+    }
+
+    #[test]
+    fn test_dedupe_decoder_memory_usage() {
+        let decoder = DedupeDecoder::new();
+        // Just verify it doesn't panic
+        let _usage = decoder.memory_usage();
     }
 
     #[test]

@@ -81,13 +81,13 @@ impl DedupeDecodeable for MyId {}
 let vals = vec![MyId(42), MyId(7), MyId(42), MyId(7), MyId(42)];
 
 // Encode with deduplication enabled
-let mut enc = DedupeEncoder::new();
+let mut enc_ctx = EncoderContext::with_dedupe();
 let mut buf = Vec::new();
-encode_ext(&vals, &mut buf, Some(&mut enc))?;
+encode_ext(&vals, &mut buf, Some(&mut enc_ctx))?;
 
 // Decode with deduplication enabled
-let mut dec = DedupeDecoder::new();
-let roundtrip: Vec<MyId> = decode_ext(&mut Cursor::new(&buf), Some(&mut dec))?;
+let mut dec_ctx = DecoderContext::with_dedupe();
+let roundtrip: Vec<MyId> = decode_ext(&mut Cursor::new(&buf), Some(&mut dec_ctx))?;
 assert_eq!(roundtrip, vals);
 ```
 

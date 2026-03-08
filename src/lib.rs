@@ -41,6 +41,10 @@
 //! [`EncoderContext::with_diff`] / [`DecoderContext::with_diff`] and call `set_key()`
 //! before each encode/decode to opt in for a given field.
 //!
+//! Both [`DedupeEncoder`] and [`DiffEncoder`]/[`DiffDecoder`] provide introspection
+//! methods (`len()`, `num_keys()`, `memory_usage()`, etc.) and granular state management
+//! (`clear()`, `clear_type::<T>()`, `remove_key()`).
+//!
 //! ## Bulk encoding
 //!
 //! Collections of fixed‑size elements (e.g. `Vec<[u8; 32]>`) are encoded via bulk
