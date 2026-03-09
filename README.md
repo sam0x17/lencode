@@ -229,13 +229,3 @@ Run with `--features solana`.
 ## License
 
 MIT
-
-## Changelog
-
-### 0.1.0
-- Lencode varints for signed/unsigned ints
-- Optional deduplication via `DedupeEncoder`/`DedupeDecoder`
-- Bytes/strings with flagged header + zstd
-- `no_std` by default; `std` and `solana` features
-- Derive macros for `Encode`/`Decode`
-- Big‑endian test coverage
