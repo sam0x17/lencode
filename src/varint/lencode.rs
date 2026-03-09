@@ -425,26 +425,9 @@ impl Lencode {
             return Ok(first as u64);
         }
         let n = (first & 0x7F) as usize;
-        #[cfg(target_endian = "little")]
-        {
-            let mut val: u64 = 0;
-            let val_bytes =
-                unsafe { core::slice::from_raw_parts_mut(&mut val as *mut u64 as *mut u8, 8) };
-            reader.read(&mut val_bytes[..n])?;
-            Ok(val)
-        }
-        #[cfg(target_endian = "big")]
-        {
-            let mut buf = [0u8; 8];
-            reader.read(&mut buf[..n])?;
-            let mut val = 0u64;
-            let mut shift = 0u32;
-            for i in 0..n {
-                val |= (buf[i] as u64) << shift;
-                shift += 8;
-            }
-            Ok(val)
-        }
+        let mut bytes = [0u8; 8];
+        reader.read(&mut bytes[..n])?;
+        Ok(u64::from_le_bytes(bytes))
     }
 
     #[inline(always)]
@@ -499,26 +482,9 @@ impl Lencode {
             return Ok(first as u128);
         }
         let n = (first & 0x7F) as usize;
-        #[cfg(target_endian = "little")]
-        {
-            let mut val: u128 = 0;
-            let val_bytes =
-                unsafe { core::slice::from_raw_parts_mut(&mut val as *mut u128 as *mut u8, 16) };
-            reader.read(&mut val_bytes[..n])?;
-            Ok(val)
-        }
-        #[cfg(target_endian = "big")]
-        {
-            let mut buf = [0u8; 16];
-            reader.read(&mut buf[..n])?;
-            let mut val = 0u128;
-            let mut shift = 0u32;
-            for i in 0..n {
-                val |= (buf[i] as u128) << shift;
-                shift += 8;
-            }
-            Ok(val)
-        }
+        let mut bytes = [0u8; 16];
+        reader.read(&mut bytes[..n])?;
+        Ok(u128::from_le_bytes(bytes))
     }
 }
 
@@ -531,18 +497,11 @@ impl VarintEncodingScheme for Lencode {
                 if dst.is_empty() {
                     return Err(Error::WriterOutOfSpace);
                 }
-                #[cfg(target_endian = "little")]
-                let byte = val.ne_bytes()[0];
-                #[cfg(target_endian = "big")]
-                let byte = val.le_bytes()[0];
-                unsafe { *dst.get_unchecked_mut(0) = byte };
+                unsafe { *dst.get_unchecked_mut(0) = val.le_bytes()[0] };
                 writer.advance_mut(1);
                 return Ok(1);
             }
 
-            #[cfg(target_endian = "little")]
-            let bytes = val.ne_bytes();
-            #[cfg(target_endian = "big")]
             let bytes = val.le_bytes();
             let bytes = bytes.as_slice();
             let mut n = bytes.len();
@@ -564,17 +523,11 @@ impl VarintEncodingScheme for Lencode {
 
         // Fallback: write through trait
         if (val >> 7) == I::ZERO {
-            #[cfg(target_endian = "little")]
-            let byte = val.ne_bytes()[0];
-            #[cfg(target_endian = "big")]
             let byte = val.le_bytes()[0];
             writer.write(core::slice::from_ref(&byte))?;
             return Ok(1);
         }
 
-        #[cfg(target_endian = "little")]
-        let bytes = val.ne_bytes();
-        #[cfg(target_endian = "big")]
         let bytes = val.le_bytes();
         let bytes = bytes.as_slice();
         let mut n = bytes.len();
@@ -609,16 +562,13 @@ impl VarintEncodingScheme for Lencode {
             let first = unsafe { *slice.get_unchecked(0) };
             if first & 0x80 == 0 {
                 reader.advance(1);
-                // Build value from the single byte
-                let mut val = I::ZERO;
-                let val_bytes = unsafe {
-                    core::slice::from_raw_parts_mut(
-                        &mut val as *mut I as *mut u8,
-                        core::mem::size_of::<I>(),
-                    )
-                };
-                unsafe { *val_bytes.get_unchecked_mut(0) = first };
-                return Ok(val);
+                // Build value from the single byte in LE layout
+                let mut le = I::ZERO.le_bytes();
+                le[0] = first;
+                // Convert LE bytes → native by reversing on BE (no-op on LE via dead code elim)
+                #[cfg(target_endian = "big")]
+                let le = endian_cast::reverse(le);
+                return Ok(unsafe { core::ptr::read_unaligned(le.as_ptr() as *const I) });
             }
             let n = (first & 0x7F) as usize;
             if 1 + n > slice.len() {
@@ -639,33 +589,17 @@ impl VarintEncodingScheme for Lencode {
             }
             #[cfg(target_endian = "big")]
             {
-                let mut buf = [0u8; 32];
+                let mut le = I::ZERO.le_bytes();
                 unsafe {
-                    core::ptr::copy_nonoverlapping(slice.as_ptr().add(1), buf.as_mut_ptr(), n);
+                    core::ptr::copy_nonoverlapping(
+                        slice.as_ptr().add(1),
+                        le.as_mut_slice().as_mut_ptr(),
+                        n,
+                    );
                 }
                 reader.advance(1 + n);
-                let mut val = I::ZERO;
-                let mut base = I::ONE;
-                for i in 0..n {
-                    let byte = buf[i];
-                    if byte != 0 {
-                        let mut part = I::ZERO;
-                        let mut factor = base;
-                        let mut c = byte;
-                        while c != 0 {
-                            if (c & 1) != 0 {
-                                part += factor;
-                            }
-                            factor = factor << 1;
-                            c >>= 1;
-                        }
-                        val += part;
-                    }
-                    if i + 1 < n {
-                        base = base << 8;
-                    }
-                }
-                return Ok(val);
+                let ne = endian_cast::reverse(le);
+                return Ok(unsafe { core::ptr::read_unaligned(ne.as_ptr() as *const I) });
             }
         }
 
@@ -693,38 +627,15 @@ impl VarintEncodingScheme for Lencode {
         {
             let mut first = 0u8;
             reader.read(core::slice::from_mut(&mut first))?;
-            let mut buf = [0u8; 32];
-            let n: usize;
+            let mut le = I::ZERO.le_bytes();
             if first & 0x80 == 0 {
-                buf[0] = first & 0x7F;
-                n = 1;
+                le[0] = first;
             } else {
-                n = (first & 0x7F) as usize;
-                reader.read(&mut buf[..n])?;
+                let n = (first & 0x7F) as usize;
+                reader.read(&mut le.as_mut_slice()[..n])?;
             }
-
-            let mut val = I::ZERO;
-            let mut base = I::ONE;
-            for i in 0..n {
-                let byte = buf[i];
-                if byte != 0 {
-                    let mut part = I::ZERO;
-                    let mut factor = base;
-                    let mut c = byte;
-                    while c != 0 {
-                        if (c & 1) != 0 {
-                            part += factor;
-                        }
-                        factor = factor << 1;
-                        c >>= 1;
-                    }
-                    val += part;
-                }
-                if i + 1 < n {
-                    base = base << 8;
-                }
-            }
-            return Ok(val);
+            let ne = endian_cast::reverse(le);
+            return Ok(unsafe { core::ptr::read_unaligned(ne.as_ptr() as *const I) });
         }
     }
 
