@@ -9,9 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::hint::black_box;
 use std::io::Cursor;
 use wincode::SchemaReadOwned;
-use wincode::io::{ReadError as WincodeReadError, ReadResult as WincodeReadResult};
-use wincode::io::{Reader as WincodeReader, WriteError as WincodeWriteError};
-use wincode::io::{WriteResult as WincodeWriteResult, Writer as WincodeWriter};
+use wincode::io::Cursor as WincodeCursor;
 use wincode::{SchemaRead, SchemaWrite};
 
 #[derive(
@@ -123,111 +121,6 @@ fn make_medium(
     }
 }
 
-struct WincodeStdCursorWriter<'a> {
-    cursor: &'a mut Cursor<Vec<u8>>,
-}
-
-impl<'a> WincodeWriter for WincodeStdCursorWriter<'a> {
-    type Trusted<'b>
-        = WincodeStdCursorWriter<'b>
-    where
-        Self: 'b;
-
-    #[inline(always)]
-    fn write(&mut self, src: &[u8]) -> WincodeWriteResult<()> {
-        use std::io::Write as _;
-        self.cursor
-            .write_all(src)
-            .map_err(WincodeWriteError::from)?;
-        Ok(())
-    }
-
-    #[inline(always)]
-    unsafe fn as_trusted_for(&mut self, n_bytes: usize) -> WincodeWriteResult<Self::Trusted<'_>> {
-        self.cursor.get_mut().reserve(n_bytes);
-        Ok(WincodeStdCursorWriter {
-            cursor: &mut *self.cursor,
-        })
-    }
-}
-
-struct WincodeStdCursorReader<'a> {
-    cursor: Cursor<&'a [u8]>,
-}
-
-impl<'a> WincodeStdCursorReader<'a> {
-    #[inline(always)]
-    const fn new(bytes: &'a [u8]) -> Self {
-        Self {
-            cursor: Cursor::new(bytes),
-        }
-    }
-}
-
-impl<'a> WincodeReader<'a> for WincodeStdCursorReader<'a> {
-    type Trusted<'b>
-        = WincodeStdCursorReader<'a>
-    where
-        Self: 'b;
-
-    #[inline(always)]
-    fn fill_buf(&mut self, n_bytes: usize) -> WincodeReadResult<&[u8]> {
-        let pos = self.cursor.position() as usize;
-        let slice = self.cursor.get_ref();
-        let end = (pos + n_bytes).min(slice.len());
-        Ok(&slice[pos..end])
-    }
-
-    #[inline(always)]
-    fn borrow_exact(&mut self, len: usize) -> WincodeReadResult<&'a [u8]> {
-        let pos = self.cursor.position() as usize;
-        let slice = *self.cursor.get_ref();
-        let end = pos + len;
-        if end > slice.len() {
-            return Err(WincodeReadError::ReadSizeLimit(len));
-        }
-        self.cursor.set_position(end as u64);
-        Ok(&slice[pos..end])
-    }
-
-    #[inline(always)]
-    fn borrow_exact_mut(&mut self, _len: usize) -> WincodeReadResult<&'a mut [u8]> {
-        Err(WincodeReadError::UnsupportedZeroCopy)
-    }
-
-    #[inline(always)]
-    unsafe fn consume_unchecked(&mut self, amt: usize) {
-        let pos = self.cursor.position() as usize;
-        self.cursor.set_position((pos + amt) as u64);
-    }
-
-    #[inline(always)]
-    fn consume(&mut self, amt: usize) -> WincodeReadResult<()> {
-        let pos = self.cursor.position() as usize;
-        let slice = self.cursor.get_ref();
-        let end = pos + amt;
-        if end > slice.len() {
-            return Err(WincodeReadError::ReadSizeLimit(amt));
-        }
-        self.cursor.set_position(end as u64);
-        Ok(())
-    }
-
-    #[inline(always)]
-    unsafe fn as_trusted_for(&mut self, n_bytes: usize) -> WincodeReadResult<Self::Trusted<'_>> {
-        let pos = self.cursor.position() as usize;
-        let slice = *self.cursor.get_ref();
-        let end = pos + n_bytes;
-        if end > slice.len() {
-            return Err(WincodeReadError::ReadSizeLimit(n_bytes));
-        }
-        self.cursor.set_position(end as u64);
-        Ok(WincodeStdCursorReader {
-            cursor: Cursor::new(&slice[pos..end]),
-        })
-    }
-}
-
 #[inline(always)]
 fn encode_lencode_into<T: Encode>(value: &T, writer: &mut lencode::io::VecWriter) {
     value.encode_ext(writer, None).unwrap();
@@ -283,16 +176,13 @@ fn decode_borsh<T: BorshDeserialize>(bytes: &[u8]) -> T {
 }
 
 #[inline(always)]
-fn encode_wincode_into<T: SchemaWrite<Src = T>>(value: &T, cursor: &mut Cursor<Vec<u8>>) {
-    let mut writer = WincodeStdCursorWriter { cursor };
-    wincode::serialize_into(&mut writer, value).unwrap();
+fn encode_wincode_into<T: SchemaWrite<Src = T>>(value: &T, writer: &mut impl wincode::io::Writer) {
+    wincode::serialize_into(writer, value).unwrap();
 }
 
 #[inline(always)]
 fn encode_wincode<T: SchemaWrite<Src = T>>(value: &T) -> Vec<u8> {
-    let mut cursor = Cursor::new(Vec::new());
-    encode_wincode_into(value, &mut cursor);
-    cursor.into_inner()
+    wincode::serialize(value).unwrap()
 }
 
 #[inline(always)]
@@ -300,8 +190,7 @@ fn decode_wincode<T>(bytes: &[u8]) -> T
 where
     T: SchemaReadOwned<Dst = T>,
 {
-    let mut cursor = WincodeStdCursorReader::new(bytes);
-    wincode::deserialize_from(&mut cursor).unwrap()
+    wincode::deserialize(bytes).unwrap()
 }
 
 fn bench_codec<T>(c: &mut Criterion, name: &str, value: &T)
@@ -339,7 +228,7 @@ where
     });
     group.bench_function("wincode", |b| {
         b.iter_batched(
-            || Cursor::new(Vec::new()),
+            || WincodeCursor::new(Vec::new()),
             |mut cursor| {
                 encode_wincode_into(value, &mut cursor);
                 black_box(cursor.into_inner());
