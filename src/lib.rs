@@ -95,8 +95,12 @@
 //!     fn pack(&self, w: &mut impl Write) -> Result<usize> { self.0.pack(w) }
 //!     fn unpack(r: &mut impl Read) -> Result<Self> { Ok(Self(u32::unpack(r)?)) }
 //! }
-//! impl DedupeEncodeable for MyId {}
-//! impl DedupeDecodeable for MyId {}
+//! impl DedupeEncodeable for MyId {
+//!     type Hasher = DefaultDedupeHasher;
+//! }
+//! impl DedupeDecodeable for MyId {
+//!     type Hasher = DefaultDedupeHasher;
+//! }
 //!
 //! // Prepare some data with many repeats
 //! let vals = vec![MyId(42), MyId(7), MyId(42), MyId(7), MyId(42), MyId(7), MyId(42)];

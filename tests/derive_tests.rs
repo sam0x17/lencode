@@ -120,8 +120,12 @@ struct SimplePoint {
 #[repr(transparent)]
 struct MyKey([u8; 32]);
 
-impl DedupeEncodeable for MyKey {}
-impl DedupeDecodeable for MyKey {}
+impl DedupeEncodeable for MyKey {
+    type Hasher = DefaultDedupeHasher;
+}
+impl DedupeDecodeable for MyKey {
+    type Hasher = DefaultDedupeHasher;
+}
 
 #[test]
 fn test_derive_pack_named_struct_roundtrip() {

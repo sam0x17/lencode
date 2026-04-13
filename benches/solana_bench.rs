@@ -39,8 +39,12 @@ impl From<Pubkey> for BenchPubkey {
     }
 }
 
-impl DedupeEncodeable for BenchPubkey {}
-impl DedupeDecodeable for BenchPubkey {}
+impl DedupeEncodeable for BenchPubkey {
+    type Hasher = DefaultDedupeHasher;
+}
+impl DedupeDecodeable for BenchPubkey {
+    type Hasher = DefaultDedupeHasher;
+}
 
 #[derive(
     Clone,

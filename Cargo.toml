@@ -26,13 +26,14 @@ solana-transaction-error = { version = "3", optional = true }
 solana-instruction = { version = "3", optional = true }
 solana-hash = { version = "3", optional = true }
 solana-signature = { version = "3", optional = true }
-solana-pubkey = { version = "3", optional = true }
+solana-pubkey = { version = "3", optional = true, features = ["rand"] }
 solana-clock = { version = "3", optional = true }
 solana-reward-info = { version = "3", optional = true }
 solana-account-decoder-client-types = { version = "3", optional = true }
 ruint = { version = "1", default-features = false}
 newt-hype = { version = "0", default-features = false }
 hashbrown = "0"
+ahash = { version = "0.8", default-features = false, features = ["compile-time-rng"] }
 smallbox = { version = "0.8", default-features = false }
 zstd-safe = { version = "7", default-features = false }
 
