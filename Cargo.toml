@@ -121,3 +121,7 @@ required-features = ["std"]
 name = "codec_bench"
 harness = false
 required-features = ["std", "comparison-bench"]
+
+[[bench]]
+name = "io_bench"
+harness = false
