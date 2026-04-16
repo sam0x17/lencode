@@ -787,11 +787,10 @@ impl Encode for &[u8] {
         // header = varint((payload_len << 1) | (is_compressed as usize))
         let raw_len = self.len();
         // Skip compression for small payloads where overhead outweighs savings
-        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(self) {
-            if let Some(n) = bytes::compress_and_write(self, writer)? {
+        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(self)
+            && let Some(n) = bytes::compress_and_write(self, writer)? {
                 return Ok(n);
             }
-        }
         bytes::write_flagged_raw(writer, self, 0)
     }
 }
@@ -807,11 +806,10 @@ impl Encode for &str {
         let bytes = self.as_bytes();
         let raw_len = bytes.len();
         // Skip compression for small payloads where overhead outweighs savings
-        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes) {
-            if let Some(n) = bytes::compress_and_write(bytes, writer)? {
+        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes)
+            && let Some(n) = bytes::compress_and_write(bytes, writer)? {
                 return Ok(n);
             }
-        }
         bytes::write_flagged_raw(writer, bytes, 0)
     }
 }
@@ -1215,11 +1213,10 @@ impl<T: Encode + 'static> Encode for Vec<T> {
 
             let raw_len = bytes.len();
             // Skip compression for small payloads where overhead outweighs savings
-            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes) {
-                if let Some(n) = bytes::compress_and_write(bytes, writer)? {
+            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes)
+                && let Some(n) = bytes::compress_and_write(bytes, writer)? {
                     return Ok(n);
                 }
-            }
             return bytes::write_flagged_raw(writer, bytes, 0);
         }
 
@@ -1329,11 +1326,10 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
             tmp.extend_from_slice(b_u8);
             let raw_len = tmp.len();
             // Skip compression for small payloads where overhead outweighs savings
-            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(&tmp) {
-                if let Some(n) = bytes::compress_and_write(&tmp, writer)? {
+            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(&tmp)
+                && let Some(n) = bytes::compress_and_write(&tmp, writer)? {
                     return Ok(n);
                 }
-            }
             return bytes::write_flagged_raw(writer, &tmp, 0);
         }
 

@@ -251,8 +251,8 @@ pub(crate) fn write_flagged_raw(
     };
     let total = hdr_len + raw_len;
     writer.reserve(total);
-    if let Some(dst) = writer.buf_mut() {
-        if dst.len() >= total {
+    if let Some(dst) = writer.buf_mut()
+        && dst.len() >= total {
             unsafe {
                 let p = dst.as_mut_ptr();
                 if header_val <= 0x7F {
@@ -268,7 +268,6 @@ pub(crate) fn write_flagged_raw(
             writer.advance_mut(total);
             return Ok(total);
         }
-    }
     // Fallback: write through trait
     let mut out = [0u8; 9];
     if header_val <= 0x7F {
