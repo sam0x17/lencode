@@ -125,3 +125,15 @@ required-features = ["std", "comparison-bench"]
 [[bench]]
 name = "io_bench"
 harness = false
+
+[[bench]]
+name = "dedupe_bench"
+harness = false
+
+[[bench]]
+name = "pack_bench"
+harness = false
+
+[[bench]]
+name = "heuristic_bench"
+harness = false
