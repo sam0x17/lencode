@@ -5,7 +5,7 @@
 //! the HashMap lookup / TypeId dispatch / SmallBox downcast chain.
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use lencode::dedupe::{DefaultDedupeHasher, DedupeDecodeable, DedupeEncoder, DedupeEncodeable};
+use lencode::dedupe::{DedupeDecodeable, DedupeEncodeable, DedupeEncoder, DefaultDedupeHasher};
 use lencode::io::{Cursor, VecWriter};
 use lencode::pack::Pack;
 use lencode::prelude::*;
@@ -29,12 +29,7 @@ fn make_keys(count: usize, seed: u64) -> Vec<Key32> {
     (0..count).map(|_| Key32(rng.random())).collect()
 }
 
-fn make_hotset_keys(
-    count: usize,
-    hotset: &[Key32],
-    hotset_pct: u8,
-    seed: u64,
-) -> Vec<Key32> {
+fn make_hotset_keys(count: usize, hotset: &[Key32], hotset_pct: u8, seed: u64) -> Vec<Key32> {
     use rand::rngs::StdRng;
     use rand::seq::SliceRandom;
     use rand::{RngExt, SeedableRng};
@@ -291,5 +286,10 @@ fn bench_pack_baseline(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_dedupe_encode, bench_dedupe_decode, bench_pack_baseline);
+criterion_group!(
+    benches,
+    bench_dedupe_encode,
+    bench_dedupe_decode,
+    bench_pack_baseline
+);
 criterion_main!(benches);

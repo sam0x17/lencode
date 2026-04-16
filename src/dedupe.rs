@@ -93,8 +93,10 @@ impl<T: DedupeDecodeable> Decode for T {
 
 /// Stateful encoder that replaces repeated values with compact IDs.
 pub struct DedupeEncoder {
-    // Store type-specific hashmaps: TypeId -> HashMap<T, usize>
-    type_stores: HashMap<TypeId, SmallBox<dyn Any + Send + Sync, S8>>,
+    // Per-type hashmaps stored as a small Vec for linear-search lookup by TypeId.
+    // Typical workloads use 1–4 types, where a linear scan over a Vec is
+    // significantly faster than hashing a TypeId through a HashMap.
+    type_stores: Vec<(TypeId, SmallBox<dyn Any + Send + Sync, S8>)>,
     // Next ID to assign (starts at 1)
     next_id: usize,
     initial_capacity: usize,
@@ -112,7 +114,7 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            type_stores: HashMap::with_capacity(DEFAULT_NUM_TYPES),
+            type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
             next_id: 1, // Start at 1 to match decoder
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
         }
@@ -125,7 +127,7 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn with_capacity(initial_capacity: usize, num_types: usize) -> Self {
         Self {
-            type_stores: HashMap::with_capacity(num_types),
+            type_stores: Vec::with_capacity(num_types),
             next_id: 1,
             initial_capacity,
         }
@@ -159,13 +161,14 @@ impl DedupeEncoder {
     /// Returns an iterator over the [`TypeId`]s of all stored types.
     #[inline(always)]
     pub fn type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.type_stores.keys().copied()
+        self.type_stores.iter().map(|(id, _)| *id)
     }
 
     /// Returns `true` if any entries exist for type `T`.
     #[inline]
     pub fn contains_type<T: 'static>(&self) -> bool {
-        self.type_stores.contains_key(&TypeId::of::<T>())
+        let type_id = TypeId::of::<T>();
+        self.type_stores.iter().any(|(id, _)| *id == type_id)
     }
 
     /// Returns the number of unique values stored for type `T`.
@@ -179,12 +182,11 @@ impl DedupeEncoder {
         S: BuildHasher + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
-        match self.type_stores.get(&type_id) {
-            Some(store) => store
-                .downcast_ref::<HashMap<T, usize, S>>()
-                .map_or(0, |m| m.len()),
-            None => 0,
-        }
+        self.type_stores
+            .iter()
+            .find(|(id, _)| *id == type_id)
+            .and_then(|(_, store)| store.downcast_ref::<HashMap<T, usize, S>>())
+            .map_or(0, |m| m.len())
     }
 
     /// Returns an iterator over the unique values stored for type `T`.
@@ -199,8 +201,9 @@ impl DedupeEncoder {
     {
         let type_id = TypeId::of::<T>();
         self.type_stores
-            .get(&type_id)
-            .and_then(|store| store.downcast_ref::<HashMap<T, usize, S>>())
+            .iter()
+            .find(|(id, _)| *id == type_id)
+            .and_then(|(_, store)| store.downcast_ref::<HashMap<T, usize, S>>())
             .into_iter()
             .flat_map(|m| m.keys())
     }
@@ -213,26 +216,22 @@ impl DedupeEncoder {
     #[inline]
     pub fn clear_type<T: Hash + Eq + Send + Sync + 'static>(&mut self) {
         let type_id = TypeId::of::<T>();
-        self.type_stores.remove(&type_id);
+        if let Some(pos) = self.type_stores.iter().position(|(id, _)| *id == type_id) {
+            self.type_stores.swap_remove(pos);
+        }
     }
 
     /// Returns an estimate of the heap memory (in bytes) used by the encoder's
     /// internal tables.
     ///
-    /// This is a rough lower bound: it accounts for the hashmap overhead and
+    /// This is a rough lower bound: it accounts for the vec overhead and
     /// stored key/value sizes but not allocator metadata.
     #[inline]
     pub fn memory_usage(&self) -> usize {
         use core::mem::size_of;
-        // Outer HashMap overhead
         let mut total = self.type_stores.capacity()
             * (size_of::<TypeId>() + size_of::<SmallBox<dyn Any + Send + Sync, S8>>());
 
-        // We can't inspect the typed hashmaps generically, but we know the
-        // total entry count from next_id, plus the HashMap overhead per store.
-        // Each entry is at least (key_size + sizeof(usize)) in the inner map.
-        // Since we can't know key_size generically, report a conservative
-        // per-entry overhead of size_of::<usize>() * 3 (hash + key-ptr + value).
         let entry_count = self.len();
         total += entry_count * size_of::<usize>() * 3;
 
@@ -263,18 +262,29 @@ impl DedupeEncoder {
     {
         let type_id = TypeId::of::<T>();
 
-        // Get or create the type-specific store for this type
-        let store = self.type_stores.entry(type_id).or_insert_with(|| {
-            smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
-                self.initial_capacity,
-                S::default(),
-            ))
-        });
+        // Linear scan for the type-specific store. For the typical 1–4 types
+        // this is faster than hashing a TypeId through a HashMap.
+        let store = match self.type_stores.iter_mut().find(|(id, _)| *id == type_id) {
+            Some((_, store)) => store,
+            None => {
+                self.type_stores.push((
+                    type_id,
+                    smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
+                        self.initial_capacity,
+                        S::default(),
+                    )),
+                ));
+                &mut self.type_stores.last_mut().unwrap().1
+            }
+        };
 
-        // Downcast to the concrete type
-        let typed_store = store
-            .downcast_mut::<HashMap<T, usize, S>>()
-            .expect("Type mismatch in type store");
+        // SAFETY: we just matched `type_id == TypeId::of::<T>()` in the linear
+        // scan, and this slot was originally inserted with a
+        // `HashMap::<T, usize, S>`. Skipping `downcast_mut` avoids a redundant
+        // vtable call to `type_id()`.
+        let typed_store: &mut HashMap<T, usize, S> = unsafe {
+            &mut *(&mut **store as *mut (dyn Any + Send + Sync) as *mut HashMap<T, usize, S>)
+        };
 
         // Check if we've already seen this value
         if let Some(&existing_id) = typed_store.get(val) {

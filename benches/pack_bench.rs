@@ -5,7 +5,7 @@
 //! Encode/Decode/Dedupe layers above it.
 
 use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use lencode::dedupe::{DefaultDedupeHasher, DedupeDecodeable, DedupeEncodeable};
+use lencode::dedupe::{DedupeDecodeable, DedupeEncodeable, DefaultDedupeHasher};
 use lencode::io::{Cursor, VecWriter};
 use lencode::pack::Pack;
 use lencode::prelude::*;
@@ -261,5 +261,10 @@ fn bench_encode_vs_pack(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_pack_single, bench_pack_bulk, bench_encode_vs_pack);
+criterion_group!(
+    benches,
+    bench_pack_single,
+    bench_pack_bulk,
+    bench_encode_vs_pack
+);
 criterion_main!(benches);

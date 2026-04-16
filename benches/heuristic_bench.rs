@@ -27,17 +27,13 @@ fn bench_heuristic_overhead(c: &mut Criterion) {
     for &len in &[32usize, 63, 64, 65, 128, 256, 512, 1024] {
         let data: Vec<u8> = (0..len).map(|_| rng.random()).collect();
 
-        group.bench_with_input(
-            BenchmarkId::new("random_encode", len),
-            &data,
-            |b, data| {
-                b.iter(|| {
-                    let mut writer = VecWriter::with_capacity(len + 16);
-                    data.encode_ext(&mut writer, None).unwrap();
-                    black_box(writer);
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("random_encode", len), &data, |b, data| {
+            b.iter(|| {
+                let mut writer = VecWriter::with_capacity(len + 16);
+                data.encode_ext(&mut writer, None).unwrap();
+                black_box(writer);
+            })
+        });
     }
 
     // Compressible payloads: all zeros. These pass the heuristic (not
@@ -46,17 +42,13 @@ fn bench_heuristic_overhead(c: &mut Criterion) {
     for &len in &[64usize, 128, 256, 512, 1024] {
         let data: Vec<u8> = vec![0u8; len];
 
-        group.bench_with_input(
-            BenchmarkId::new("zeros_encode", len),
-            &data,
-            |b, data| {
-                b.iter(|| {
-                    let mut writer = VecWriter::with_capacity(len + 16);
-                    data.encode_ext(&mut writer, None).unwrap();
-                    black_box(writer);
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("zeros_encode", len), &data, |b, data| {
+            b.iter(|| {
+                let mut writer = VecWriter::with_capacity(len + 16);
+                data.encode_ext(&mut writer, None).unwrap();
+                black_box(writer);
+            })
+        });
     }
 
     // Decode side: random raw payloads (no compression). Measures the

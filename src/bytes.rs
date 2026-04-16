@@ -159,11 +159,15 @@ pub fn zstd_compress(input: &[u8]) -> Result<Vec<u8>> {
     }
     #[cfg(feature = "std")]
     let written = ZSTD_STATE
-        .with(|cell| cell.borrow_mut().cctx.compress(&mut out[..], input, ZSTD_LEVEL))
+        .with(|cell| {
+            cell.borrow_mut()
+                .cctx
+                .compress(&mut out[..], input, ZSTD_LEVEL)
+        })
         .map_err(|_| Error::InvalidData)?;
     #[cfg(not(feature = "std"))]
-    let written = zstd_safe::compress(&mut out[..], input, ZSTD_LEVEL)
-        .map_err(|_| Error::InvalidData)?;
+    let written =
+        zstd_safe::compress(&mut out[..], input, ZSTD_LEVEL).map_err(|_| Error::InvalidData)?;
     out.truncate(written);
     Ok(out)
 }
@@ -188,8 +192,8 @@ pub fn zstd_decompress(compressed: &[u8], original_len: usize) -> Result<Vec<u8>
         .with(|cell| cell.borrow_mut().dctx.decompress(&mut out[..], compressed))
         .map_err(|_| Error::InvalidData)?;
     #[cfg(not(feature = "std"))]
-    let written = zstd_safe::decompress(&mut out[..], compressed)
-        .map_err(|_| Error::InvalidData)?;
+    let written =
+        zstd_safe::decompress(&mut out[..], compressed).map_err(|_| Error::InvalidData)?;
     if written != original_len {
         return Err(Error::IncorrectLength);
     }
@@ -304,8 +308,8 @@ mod tests {
         // mirroring the no_std fallback.
         let bound = zstd_safe::compress_bound(payload.len());
         let mut tmp = vec![0u8; bound];
-        let written = zstd_safe::compress(&mut tmp[..], &payload, ZSTD_LEVEL)
-            .expect("zstd_safe::compress");
+        let written =
+            zstd_safe::compress(&mut tmp[..], &payload, ZSTD_LEVEL).expect("zstd_safe::compress");
         tmp.truncate(written);
         let mut writer_b = VecWriter::new();
         write_flagged_raw(&mut writer_b, &tmp, 1).unwrap();

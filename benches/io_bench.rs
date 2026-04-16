@@ -299,5 +299,10 @@ fn bench_vec_writer(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_cursor_read, bench_cursor_write, bench_vec_writer);
+criterion_group!(
+    benches,
+    bench_cursor_read,
+    bench_cursor_write,
+    bench_vec_writer
+);
 criterion_main!(benches);
