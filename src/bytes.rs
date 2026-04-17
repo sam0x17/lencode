@@ -125,11 +125,14 @@ pub(crate) fn compress_and_write(
     }
     #[cfg(not(feature = "std"))]
     {
-        let mut scratch: Vec<u8> = Vec::with_capacity(bound);
-        // SAFETY: capacity is `bound`; same justification as the std branch.
-        unsafe {
-            scratch.set_len(bound);
-        }
+        // SAFETY: same as `zstd_compress` — zstd writes into the buffer and we
+        // only slice up to the reported `comp_len`.
+        #[allow(clippy::uninit_vec)]
+        let mut scratch: Vec<u8> = unsafe {
+            let mut v = Vec::with_capacity(bound);
+            v.set_len(bound);
+            v
+        };
         let comp_len = zstd_safe::compress(&mut scratch[..], input, ZSTD_LEVEL)
             .map_err(|_| Error::InvalidData)?;
         let comp_hdr_len = flagged_header_len(comp_len, true);
@@ -151,12 +154,16 @@ pub(crate) fn compress_and_write(
 #[inline(never)]
 pub fn zstd_compress(input: &[u8]) -> Result<Vec<u8>> {
     let bound = zstd_safe::compress_bound(input.len());
-    let mut out: Vec<u8> = Vec::with_capacity(bound);
-    // SAFETY: capacity is `bound`; zstd writes up to `written` bytes which we
-    // truncate to before exposing the buffer.
-    unsafe {
-        out.set_len(bound);
-    }
+    // SAFETY: `out` is immediately passed to `zstd_safe::compress` which writes
+    // into `out[..written]`. We `truncate(written)` before returning, so callers
+    // never observe the uninitialized tail. Skipping zero-init saves a memset
+    // that zstd would overwrite anyway.
+    #[allow(clippy::uninit_vec)]
+    let mut out: Vec<u8> = unsafe {
+        let mut v = Vec::with_capacity(bound);
+        v.set_len(bound);
+        v
+    };
     #[cfg(feature = "std")]
     let written = ZSTD_STATE
         .with(|cell| {
@@ -181,12 +188,16 @@ pub fn zstd_compress(input: &[u8]) -> Result<Vec<u8>> {
 /// that inner loop's code footprint.
 #[inline(never)]
 pub fn zstd_decompress(compressed: &[u8], original_len: usize) -> Result<Vec<u8>> {
-    let mut out: Vec<u8> = Vec::with_capacity(original_len);
-    // SAFETY: capacity is `original_len`; we only return `out` after verifying
-    // exactly `original_len` bytes were written.
-    unsafe {
-        out.set_len(original_len);
-    }
+    // SAFETY: `out` is immediately passed to `zstd_safe::decompress` which writes
+    // exactly `original_len` bytes (verified below). We never return `out` without
+    // confirming `written == original_len`. Skipping zero-init saves a memset
+    // that zstd would overwrite anyway.
+    #[allow(clippy::uninit_vec)]
+    let mut out: Vec<u8> = unsafe {
+        let mut v = Vec::with_capacity(original_len);
+        v.set_len(original_len);
+        v
+    };
     #[cfg(feature = "std")]
     let written = ZSTD_STATE
         .with(|cell| cell.borrow_mut().dctx.decompress(&mut out[..], compressed))
@@ -252,22 +263,23 @@ pub(crate) fn write_flagged_raw(
     let total = hdr_len + raw_len;
     writer.reserve(total);
     if let Some(dst) = writer.buf_mut()
-        && dst.len() >= total {
-            unsafe {
-                let p = dst.as_mut_ptr();
-                if header_val <= 0x7F {
-                    *p = header_val as u8;
-                    core::ptr::copy_nonoverlapping(bytes.as_ptr(), p.add(1), raw_len);
-                } else {
-                    let n = hdr_len - 1;
-                    *p = 0x80 | (n as u8);
-                    (p.add(1) as *mut u64).write_unaligned(header_val.to_le());
-                    core::ptr::copy_nonoverlapping(bytes.as_ptr(), p.add(hdr_len), raw_len);
-                }
+        && dst.len() >= total
+    {
+        unsafe {
+            let p = dst.as_mut_ptr();
+            if header_val <= 0x7F {
+                *p = header_val as u8;
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), p.add(1), raw_len);
+            } else {
+                let n = hdr_len - 1;
+                *p = 0x80 | (n as u8);
+                (p.add(1) as *mut u64).write_unaligned(header_val.to_le());
+                core::ptr::copy_nonoverlapping(bytes.as_ptr(), p.add(hdr_len), raw_len);
             }
-            writer.advance_mut(total);
-            return Ok(total);
         }
+        writer.advance_mut(total);
+        return Ok(total);
+    }
     // Fallback: write through trait
     let mut out = [0u8; 9];
     if header_val <= 0x7F {

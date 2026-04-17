@@ -4,7 +4,7 @@
 //! separately from the underlying Pack encoding, so we can attribute time to
 //! the HashMap lookup / TypeId dispatch / SmallBox downcast chain.
 
-use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use lencode::dedupe::{DedupeDecodeable, DedupeEncodeable, DedupeEncoder, DefaultDedupeHasher};
 use lencode::io::{Cursor, VecWriter};
 use lencode::pack::Pack;
