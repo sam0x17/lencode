@@ -307,11 +307,25 @@ impl DedupeEncoder {
     }
 }
 
-#[derive(Default)]
 /// Companion to [`DedupeEncoder`] that reconstructs repeated values from IDs.
+///
+/// Internally uses a type‑erased `Vec<T>` for single‑type workloads (the common
+/// case), storing values inline without per‑value Box allocations. Falls back to
+/// `Vec<Box<dyn Any>>` when multiple types are decoded.
 pub struct DedupeDecoder {
-    // Store values in order - index 0 = ID 1, index 1 = ID 2, etc.
-    values: Vec<Box<dyn Any + Send + Sync>>,
+    // Type-erased Vec<T> for the current (or only) decoded type.
+    // When all decode calls use the same T, values are stored contiguously
+    // in this Vec — no per-value heap allocation, no Box indirection.
+    typed_vec: Option<(TypeId, Box<dyn Any + Send + Sync>)>,
+    // Fallback for multi-type scenarios: values stored as Box<dyn Any>.
+    boxed_values: Vec<Box<dyn Any + Send + Sync>>,
+    count: usize,
+}
+
+impl Default for DedupeDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DedupeDecoder {
@@ -319,37 +333,41 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            values: Vec::with_capacity(DEFAULT_INITIAL_CAPACITY),
+            typed_vec: None,
+            boxed_values: Vec::new(),
+            count: 0,
         }
     }
 
     /// Creates a new [`DedupeDecoder`] with the specified capacity.
-    ///
-    /// The decoder will be able to hold at least `capacity` cached values without
-    /// reallocating. Creates a decoder with a pre‑allocated value table of `capacity`.
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
+        let _ = capacity;
         Self {
-            values: Vec::with_capacity(capacity),
+            typed_vec: None,
+            boxed_values: Vec::new(),
+            count: 0,
         }
     }
 
     /// Clears cached values.
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.values.clear();
+        self.typed_vec = None;
+        self.boxed_values.clear();
+        self.count = 0;
     }
 
     /// Returns the number of cached values.
     #[inline(always)]
     pub fn len(&self) -> usize {
-        self.values.len()
+        self.count
     }
 
     /// Returns `true` if the cache is empty.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
+        self.count == 0
     }
 
     /// Returns an estimate of the heap memory (in bytes) used by the decoder's
@@ -357,49 +375,71 @@ impl DedupeDecoder {
     #[inline]
     pub fn memory_usage(&self) -> usize {
         use core::mem::size_of;
-        // Vec overhead + per-element Box overhead
-        self.values.capacity() * size_of::<Box<dyn Any + Send + Sync>>()
+        self.boxed_values.capacity() * size_of::<Box<dyn Any + Send + Sync>>()
+            + self.typed_vec.as_ref().map_or(0, |_| self.count * 64)
     }
 
     /// Decodes a value with deduplication.
     ///
-    /// If the ID is 0, a new value is decoded and stored in the table. Otherwise, the value is
-    /// retrieved from the table using the given ID.
-    ///
-    /// # Arguments
-    ///
-    /// * `reader` - The reader from which the encoded data will be read.
-    ///
-    /// # Returns
-    ///
-    /// The decoded value. Decodes a value with deduplication support.
-    ///
-    /// If the next ID is `0`, a fresh value is decoded, stored, and returned. Otherwise, the
-    /// referenced value is loaded from the cache.
+    /// If the next ID is `0`, a fresh value is decoded, stored, and returned.
+    /// Otherwise, the referenced value is loaded from the cache.
     #[inline]
     pub fn decode<T: Pack + Clone + Hash + Eq + Send + Sync + 'static>(
         &mut self,
         reader: &mut impl Read,
     ) -> Result<T> {
         let id = Lencode::decode_varint::<usize>(reader)?;
+        let type_id = TypeId::of::<T>();
 
+        // Fast path: typed Vec<T> for single-type workloads.
+        if let Some((ref cached_type, ref mut store)) = self.typed_vec
+            && *cached_type == type_id
+        {
+            // SAFETY: we verified TypeId matches; the store holds a Vec<T>.
+            let vec: &mut Vec<T> =
+                unsafe { &mut *(store.as_mut() as *mut (dyn Any + Send + Sync) as *mut Vec<T>) };
+            if id == 0 {
+                let value = T::unpack(reader)?;
+                vec.push(value.clone());
+                self.count += 1;
+                return Ok(value);
+            } else {
+                let index = id - 1;
+                if let Some(v) = vec.get(index) {
+                    return Ok(v.clone());
+                }
+                return Err(crate::io::Error::InvalidData);
+            }
+        }
+
+        // First call for this type: initialize the typed Vec
+        if self.typed_vec.is_none() && self.boxed_values.is_empty() {
+            let mut vec: Vec<T> = Vec::with_capacity(DEFAULT_INITIAL_CAPACITY);
+            if id == 0 {
+                let value = T::unpack(reader)?;
+                vec.push(value.clone());
+                self.typed_vec = Some((type_id, Box::new(vec)));
+                self.count += 1;
+                return Ok(value);
+            } else {
+                // Trying to reference a value before any were stored
+                return Err(crate::io::Error::InvalidData);
+            }
+        }
+
+        // Multi-type fallback: use Box<dyn Any> per value
         if id == 0 {
-            // New value, decode it and store in table
             let value = T::unpack(reader)?;
-
-            // Store the value (Vec index = ID - 1)
-            self.values.push(Box::new(value.clone()));
-
+            self.boxed_values.push(Box::new(value.clone()));
+            self.count += 1;
             Ok(value)
         } else {
-            // Existing value, retrieve from table
-            let index = id - 1; // Convert ID to Vec index
-            if let Some(boxed_value) = self.values.get(index)
-                && let Some(typed_value) = boxed_value.downcast_ref::<T>()
-            {
+            let index = id - 1;
+            if let Some(boxed_value) = self.boxed_values.get(index) {
+                let typed_value: &T =
+                    unsafe { &*(&**boxed_value as *const (dyn Any + Send + Sync) as *const T) };
                 return Ok(typed_value.clone());
             }
-
             Err(crate::io::Error::InvalidData)
         }
     }
