@@ -208,8 +208,30 @@ macro_rules! impl_pack_for_endianness_types {
                     writer.write(&endian_cast::Endianness::le_bytes(self))
                 }
 
+                #[inline]
                 fn unpack(reader: &mut impl $crate::io::Read) -> $crate::Result<Self> {
                     let size = core::mem::size_of::<Self>();
+                    // Zero-copy fast path: read directly from the reader's buffer.
+                    if let Some(buf) = reader.buf() {
+                        if buf.len() >= size {
+                            let mut ret = core::mem::MaybeUninit::<Self>::uninit();
+                            let dst = ret.as_mut_ptr() as *mut u8;
+                            #[cfg(target_endian = "little")]
+                            unsafe {
+                                core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, size);
+                            }
+                            #[cfg(target_endian = "big")]
+                            unsafe {
+                                for i in 0..size {
+                                    *dst.add(i) = buf[size - 1 - i];
+                                }
+                            }
+                            reader.advance(size);
+                            return Ok(unsafe { ret.assume_init() });
+                        }
+                        return Err($crate::io::Error::ReaderOutOfData);
+                    }
+                    // Fallback: copy through a stack buffer.
                     let mut tmp = [0u8; core::mem::size_of::<Self>()];
                     let bytes_read = reader.read(&mut tmp[..])?;
                     if bytes_read != size {
