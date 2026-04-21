@@ -18,7 +18,8 @@ macro_rules! bench_type {
                     b.iter_batched(
                         || Cursor::new([0u8; 32]),
                         |mut cursor| {
-                            black_box(value.encode(&mut cursor).unwrap());
+                            value.encode(&mut cursor).unwrap();
+                            black_box(cursor);
                         },
                         criterion::BatchSize::SmallInput,
                     )
@@ -29,6 +30,7 @@ macro_rules! bench_type {
                         |mut buf| {
                             let mut writer: &mut [u8] = &mut buf;
                             wincode::serialize_into(&mut writer, &value).unwrap();
+                            black_box(buf);
                         },
                         criterion::BatchSize::SmallInput,
                     )
@@ -52,7 +54,10 @@ macro_rules! bench_type {
                 group.bench_function("lencode", |b| {
                     b.iter_batched(
                         || Cursor::new(enc_buf),
-                        |mut cursor| {
+                        |cursor| {
+                            // Opaque the cursor so the compiler can't fold
+                            // through to the statically-known input buffer.
+                            let mut cursor = black_box(cursor);
                             black_box(<$ty>::decode(&mut cursor).unwrap());
                         },
                         criterion::BatchSize::SmallInput,
@@ -62,6 +67,9 @@ macro_rules! bench_type {
                     b.iter_batched(
                         || wincode_buf,
                         |buf| {
+                            // Opaque the input buffer so the compiler can't
+                            // fold the deserialize against the known value.
+                            let buf = black_box(buf);
                             let mut reader: &[u8] = &buf;
                             black_box(wincode::deserialize_from::<$ty>(&mut reader).unwrap());
                         },
@@ -93,7 +101,8 @@ fn bench_bool(c: &mut Criterion) {
         b.iter_batched(
             || Cursor::new([0u8; 1]),
             |mut cursor| {
-                black_box(value.encode(&mut cursor).unwrap());
+                value.encode(&mut cursor).unwrap();
+                black_box(cursor);
             },
             criterion::BatchSize::SmallInput,
         )
@@ -104,6 +113,7 @@ fn bench_bool(c: &mut Criterion) {
             |mut buf| {
                 let mut writer: &mut [u8] = &mut buf;
                 wincode::serialize_into(&mut writer, &value).unwrap();
+                black_box(buf);
             },
             criterion::BatchSize::SmallInput,
         )
@@ -125,7 +135,8 @@ fn bench_bool(c: &mut Criterion) {
     group.bench_function("lencode", |b| {
         b.iter_batched(
             || Cursor::new(enc_buf),
-            |mut cursor| {
+            |cursor| {
+                let mut cursor = black_box(cursor);
                 black_box(<bool>::decode(&mut cursor).unwrap());
             },
             criterion::BatchSize::SmallInput,
@@ -135,6 +146,7 @@ fn bench_bool(c: &mut Criterion) {
         b.iter_batched(
             || wincode_buf,
             |buf| {
+                let buf = black_box(buf);
                 let mut reader: &[u8] = &buf;
                 black_box(wincode::deserialize_from::<bool>(&mut reader).unwrap());
             },
@@ -155,7 +167,8 @@ fn bench_float(c: &mut Criterion) {
             b.iter_batched(
                 || Cursor::new([0u8; 4]),
                 |mut cursor| {
-                    black_box(value.encode(&mut cursor).unwrap());
+                    value.encode(&mut cursor).unwrap();
+                    black_box(cursor);
                 },
                 criterion::BatchSize::SmallInput,
             )
@@ -166,6 +179,7 @@ fn bench_float(c: &mut Criterion) {
                 |mut buf| {
                     let mut writer: &mut [u8] = &mut buf;
                     wincode::serialize_into(&mut writer, &value).unwrap();
+                    black_box(buf);
                 },
                 criterion::BatchSize::SmallInput,
             )
@@ -187,7 +201,8 @@ fn bench_float(c: &mut Criterion) {
         group.bench_function("lencode", |b| {
             b.iter_batched(
                 || Cursor::new(enc_buf),
-                |mut cursor| {
+                |cursor| {
+                    let mut cursor = black_box(cursor);
                     black_box(<f32>::decode(&mut cursor).unwrap());
                 },
                 criterion::BatchSize::SmallInput,
@@ -197,6 +212,7 @@ fn bench_float(c: &mut Criterion) {
             b.iter_batched(
                 || wincode_buf,
                 |buf| {
+                    let buf = black_box(buf);
                     let mut reader: &[u8] = &buf;
                     black_box(wincode::deserialize_from::<f32>(&mut reader).unwrap());
                 },
@@ -214,7 +230,8 @@ fn bench_float(c: &mut Criterion) {
             b.iter_batched(
                 || Cursor::new([0u8; 8]),
                 |mut cursor| {
-                    black_box(value.encode(&mut cursor).unwrap());
+                    value.encode(&mut cursor).unwrap();
+                    black_box(cursor);
                 },
                 criterion::BatchSize::SmallInput,
             )
@@ -225,6 +242,7 @@ fn bench_float(c: &mut Criterion) {
                 |mut buf| {
                     let mut writer: &mut [u8] = &mut buf;
                     wincode::serialize_into(&mut writer, &value).unwrap();
+                    black_box(buf);
                 },
                 criterion::BatchSize::SmallInput,
             )
@@ -246,7 +264,8 @@ fn bench_float(c: &mut Criterion) {
         group.bench_function("lencode", |b| {
             b.iter_batched(
                 || Cursor::new(enc_buf),
-                |mut cursor| {
+                |cursor| {
+                    let mut cursor = black_box(cursor);
                     black_box(<f64>::decode(&mut cursor).unwrap());
                 },
                 criterion::BatchSize::SmallInput,
@@ -256,6 +275,7 @@ fn bench_float(c: &mut Criterion) {
             b.iter_batched(
                 || wincode_buf,
                 |buf| {
+                    let buf = black_box(buf);
                     let mut reader: &[u8] = &buf;
                     black_box(wincode::deserialize_from::<f64>(&mut reader).unwrap());
                 },

@@ -47,8 +47,12 @@ impl Pack for pubkey3::Pubkey {
         Ok(Self::new_from_array(buf))
     }
 }
-impl DedupeEncodeable for pubkey3::Pubkey {}
-impl DedupeDecodeable for pubkey3::Pubkey {}
+impl DedupeEncodeable for pubkey3::Pubkey {
+    type Hasher = pubkey3::PubkeyHasherBuilder;
+}
+impl DedupeDecodeable for pubkey3::Pubkey {
+    type Hasher = pubkey3::PubkeyHasherBuilder;
+}
 
 impl Encode for hash3::Hash {
     #[inline(always)]

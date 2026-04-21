@@ -202,11 +202,16 @@ impl Write for VecWriter {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let len = self.0.len();
+        let cap = self.0.capacity();
         let add = buf.len();
-        if add == 0 {
-            return Ok(0);
+        // Grow using a doubling strategy with a 256-byte floor. Vec's default
+        // `reserve` starts from `MIN_NON_ZERO_CAP = 8` for u8 which causes
+        // one realloc per doubling step on early writes. A 256-byte floor
+        // matches `buf_mut`'s first-alloc size and keeps growth log(n) with
+        // a better constant for sequential-write workloads.
+        if cap - len < add {
+            self.0.reserve(cap.max(256).max(add));
         }
-        self.0.reserve(add);
         unsafe {
             let dst = self.0.as_mut_ptr().add(len);
             core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, add);
@@ -254,11 +259,11 @@ impl Write for alloc::vec::Vec<u8> {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let len = self.len();
+        let cap = self.capacity();
         let add = buf.len();
-        if add == 0 {
-            return Ok(0);
+        if cap - len < add {
+            self.reserve(cap.max(256).max(add));
         }
-        self.reserve(add);
         unsafe {
             let dst = self.as_mut_ptr().add(len);
             core::ptr::copy_nonoverlapping(buf.as_ptr(), dst, add);

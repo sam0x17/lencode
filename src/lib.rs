@@ -95,8 +95,12 @@
 //!     fn pack(&self, w: &mut impl Write) -> Result<usize> { self.0.pack(w) }
 //!     fn unpack(r: &mut impl Read) -> Result<Self> { Ok(Self(u32::unpack(r)?)) }
 //! }
-//! impl DedupeEncodeable for MyId {}
-//! impl DedupeDecodeable for MyId {}
+//! impl DedupeEncodeable for MyId {
+//!     type Hasher = DefaultDedupeHasher;
+//! }
+//! impl DedupeDecodeable for MyId {
+//!     type Hasher = DefaultDedupeHasher;
+//! }
 //!
 //! // Prepare some data with many repeats
 //! let vals = vec![MyId(42), MyId(7), MyId(42), MyId(7), MyId(42), MyId(7), MyId(42)];
@@ -783,22 +787,13 @@ impl Encode for &[u8] {
         // header = varint((payload_len << 1) | (is_compressed as usize))
         let raw_len = self.len();
         // Skip compression for small payloads where overhead outweighs savings
-        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(self) {
-            let compressed = bytes::zstd_compress(self)?;
-            let comp_len = compressed.len();
-            let raw_hdr = bytes::flagged_header_len(raw_len, false);
-            let comp_hdr = bytes::flagged_header_len(comp_len, true);
-            if comp_len + comp_hdr < raw_len + raw_hdr {
-                let mut total = 0;
-                total += Self::encode_len((comp_len << 1) | 1, writer)?;
-                total += writer.write(&compressed)?;
-                return Ok(total);
-            }
+        if raw_len >= bytes::MIN_COMPRESS_LEN
+            && !bytes::looks_incompressible(self)
+            && let Some(n) = bytes::compress_and_write(self, writer)?
+        {
+            return Ok(n);
         }
-        let mut total = 0;
-        total += Self::encode_len(raw_len << 1, writer)?;
-        total += writer.write(self)?;
-        Ok(total)
+        bytes::write_flagged_raw(writer, self, 0)
     }
 }
 
@@ -813,22 +808,13 @@ impl Encode for &str {
         let bytes = self.as_bytes();
         let raw_len = bytes.len();
         // Skip compression for small payloads where overhead outweighs savings
-        if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes) {
-            let compressed = bytes::zstd_compress(bytes)?;
-            let comp_len = compressed.len();
-            let raw_hdr = bytes::flagged_header_len(raw_len, false);
-            let comp_hdr = bytes::flagged_header_len(comp_len, true);
-            if comp_len + comp_hdr < raw_len + raw_hdr {
-                let mut total = 0;
-                total += Self::encode_len((comp_len << 1) | 1, writer)?;
-                total += writer.write(&compressed)?;
-                return Ok(total);
-            }
+        if raw_len >= bytes::MIN_COMPRESS_LEN
+            && !bytes::looks_incompressible(bytes)
+            && let Some(n) = bytes::compress_and_write(bytes, writer)?
+        {
+            return Ok(n);
         }
-        let mut total = 0;
-        total += Self::encode_len(raw_len << 1, writer)?;
-        total += writer.write(bytes)?;
-        Ok(total)
+        bytes::write_flagged_raw(writer, bytes, 0)
     }
 }
 
@@ -1231,32 +1217,24 @@ impl<T: Encode + 'static> Encode for Vec<T> {
 
             let raw_len = bytes.len();
             // Skip compression for small payloads where overhead outweighs savings
-            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(bytes) {
-                let compressed = bytes::zstd_compress(bytes)?;
-                let comp_len = compressed.len();
-                let raw_hdr = bytes::flagged_header_len(raw_len, false);
-                let comp_hdr = bytes::flagged_header_len(comp_len, true);
-                if comp_len + comp_hdr < raw_len + raw_hdr {
-                    let mut total = 0;
-                    total += Self::encode_len((comp_len << 1) | 1, writer)?;
-                    total += writer.write(&compressed)?;
-                    return Ok(total);
-                }
+            if raw_len >= bytes::MIN_COMPRESS_LEN
+                && !bytes::looks_incompressible(bytes)
+                && let Some(n) = bytes::compress_and_write(bytes, writer)?
+            {
+                return Ok(n);
             }
-            let mut total = 0;
-            total += Self::encode_len(raw_len << 1, writer)?;
-            total += writer.write(bytes)?;
-            return Ok(total);
+            return bytes::write_flagged_raw(writer, bytes, 0);
         }
 
         let mut total_written = 0;
-        total_written += Self::encode_len(self.len(), writer)?;
         if ctx.is_none() {
-            // Pre-reserve to avoid intermediate reallocations
-            writer.reserve(self.len() * core::mem::size_of::<T>());
+            // Pre-reserve to avoid intermediate reallocations: header + payload
+            writer.reserve(self.len() * core::mem::size_of::<T>() + 9);
+            total_written += Self::encode_len(self.len(), writer)?;
             total_written += T::encode_slice(self, writer)?;
             return Ok(total_written);
         }
+        total_written += Self::encode_len(self.len(), writer)?;
         for item in self {
             total_written += item.encode_ext(writer, ctx.as_deref_mut())?;
         }
@@ -1354,24 +1332,13 @@ impl<V: Encode + 'static> Encode for collections::VecDeque<V> {
             tmp.extend_from_slice(b_u8);
             let raw_len = tmp.len();
             // Skip compression for small payloads where overhead outweighs savings
-            if raw_len >= bytes::MIN_COMPRESS_LEN && !bytes::looks_incompressible(&tmp) {
-                let compressed = bytes::zstd_compress(&tmp)?;
-                let comp_len = compressed.len();
-                let raw_hdr = bytes::flagged_header_len(raw_len, false);
-                let comp_hdr = bytes::flagged_header_len(comp_len, true);
-                if comp_len + comp_hdr < raw_len + raw_hdr {
-                    let mut total_written = 0;
-                    total_written += Self::encode_len((comp_len << 1) | 1, writer)?;
-                    total_written += writer.write(&compressed)?;
-                    return Ok(total_written);
-                }
-            }
+            if raw_len >= bytes::MIN_COMPRESS_LEN
+                && !bytes::looks_incompressible(&tmp)
+                && let Some(n) = bytes::compress_and_write(&tmp, writer)?
             {
-                let mut total_written = 0;
-                total_written += Self::encode_len(raw_len << 1, writer)?;
-                total_written += writer.write(&tmp)?;
-                return Ok(total_written);
+                return Ok(n);
             }
+            return bytes::write_flagged_raw(writer, &tmp, 0);
         }
 
         let mut total_written = 0;

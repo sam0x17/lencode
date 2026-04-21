@@ -1,8 +1,12 @@
 use core::any::{Any, TypeId};
-use core::hash::Hash;
+use core::hash::{BuildHasher, Hash};
 use hashbrown::HashMap;
 use smallbox::SmallBox;
 use smallbox::space::S8;
+
+/// Default [`BuildHasher`] used by [`DedupeEncodeable`] / [`DedupeDecodeable`]
+/// implementations that don't override it.
+pub type DefaultDedupeHasher = ahash::RandomState;
 
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
@@ -20,7 +24,11 @@ const DEFAULT_NUM_TYPES: usize = 4;
 /// stored in the encoder’s table and written on first occurrence.
 /// Implement this with a blanket `impl` for your type when you want
 /// [`Encode::encode_ext`] to take advantage of [`DedupeEncoder`].
-pub trait DedupeEncodeable: Hash + Eq + Pack + Clone + Send + Sync + 'static {}
+pub trait DedupeEncodeable: Hash + Eq + Pack + Clone + Send + Sync + 'static {
+    /// `BuildHasher` used for the per-type dedupe table. Override for types
+    /// (like cryptographic keys) that benefit from a specialized hasher.
+    type Hasher: BuildHasher + Default + Send + Sync + 'static;
+}
 
 /// Blanket [`Encode`] impl for all [`DedupeEncodeable`] types.
 ///
@@ -37,7 +45,7 @@ impl<T: DedupeEncodeable> Encode for T {
         if let Some(ctx) = ctx
             && let Some(encoder) = ctx.dedupe.as_mut()
         {
-            return encoder.encode(self, writer);
+            return encoder.encode::<T, T::Hasher>(self, writer);
         }
         self.pack(writer)
     }
@@ -51,7 +59,12 @@ impl<T: DedupeEncodeable> Encode for T {
 /// Marker trait for types eligible for deduplicated decoding.
 ///
 /// Pairs with `DedupeEncodeable`; see that trait for details.
-pub trait DedupeDecodeable: Pack + Clone + Hash + Eq + Send + Sync + 'static {}
+pub trait DedupeDecodeable: Pack + Clone + Hash + Eq + Send + Sync + 'static {
+    /// Mirrors [`DedupeEncodeable::Hasher`]. Must match the encoder side for a
+    /// given type; the decoder doesn't actually hash, but keeping the symmetry
+    /// makes it harder to wire mismatched halves together.
+    type Hasher: BuildHasher + Default + Send + Sync + 'static;
+}
 
 /// Blanket [`Decode`] impl for all [`DedupeDecodeable`] types.
 ///
@@ -67,7 +80,7 @@ impl<T: DedupeDecodeable> Decode for T {
         if let Some(ctx) = ctx
             && let Some(decoder) = ctx.dedupe.as_mut()
         {
-            return decoder.decode(reader);
+            return decoder.decode::<T>(reader);
         }
         T::unpack(reader)
     }
@@ -80,8 +93,10 @@ impl<T: DedupeDecodeable> Decode for T {
 
 /// Stateful encoder that replaces repeated values with compact IDs.
 pub struct DedupeEncoder {
-    // Store type-specific hashmaps: TypeId -> HashMap<T, usize>
-    type_stores: HashMap<TypeId, SmallBox<dyn Any + Send + Sync, S8>>,
+    // Per-type hashmaps stored as a small Vec for linear-search lookup by TypeId.
+    // Typical workloads use 1–4 types, where a linear scan over a Vec is
+    // significantly faster than hashing a TypeId through a HashMap.
+    type_stores: Vec<(TypeId, SmallBox<dyn Any + Send + Sync, S8>)>,
     // Next ID to assign (starts at 1)
     next_id: usize,
     initial_capacity: usize,
@@ -99,7 +114,7 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            type_stores: HashMap::with_capacity(DEFAULT_NUM_TYPES),
+            type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
             next_id: 1, // Start at 1 to match decoder
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
         }
@@ -112,7 +127,7 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn with_capacity(initial_capacity: usize, num_types: usize) -> Self {
         Self {
-            type_stores: HashMap::with_capacity(num_types),
+            type_stores: Vec::with_capacity(num_types),
             next_id: 1,
             initial_capacity,
         }
@@ -146,40 +161,49 @@ impl DedupeEncoder {
     /// Returns an iterator over the [`TypeId`]s of all stored types.
     #[inline(always)]
     pub fn type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.type_stores.keys().copied()
+        self.type_stores.iter().map(|(id, _)| *id)
     }
 
     /// Returns `true` if any entries exist for type `T`.
     #[inline]
     pub fn contains_type<T: 'static>(&self) -> bool {
-        self.type_stores.contains_key(&TypeId::of::<T>())
+        let type_id = TypeId::of::<T>();
+        self.type_stores.iter().any(|(id, _)| *id == type_id)
     }
 
     /// Returns the number of unique values stored for type `T`.
     ///
-    /// Returns `0` if no values of type `T` have been seen.
+    /// Returns `0` if no values of type `T` have been seen. The hasher type
+    /// `S` must match the one used when encoding values of `T`.
     #[inline]
-    pub fn len_for_type<T: Hash + Eq + Send + Sync + 'static>(&self) -> usize {
+    pub fn len_for_type<T, S>(&self) -> usize
+    where
+        T: Hash + Eq + Send + Sync + 'static,
+        S: BuildHasher + Send + Sync + 'static,
+    {
         let type_id = TypeId::of::<T>();
-        match self.type_stores.get(&type_id) {
-            Some(store) => store
-                .downcast_ref::<HashMap<T, usize>>()
-                .map_or(0, |m| m.len()),
-            None => 0,
-        }
+        self.type_stores
+            .iter()
+            .find(|(id, _)| *id == type_id)
+            .and_then(|(_, store)| store.downcast_ref::<HashMap<T, usize, S>>())
+            .map_or(0, |m| m.len())
     }
 
     /// Returns an iterator over the unique values stored for type `T`.
     ///
-    /// Returns an empty iterator if no values of type `T` have been seen.
+    /// Returns an empty iterator if no values of type `T` have been seen. The
+    /// hasher type `S` must match the one used when encoding values of `T`.
     #[inline]
-    pub fn values_for_type<T: Hash + Eq + Send + Sync + 'static>(
-        &self,
-    ) -> impl Iterator<Item = &T> {
+    pub fn values_for_type<T, S>(&self) -> impl Iterator<Item = &T>
+    where
+        T: Hash + Eq + Send + Sync + 'static,
+        S: BuildHasher + Send + Sync + 'static,
+    {
         let type_id = TypeId::of::<T>();
         self.type_stores
-            .get(&type_id)
-            .and_then(|store| store.downcast_ref::<HashMap<T, usize>>())
+            .iter()
+            .find(|(id, _)| *id == type_id)
+            .and_then(|(_, store)| store.downcast_ref::<HashMap<T, usize, S>>())
             .into_iter()
             .flat_map(|m| m.keys())
     }
@@ -192,26 +216,22 @@ impl DedupeEncoder {
     #[inline]
     pub fn clear_type<T: Hash + Eq + Send + Sync + 'static>(&mut self) {
         let type_id = TypeId::of::<T>();
-        self.type_stores.remove(&type_id);
+        if let Some(pos) = self.type_stores.iter().position(|(id, _)| *id == type_id) {
+            self.type_stores.swap_remove(pos);
+        }
     }
 
     /// Returns an estimate of the heap memory (in bytes) used by the encoder's
     /// internal tables.
     ///
-    /// This is a rough lower bound: it accounts for the hashmap overhead and
+    /// This is a rough lower bound: it accounts for the vec overhead and
     /// stored key/value sizes but not allocator metadata.
     #[inline]
     pub fn memory_usage(&self) -> usize {
         use core::mem::size_of;
-        // Outer HashMap overhead
         let mut total = self.type_stores.capacity()
             * (size_of::<TypeId>() + size_of::<SmallBox<dyn Any + Send + Sync, S8>>());
 
-        // We can't inspect the typed hashmaps generically, but we know the
-        // total entry count from next_id, plus the HashMap overhead per store.
-        // Each entry is at least (key_size + sizeof(usize)) in the inner map.
-        // Since we can't know key_size generically, report a conservative
-        // per-entry overhead of size_of::<usize>() * 3 (hash + key-ptr + value).
         let entry_count = self.len();
         total += entry_count * size_of::<usize>() * 3;
 
@@ -235,22 +255,36 @@ impl DedupeEncoder {
     /// When the value is first seen, this writes a special ID `0` followed by the packed
     /// value. On subsequent occurrences, only the assigned ID is written.
     #[inline]
-    pub fn encode<T: Hash + Eq + Pack + Clone + Send + Sync + 'static>(
-        &mut self,
-        val: &T,
-        writer: &mut impl Write,
-    ) -> Result<usize> {
+    pub fn encode<T, S>(&mut self, val: &T, writer: &mut impl Write) -> Result<usize>
+    where
+        T: Hash + Eq + Pack + Clone + Send + Sync + 'static,
+        S: BuildHasher + Default + Send + Sync + 'static,
+    {
         let type_id = TypeId::of::<T>();
 
-        // Get or create the type-specific store for this type
-        let store = self.type_stores.entry(type_id).or_insert_with(|| {
-            smallbox::smallbox!(HashMap::<T, usize>::with_capacity(self.initial_capacity))
-        });
+        // Linear scan for the type-specific store. For the typical 1–4 types
+        // this is faster than hashing a TypeId through a HashMap.
+        let store = match self.type_stores.iter_mut().find(|(id, _)| *id == type_id) {
+            Some((_, store)) => store,
+            None => {
+                self.type_stores.push((
+                    type_id,
+                    smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
+                        self.initial_capacity,
+                        S::default(),
+                    )),
+                ));
+                &mut self.type_stores.last_mut().unwrap().1
+            }
+        };
 
-        // Downcast to the concrete type
-        let typed_store = store
-            .downcast_mut::<HashMap<T, usize>>()
-            .expect("Type mismatch in type store");
+        // SAFETY: we just matched `type_id == TypeId::of::<T>()` in the linear
+        // scan, and this slot was originally inserted with a
+        // `HashMap::<T, usize, S>`. Skipping `downcast_mut` avoids a redundant
+        // vtable call to `type_id()`.
+        let typed_store: &mut HashMap<T, usize, S> = unsafe {
+            &mut *(&mut **store as *mut (dyn Any + Send + Sync) as *mut HashMap<T, usize, S>)
+        };
 
         // Check if we've already seen this value
         if let Some(&existing_id) = typed_store.get(val) {
@@ -273,11 +307,25 @@ impl DedupeEncoder {
     }
 }
 
-#[derive(Default)]
 /// Companion to [`DedupeEncoder`] that reconstructs repeated values from IDs.
+///
+/// Internally uses a type‑erased `Vec<T>` for single‑type workloads (the common
+/// case), storing values inline without per‑value Box allocations. Falls back to
+/// `Vec<Box<dyn Any>>` when multiple types are decoded.
 pub struct DedupeDecoder {
-    // Store values in order - index 0 = ID 1, index 1 = ID 2, etc.
-    values: Vec<Box<dyn Any + Send + Sync>>,
+    // Type-erased Vec<T> for the current (or only) decoded type.
+    // When all decode calls use the same T, values are stored contiguously
+    // in this Vec — no per-value heap allocation, no Box indirection.
+    typed_vec: Option<(TypeId, Box<dyn Any + Send + Sync>)>,
+    // Fallback for multi-type scenarios: values stored as Box<dyn Any>.
+    boxed_values: Vec<Box<dyn Any + Send + Sync>>,
+    count: usize,
+}
+
+impl Default for DedupeDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DedupeDecoder {
@@ -285,37 +333,41 @@ impl DedupeDecoder {
     #[inline(always)]
     pub fn new() -> Self {
         Self {
-            values: Vec::with_capacity(DEFAULT_INITIAL_CAPACITY),
+            typed_vec: None,
+            boxed_values: Vec::new(),
+            count: 0,
         }
     }
 
     /// Creates a new [`DedupeDecoder`] with the specified capacity.
-    ///
-    /// The decoder will be able to hold at least `capacity` cached values without
-    /// reallocating. Creates a decoder with a pre‑allocated value table of `capacity`.
     #[inline(always)]
     pub fn with_capacity(capacity: usize) -> Self {
+        let _ = capacity;
         Self {
-            values: Vec::with_capacity(capacity),
+            typed_vec: None,
+            boxed_values: Vec::new(),
+            count: 0,
         }
     }
 
     /// Clears cached values.
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.values.clear();
+        self.typed_vec = None;
+        self.boxed_values.clear();
+        self.count = 0;
     }
 
     /// Returns the number of cached values.
     #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.values.len()
+    pub const fn len(&self) -> usize {
+        self.count
     }
 
     /// Returns `true` if the cache is empty.
     #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        self.values.is_empty()
+    pub const fn is_empty(&self) -> bool {
+        self.count == 0
     }
 
     /// Returns an estimate of the heap memory (in bytes) used by the decoder's
@@ -323,49 +375,71 @@ impl DedupeDecoder {
     #[inline]
     pub fn memory_usage(&self) -> usize {
         use core::mem::size_of;
-        // Vec overhead + per-element Box overhead
-        self.values.capacity() * size_of::<Box<dyn Any + Send + Sync>>()
+        self.boxed_values.capacity() * size_of::<Box<dyn Any + Send + Sync>>()
+            + self.typed_vec.as_ref().map_or(0, |_| self.count * 64)
     }
 
     /// Decodes a value with deduplication.
     ///
-    /// If the ID is 0, a new value is decoded and stored in the table. Otherwise, the value is
-    /// retrieved from the table using the given ID.
-    ///
-    /// # Arguments
-    ///
-    /// * `reader` - The reader from which the encoded data will be read.
-    ///
-    /// # Returns
-    ///
-    /// The decoded value. Decodes a value with deduplication support.
-    ///
-    /// If the next ID is `0`, a fresh value is decoded, stored, and returned. Otherwise, the
-    /// referenced value is loaded from the cache.
+    /// If the next ID is `0`, a fresh value is decoded, stored, and returned.
+    /// Otherwise, the referenced value is loaded from the cache.
     #[inline]
     pub fn decode<T: Pack + Clone + Hash + Eq + Send + Sync + 'static>(
         &mut self,
         reader: &mut impl Read,
     ) -> Result<T> {
         let id = Lencode::decode_varint::<usize>(reader)?;
+        let type_id = TypeId::of::<T>();
 
+        // Fast path: typed Vec<T> for single-type workloads.
+        if let Some((ref cached_type, ref mut store)) = self.typed_vec
+            && *cached_type == type_id
+        {
+            // SAFETY: we verified TypeId matches; the store holds a Vec<T>.
+            let vec: &mut Vec<T> =
+                unsafe { &mut *(store.as_mut() as *mut (dyn Any + Send + Sync) as *mut Vec<T>) };
+            if id == 0 {
+                let value = T::unpack(reader)?;
+                vec.push(value.clone());
+                self.count += 1;
+                return Ok(value);
+            } else {
+                let index = id - 1;
+                if let Some(v) = vec.get(index) {
+                    return Ok(v.clone());
+                }
+                return Err(crate::io::Error::InvalidData);
+            }
+        }
+
+        // First call for this type: initialize the typed Vec
+        if self.typed_vec.is_none() && self.boxed_values.is_empty() {
+            let mut vec: Vec<T> = Vec::with_capacity(DEFAULT_INITIAL_CAPACITY);
+            if id == 0 {
+                let value = T::unpack(reader)?;
+                vec.push(value.clone());
+                self.typed_vec = Some((type_id, Box::new(vec)));
+                self.count += 1;
+                return Ok(value);
+            } else {
+                // Trying to reference a value before any were stored
+                return Err(crate::io::Error::InvalidData);
+            }
+        }
+
+        // Multi-type fallback: use Box<dyn Any> per value
         if id == 0 {
-            // New value, decode it and store in table
             let value = T::unpack(reader)?;
-
-            // Store the value (Vec index = ID - 1)
-            self.values.push(Box::new(value.clone()));
-
+            self.boxed_values.push(Box::new(value.clone()));
+            self.count += 1;
             Ok(value)
         } else {
-            // Existing value, retrieve from table
-            let index = id - 1; // Convert ID to Vec index
-            if let Some(boxed_value) = self.values.get(index)
-                && let Some(typed_value) = boxed_value.downcast_ref::<T>()
-            {
+            let index = id - 1;
+            if let Some(boxed_value) = self.boxed_values.get(index) {
+                let typed_value: &T =
+                    unsafe { &*(&**boxed_value as *const (dyn Any + Send + Sync) as *const T) };
                 return Ok(typed_value.clone());
             }
-
             Err(crate::io::Error::InvalidData)
         }
     }
@@ -375,6 +449,8 @@ impl DedupeDecoder {
 mod tests {
     use super::*;
     use crate::io::Cursor;
+
+    type H = DefaultDedupeHasher;
 
     #[test]
     fn test_dedupe_encode_decode_roundtrip() {
@@ -387,7 +463,7 @@ mod tests {
 
         // Encode all values
         for &value in &values {
-            encoder.encode(&value, &mut buffer).unwrap();
+            encoder.encode::<u32, H>(&value, &mut buffer).unwrap();
         }
 
         // Decode all values
@@ -410,16 +486,16 @@ mod tests {
         let mut buffer = Vec::new();
 
         // Encode some values
-        encoder.encode(&42u32, &mut buffer).unwrap();
-        encoder.encode(&123u32, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&42u32, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&123u32, &mut buffer).unwrap();
 
         // Clear and encode again - should start fresh
         encoder.clear();
         decoder.clear();
         buffer.clear();
 
-        encoder.encode(&42u32, &mut buffer).unwrap(); // Should be encoded as new (ID 0)
-        encoder.encode(&42u32, &mut buffer).unwrap(); // Should be encoded as reference (ID 1)
+        encoder.encode::<u32, H>(&42u32, &mut buffer).unwrap(); // Should be encoded as new (ID 0)
+        encoder.encode::<u32, H>(&42u32, &mut buffer).unwrap(); // Should be encoded as reference (ID 1)
 
         let mut cursor = Cursor::new(&buffer);
         let decoded1: u32 = decoder.decode(&mut cursor).unwrap();
@@ -434,17 +510,17 @@ mod tests {
         let mut encoder = DedupeEncoder::new();
         let mut buffer = Vec::new();
 
-        assert_eq!(encoder.len_for_type::<u32>(), 0);
+        assert_eq!(encoder.len_for_type::<u32, H>(), 0);
         assert_eq!(encoder.num_types(), 0);
 
-        encoder.encode(&42u32, &mut buffer).unwrap();
-        encoder.encode(&42u32, &mut buffer).unwrap(); // duplicate, not a new entry
-        encoder.encode(&99u32, &mut buffer).unwrap();
-        encoder.encode(&7u64, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&42u32, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&42u32, &mut buffer).unwrap(); // duplicate, not a new entry
+        encoder.encode::<u32, H>(&99u32, &mut buffer).unwrap();
+        encoder.encode::<u64, H>(&7u64, &mut buffer).unwrap();
 
-        assert_eq!(encoder.len_for_type::<u32>(), 2);
-        assert_eq!(encoder.len_for_type::<u64>(), 1);
-        assert_eq!(encoder.len_for_type::<u16>(), 0);
+        assert_eq!(encoder.len_for_type::<u32, H>(), 2);
+        assert_eq!(encoder.len_for_type::<u64, H>(), 1);
+        assert_eq!(encoder.len_for_type::<u16, H>(), 0);
         assert_eq!(encoder.num_types(), 2);
         assert_eq!(encoder.len(), 3);
     }
@@ -454,13 +530,13 @@ mod tests {
         let mut encoder = DedupeEncoder::new();
         let mut buffer = Vec::new();
 
-        encoder.encode(&42u32, &mut buffer).unwrap();
-        encoder.encode(&7u64, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&42u32, &mut buffer).unwrap();
+        encoder.encode::<u64, H>(&7u64, &mut buffer).unwrap();
         assert_eq!(encoder.num_types(), 2);
 
         encoder.clear_type::<u32>();
-        assert_eq!(encoder.len_for_type::<u32>(), 0);
-        assert_eq!(encoder.len_for_type::<u64>(), 1);
+        assert_eq!(encoder.len_for_type::<u32, H>(), 0);
+        assert_eq!(encoder.len_for_type::<u64, H>(), 1);
         assert_eq!(encoder.num_types(), 1);
     }
 
@@ -471,8 +547,8 @@ mod tests {
 
         let initial = encoder.memory_usage();
 
-        encoder.encode(&42u32, &mut buffer).unwrap();
-        encoder.encode(&99u32, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&42u32, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&99u32, &mut buffer).unwrap();
 
         let after = encoder.memory_usage();
         assert!(
