@@ -230,13 +230,20 @@ impl Lencode {
                     writer.advance_mut(1);
                     return Ok(1);
                 }
-                let n = ((128 - val.leading_zeros() + 7) >> 3) as usize;
+                // Split into hi/lo halves to avoid u128.leading_zeros() which
+                // compiles to a branch + two bsr instructions on x86-64.
+                let lo = val as u64;
+                let hi = (val >> 64) as u64;
+                let n = if hi != 0 {
+                    8 + (((64 - hi.leading_zeros() + 7) >> 3) as usize)
+                } else {
+                    ((64 - lo.leading_zeros() + 7) >> 3) as usize
+                };
                 unsafe {
                     *dst.get_unchecked_mut(0) = 0x80 | (n as u8);
-                    // Write as two u64s — avoids slow u128 write_unaligned on aarch64
                     let ptr = dst.as_mut_ptr().add(1);
-                    (ptr as *mut u64).write_unaligned((val as u64).to_le());
-                    (ptr.add(8) as *mut u64).write_unaligned(((val >> 64) as u64).to_le());
+                    (ptr as *mut u64).write_unaligned(lo.to_le());
+                    (ptr.add(8) as *mut u64).write_unaligned(hi.to_le());
                 }
                 writer.advance_mut(1 + n);
                 return Ok(1 + n);
@@ -470,16 +477,24 @@ impl Lencode {
                     return Ok(first as u128);
                 }
                 let n = (first & 0x7F) as usize;
-                // Load as two u64s — avoids slow u128 read_unaligned on aarch64
                 let ptr = unsafe { slice.as_ptr().add(1) };
-                let lo = unsafe { u64::from_le((ptr as *const u64).read_unaligned()) } as u128;
-                let hi =
-                    unsafe { u64::from_le((ptr.add(8) as *const u64).read_unaligned()) } as u128;
-                let raw = lo | (hi << 64);
-                let val = if n < 16 {
-                    raw & (!0u128 >> ((16 - n) << 3))
+                let lo = unsafe { u64::from_le((ptr as *const u64).read_unaligned()) };
+                let hi = unsafe { u64::from_le((ptr.add(8) as *const u64).read_unaligned()) };
+                // Mask using u64 ops instead of u128 shifts. For the hot
+                // path (n=16, ~99.6% of random u128), no masking at all.
+                let val = if n >= 16 {
+                    (lo as u128) | ((hi as u128) << 64)
+                } else if n <= 8 {
+                    let lo_masked = if n < 8 {
+                        lo & ((1u64 << (n << 3)) - 1)
+                    } else {
+                        lo
+                    };
+                    lo_masked as u128
                 } else {
-                    raw
+                    let hi_bytes = n - 8;
+                    let hi_masked = hi & ((1u64 << (hi_bytes << 3)) - 1);
+                    (lo as u128) | ((hi_masked as u128) << 64)
                 };
                 reader.advance(1 + n);
                 return Ok(val);
