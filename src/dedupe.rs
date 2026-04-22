@@ -689,7 +689,10 @@ impl DedupeDecoder {
     pub fn memory_usage(&self) -> usize {
         use core::mem::size_of;
         self.boxed_values.capacity() * size_of::<Box<dyn Any + Send + Sync>>()
-            + self.typed_vec.as_ref().map_or(0, |_| self.scratch_count * 64)
+            + self
+                .typed_vec
+                .as_ref()
+                .map_or(0, |_| self.scratch_count * 64)
     }
 
     /// Decodes a value with deduplication.
