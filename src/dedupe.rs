@@ -221,6 +221,10 @@ impl<T: DedupeDecodeable> Decode for T {
 pub struct DedupeEncoder {
     // Shared immutable primed state. Lookups check this first.
     frozen: Option<Arc<FrozenEncoderState>>,
+    // Cached copy of `frozen.total_primed` (0 if no frozen state). Avoids an
+    // Arc deref in `clear()` and keeps the post-clear `next_id` computation
+    // branch-free.
+    frozen_total_primed: usize,
     // Per-type hashmaps stored as a small Vec for linear-search lookup by TypeId.
     // Typical workloads use 1–4 types, where a linear scan over a Vec is
     // significantly faster than hashing a TypeId through a HashMap.
@@ -245,6 +249,7 @@ impl DedupeEncoder {
     pub fn new() -> Self {
         Self {
             frozen: None,
+            frozen_total_primed: 0,
             type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
             next_id: 1, // Start at 1 to match decoder
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
@@ -259,6 +264,7 @@ impl DedupeEncoder {
     pub fn with_capacity(initial_capacity: usize, num_types: usize) -> Self {
         Self {
             frozen: None,
+            frozen_total_primed: 0,
             type_stores: Vec::with_capacity(num_types),
             next_id: 1,
             initial_capacity,
@@ -277,11 +283,12 @@ impl DedupeEncoder {
     /// [`Arc`] across as many worker encoders as you need.
     #[inline(always)]
     pub fn with_frozen(frozen: Arc<FrozenEncoderState>) -> Self {
-        let start_id = frozen.total_primed + 1;
+        let total_primed = frozen.total_primed;
         Self {
             frozen: Some(frozen),
+            frozen_total_primed: total_primed,
             type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
-            next_id: start_id,
+            next_id: total_primed + 1,
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
         }
     }
@@ -317,7 +324,7 @@ impl DedupeEncoder {
     #[inline(always)]
     pub fn clear(&mut self) {
         self.type_stores.clear();
-        self.next_id = self.frozen.as_ref().map_or(1, |f| f.total_primed + 1);
+        self.next_id = self.frozen_total_primed + 1;
     }
 
     /// Returns the number of unique values currently stored in the encoder
@@ -576,6 +583,10 @@ impl DedupeEncoder {
 pub struct DedupeDecoder {
     // Shared immutable primed state.
     frozen: Option<Arc<FrozenDecoderState>>,
+    // Cached copy of `frozen.total_primed` (0 if no frozen state). Kept in sync
+    // with `frozen` so const methods like `len()` can stay const without Arc
+    // deref on the hot path.
+    frozen_total_primed: usize,
     // Type-erased Vec<T> for the current (or only) decoded type.
     // Contains only scratch (novel) values.
     typed_vec: Option<(TypeId, Box<dyn Any + Send + Sync>)>,
@@ -597,6 +608,7 @@ impl DedupeDecoder {
     pub fn new() -> Self {
         Self {
             frozen: None,
+            frozen_total_primed: 0,
             typed_vec: None,
             boxed_values: Vec::new(),
             scratch_count: 0,
@@ -609,6 +621,7 @@ impl DedupeDecoder {
         let _ = capacity;
         Self {
             frozen: None,
+            frozen_total_primed: 0,
             typed_vec: None,
             boxed_values: Vec::new(),
             scratch_count: 0,
@@ -622,8 +635,10 @@ impl DedupeDecoder {
     /// [`Self::clear`] resets only the scratch layer.
     #[inline(always)]
     pub fn with_frozen(frozen: Arc<FrozenDecoderState>) -> Self {
+        let frozen_total_primed = frozen.total_primed;
         Self {
             frozen: Some(frozen),
+            frozen_total_primed,
             typed_vec: None,
             boxed_values: Vec::new(),
             scratch_count: 0,
@@ -658,13 +673,13 @@ impl DedupeDecoder {
 
     /// Returns the total number of cached values (frozen + scratch).
     #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.frozen.as_ref().map_or(0, |f| f.total_primed) + self.scratch_count
+    pub const fn len(&self) -> usize {
+        self.frozen_total_primed + self.scratch_count
     }
 
     /// Returns `true` if the cache is empty.
     #[inline(always)]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
@@ -689,10 +704,12 @@ impl DedupeDecoder {
     ) -> Result<T> {
         let id = Lencode::decode_varint::<usize>(reader)?;
         let type_id = TypeId::of::<T>();
-        let total_primed = self.frozen.as_ref().map_or(0, |f| f.total_primed);
+        let total_primed = self.frozen_total_primed;
 
         // Frozen lookup: id in 1..=total_primed refers to a primed value.
         if id != 0 && id <= total_primed {
+            // SAFETY: total_primed > 0 implies frozen is Some (set together in
+            // `with_frozen`). Avoids an extra option-check on the hot path.
             let frozen = self.frozen.as_ref().unwrap();
             return lookup_frozen::<T>(frozen, type_id, id - 1);
         }
