@@ -5,9 +5,9 @@ use crate::diff::{DiffDecoder, DiffEncoder};
 
 /// Bundles optional [`DedupeEncoder`] and [`DiffEncoder`] state for encoding.
 ///
-/// Pass `Some(&mut EncoderContext)` to [`Encode::encode_ext`] when you want
-/// deduplication, diff encoding, or both. Individual components are optional:
-/// leave a field `None` to disable that feature.
+/// Pass `Some(&mut EncoderContext)` to [`crate::Encode::encode_ext`] when you
+/// want deduplication, diff encoding, or both. Individual components are
+/// optional: leave a field `None` to disable that feature.
 pub struct EncoderContext {
     /// Optional deduplication encoder.
     pub dedupe: Option<DedupeEncoder>,
@@ -61,8 +61,8 @@ impl EncoderContext {
 
 /// Bundles optional [`DedupeDecoder`] and [`DiffDecoder`] state for decoding.
 ///
-/// Pass `Some(&mut DecoderContext)` to [`Decode::decode_ext`] when you want
-/// deduplication, diff decoding, or both.
+/// Pass `Some(&mut DecoderContext)` to [`crate::Decode::decode_ext`] when you
+/// want deduplication, diff decoding, or both.
 pub struct DecoderContext {
     /// Optional deduplication decoder.
     pub dedupe: Option<DedupeDecoder>,
