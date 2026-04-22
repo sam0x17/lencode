@@ -75,8 +75,12 @@ impl Pack for MyId {
     fn pack(&self, w: &mut impl Write) -> Result<usize> { self.0.pack(w) }
     fn unpack(r: &mut impl Read) -> Result<Self> { Ok(Self(u32::unpack(r)?)) }
 }
-impl DedupeEncodeable for MyId {}
-impl DedupeDecodeable for MyId {}
+impl DedupeEncodeable for MyId {
+    type Hasher = DefaultDedupeHasher;
+}
+impl DedupeDecodeable for MyId {
+    type Hasher = DefaultDedupeHasher;
+}
 
 let vals = vec![MyId(42), MyId(7), MyId(42), MyId(7), MyId(42)];
 
@@ -93,7 +97,7 @@ assert_eq!(roundtrip, vals);
 
 ### Compact bytes and strings
 
-`&[u8]`, `Vec<u8]`, `VecDeque<u8]`, `&str`, and `String` use a compact flagged header: `varint((payload_len << 1) | flag) + payload`.
+`&[u8]`, `Vec<u8>`, `VecDeque<u8>`, `&str`, and `String` use a compact flagged header: `varint((payload_len << 1) | flag) + payload`.
 
 - `flag = 0` → raw bytes/UTF‑8
 - `flag = 1` → zstd frame (original size stored inside the frame)
@@ -113,8 +117,12 @@ use lencode::prelude::*;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Pack)]
 struct MyPubkey([u8; 32]);
 
-impl DedupeEncodeable for MyPubkey {}
-impl DedupeDecodeable for MyPubkey {}
+impl DedupeEncodeable for MyPubkey {
+    type Hasher = DefaultDedupeHasher;
+}
+impl DedupeDecodeable for MyPubkey {
+    type Hasher = DefaultDedupeHasher;
+}
 ```
 
 ### Incremental diff encoding
@@ -165,7 +173,7 @@ The `Write` trait provides a `reserve(additional)` hint. Growable writers like `
 - Primitives: all ints, `bool`, `f32`, `f64`
 - Arrays: `[T; N]`
 - Option: `Option<T>`
-- Bytes/strings: `&[u8]`, `Vec<u8]`, `VecDeque<u8]`, `&str`, `String`
+- Bytes/strings: `&[u8]`, `Vec<u8>`, `VecDeque<u8>`, `&str`, `String`
 - Collections (alloc): `Vec<T>`, `BTreeMap<K,V>`, `BTreeSet<V>`, `VecDeque<T>`, `LinkedList<T>`, `BinaryHeap<T>`
 - Tuples: `(T1,)` … up to 11 elements
 - `std` feature: adds support for `std::borrow::Cow<'_, T>`
