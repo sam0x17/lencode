@@ -369,6 +369,14 @@ pub struct DiffDecoder {
     store: HashMap<u64, Vec<u8>>,
     /// Currently active key, if any.
     pub(crate) current_key: Option<u64>,
+    /// Reused assembly buffer for [`decode_blob_ref`](Self::decode_blob_ref):
+    /// diff results are built here, then swapped into the store slot so both
+    /// buffers' capacities recycle across calls.
+    result_scratch: Vec<u8>,
+    /// Reused staging for mode-2 compressed bytes (borrowed path).
+    compressed_scratch: Vec<u8>,
+    /// Reused staging for mode-2 decompressed XOR bytes (borrowed path).
+    xor_scratch: Vec<u8>,
 }
 
 impl Default for DiffDecoder {
@@ -384,6 +392,9 @@ impl DiffDecoder {
         Self {
             store: HashMap::new(),
             current_key: None,
+            result_scratch: Vec::new(),
+            compressed_scratch: Vec::new(),
+            xor_scratch: Vec::new(),
         }
     }
 
@@ -393,6 +404,9 @@ impl DiffDecoder {
         Self {
             store: HashMap::with_capacity(num_keys),
             current_key: None,
+            result_scratch: Vec::new(),
+            compressed_scratch: Vec::new(),
+            xor_scratch: Vec::new(),
         }
     }
 
@@ -458,26 +472,42 @@ impl DiffDecoder {
 
     /// Decodes a byte blob, applying patches if the stream contains a diff.
     ///
-    /// Returns the reconstructed blob.
+    /// Returns the reconstructed blob as an owned `Vec`. This is the
+    /// convenience wrapper over [`decode_blob_ref`](Self::decode_blob_ref);
+    /// callers on a hot path should prefer the borrowed variant, which
+    /// performs no allocation in steady state.
     pub fn decode_blob(&mut self, reader: &mut impl Read) -> Result<Vec<u8>> {
+        Ok(self.decode_blob_ref(reader)?.to_vec())
+    }
+
+    /// Decodes a byte blob like [`decode_blob`](Self::decode_blob), but
+    /// returns a borrow of the reconstruction owned by the decoder — the
+    /// zero-copy path.
+    ///
+    /// The blob lands in the store under the active key (the previous
+    /// value's buffer is recycled as the next assembly scratch), so once
+    /// buffers have grown to blob size, decoding allocates nothing. With no
+    /// active key the reconstruction lives in an internal scratch until the
+    /// next call. The borrow ends at the next decode; copy out (e.g. into
+    /// an arena) anything you keep.
+    pub fn decode_blob_ref(&mut self, reader: &mut impl Read) -> Result<&[u8]> {
         let mode = Lencode::decode_varint_u64(reader)?;
 
         match mode {
             0 => {
-                // Full blob
+                // Full blob: read straight into its destination buffer.
                 let len = Lencode::decode_varint_u64(reader)? as usize;
-                let mut data = Vec::with_capacity(len);
-                if len > 0 {
-                    unsafe { data.set_len(len) };
-                    let n = reader.read(&mut data)?;
-                    if n != len {
-                        return Err(Error::ReaderOutOfData);
+                match self.current_key {
+                    Some(key) => {
+                        let dest = self.store.entry(key).or_default();
+                        read_exact_into(reader, len, dest)?;
+                        Ok(dest.as_slice())
+                    }
+                    None => {
+                        read_exact_into(reader, len, &mut self.result_scratch)?;
+                        Ok(self.result_scratch.as_slice())
                     }
                 }
-                if let Some(key) = self.current_key {
-                    self.store.insert(key, data.clone());
-                }
-                Ok(data)
             }
             1 => {
                 // Patch diff — need old blob
@@ -485,55 +515,68 @@ impl DiffDecoder {
                 let num_patches = Lencode::decode_varint_u64(reader)? as usize;
 
                 let key = self.current_key.ok_or(Error::InvalidData)?;
-                let old = self.store.get(&key).ok_or(Error::InvalidData)?;
+                // Assemble into the scratch while borrowing `old` from the
+                // store (disjoint fields), then swap the finished blob into
+                // the store slot below.
+                {
+                    let old = self.store.get(&key).ok_or(Error::InvalidData)?;
+                    let result = &mut self.result_scratch;
+                    result.clear();
+                    result.reserve(new_len);
+                    let mut old_cursor = 0usize;
 
-                let mut result = Vec::with_capacity(new_len);
-                let mut old_cursor = 0usize;
+                    for _ in 0..num_patches {
+                        let gap = Lencode::decode_varint_u64(reader)? as usize;
+                        let patch_len = Lencode::decode_varint_u64(reader)? as usize;
 
-                for _ in 0..num_patches {
-                    let gap = Lencode::decode_varint_u64(reader)? as usize;
-                    let patch_len = Lencode::decode_varint_u64(reader)? as usize;
+                        // Copy unchanged bytes from old blob
+                        let copy_end = old_cursor + gap;
+                        if copy_end > old.len() {
+                            return Err(Error::InvalidData);
+                        }
+                        result.extend_from_slice(&old[old_cursor..copy_end]);
 
-                    // Copy unchanged bytes from old blob
-                    let copy_end = old_cursor + gap;
-                    if copy_end > old.len() {
+                        // Read patch data directly into the vec without zero-filling.
+                        // SAFETY: we immediately read exactly patch_len bytes into the
+                        // uninitialized region; on a short read we clear the buffer
+                        // before returning, so the uninit tail is never observable.
+                        let start = result.len();
+                        result.reserve(patch_len);
+                        #[allow(clippy::uninit_vec)]
+                        // perf: avoid zero-fill before overwrite
+                        unsafe {
+                            result.set_len(start + patch_len);
+                        }
+                        let n = match reader.read(&mut result[start..start + patch_len]) {
+                            Ok(n) => n,
+                            Err(e) => {
+                                result.clear();
+                                return Err(e);
+                            }
+                        };
+                        if n != patch_len {
+                            result.clear();
+                            return Err(Error::ReaderOutOfData);
+                        }
+
+                        old_cursor = copy_end + patch_len;
+                    }
+
+                    // Copy any remaining unchanged tail from old blob
+                    // (only valid up to min(old.len(), new_len) since new might be shorter)
+                    let remaining = old.len().min(new_len) - old_cursor.min(old.len().min(new_len));
+                    if remaining > 0 && old_cursor < old.len() {
+                        let tail_end = old_cursor + remaining;
+                        result.extend_from_slice(&old[old_cursor..tail_end.min(old.len())]);
+                    }
+
+                    if result.len() != new_len {
                         return Err(Error::InvalidData);
                     }
-                    result.extend_from_slice(&old[old_cursor..copy_end]);
-
-                    // Read patch data directly into the vec without zero-filling.
-                    // SAFETY: we immediately read exactly patch_len bytes into the
-                    // uninitialized region; if the read is short we return an error
-                    // (the vec is not observed in the error path since we return Err).
-                    let start = result.len();
-                    result.reserve(patch_len);
-                    #[allow(clippy::uninit_vec)]
-                    // perf: avoid zero-fill before overwrite
-                    unsafe {
-                        result.set_len(start + patch_len);
-                    }
-                    let n = reader.read(&mut result[start..start + patch_len])?;
-                    if n != patch_len {
-                        return Err(Error::ReaderOutOfData);
-                    }
-
-                    old_cursor = copy_end + patch_len;
                 }
-
-                // Copy any remaining unchanged tail from old blob
-                // (only valid up to min(old.len(), new_len) since new might be shorter)
-                let remaining = old.len().min(new_len) - old_cursor.min(old.len().min(new_len));
-                if remaining > 0 && old_cursor < old.len() {
-                    let tail_end = old_cursor + remaining;
-                    result.extend_from_slice(&old[old_cursor..tail_end.min(old.len())]);
-                }
-
-                if result.len() != new_len {
-                    return Err(Error::InvalidData);
-                }
-
-                self.store.insert(key, result.clone());
-                Ok(result)
+                let slot = self.store.get_mut(&key).ok_or(Error::InvalidData)?;
+                core::mem::swap(slot, &mut self.result_scratch);
+                Ok(slot.as_slice())
             }
             2 => {
                 // XOR + zstd diff
@@ -541,43 +584,76 @@ impl DiffDecoder {
                 let compressed_len = Lencode::decode_varint_u64(reader)? as usize;
 
                 let key = self.current_key.ok_or(Error::InvalidData)?;
-                let old = self.store.get(&key).ok_or(Error::InvalidData)?;
+                let old_len = self.store.get(&key).ok_or(Error::InvalidData)?.len();
 
-                // Read compressed XOR data
-                let mut compressed = Vec::with_capacity(compressed_len);
-                if compressed_len > 0 {
-                    unsafe { compressed.set_len(compressed_len) };
-                    let n = reader.read(&mut compressed)?;
-                    if n != compressed_len {
-                        return Err(Error::ReaderOutOfData);
-                    }
-                }
+                // Read compressed XOR data into the reused staging buffer.
+                read_exact_into(reader, compressed_len, &mut self.compressed_scratch)?;
 
-                // Decompress the XOR buffer
-                let xor_len = old.len().max(new_len);
-                let xor = bytes::zstd_decompress(&compressed, xor_len)?;
+                // Decompress the XOR buffer into its reused staging buffer.
+                let xor_len = old_len.max(new_len);
+                bytes::zstd_decompress_into(
+                    &self.compressed_scratch,
+                    xor_len,
+                    &mut self.xor_scratch,
+                )?;
 
                 // Reconstruct: new[i] = old[i] ^ xor[i] for overlapping region
-                let mut result = Vec::with_capacity(new_len);
-                let min_len = old.len().min(new_len);
-                for i in 0..min_len {
-                    result.push(old[i] ^ xor[i]);
-                }
-                // If new is longer, tail of XOR is the new bytes (XOR with 0 = identity)
-                if new_len > old.len() {
-                    result.extend_from_slice(&xor[min_len..new_len]);
-                }
+                {
+                    let old = self.store.get(&key).ok_or(Error::InvalidData)?;
+                    let xor = &self.xor_scratch;
+                    let result = &mut self.result_scratch;
+                    result.clear();
+                    result.reserve(new_len);
+                    let min_len = old.len().min(new_len);
+                    for i in 0..min_len {
+                        result.push(old[i] ^ xor[i]);
+                    }
+                    // If new is longer, tail of XOR is the new bytes (XOR with 0 = identity)
+                    if new_len > old.len() {
+                        result.extend_from_slice(&xor[min_len..new_len]);
+                    }
 
-                if result.len() != new_len {
-                    return Err(Error::InvalidData);
+                    if result.len() != new_len {
+                        return Err(Error::InvalidData);
+                    }
                 }
-
-                self.store.insert(key, result.clone());
-                Ok(result)
+                let slot = self.store.get_mut(&key).ok_or(Error::InvalidData)?;
+                core::mem::swap(slot, &mut self.result_scratch);
+                Ok(slot.as_slice())
             }
             _ => Err(Error::InvalidData),
         }
     }
+}
+
+/// Reads exactly `len` bytes into `dest`, reusing its capacity (no
+/// allocation once grown to size). Cleared on error so the uninitialized
+/// region is never observable.
+fn read_exact_into(reader: &mut impl Read, len: usize, dest: &mut Vec<u8>) -> Result<()> {
+    dest.clear();
+    if len == 0 {
+        return Ok(());
+    }
+    dest.reserve(len);
+    // SAFETY: we immediately read exactly `len` bytes into the uninitialized
+    // region; on a short read we clear the buffer before returning.
+    #[allow(clippy::uninit_vec)]
+    // perf: avoid zero-fill before overwrite
+    unsafe {
+        dest.set_len(len);
+    }
+    let n = match reader.read(&mut dest[..]) {
+        Ok(n) => n,
+        Err(e) => {
+            dest.clear();
+            return Err(e);
+        }
+    };
+    if n != len {
+        dest.clear();
+        return Err(Error::ReaderOutOfData);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1360,5 +1436,93 @@ mod tests {
         let mut cursor = Cursor::new(&buf[..]);
         let result: Vec<u8> = Vec::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
         assert_eq!(result, data);
+    }
+
+    /// The borrowed path must produce byte-identical reconstructions to the
+    /// owned path across all three wire modes, including chained diffs
+    /// (store state must evolve identically).
+    #[test]
+    fn test_decode_blob_ref_matches_decode_blob_across_modes() {
+        let key = 77u64;
+
+        // v1: full blob (mode 0); v2: single-byte change (mode 1 RLE);
+        // v3: every 3rd byte changed (mode 2 XOR+zstd); v4: another RLE on
+        // top of the mode-2 result, proving the store stayed consistent.
+        let v1: Vec<u8> = (0..4096).map(|i| (i % 251) as u8).collect();
+        let mut v2 = v1.clone();
+        v2[100] ^= 0xFF;
+        let mut v3 = v2.clone();
+        for i in (0..v3.len()).step_by(3) {
+            v3[i] = v3[i].wrapping_add(1);
+        }
+        let mut v4 = v3.clone();
+        v4[7] ^= 0x55;
+
+        let mut encoder = DiffEncoder::new();
+        let mut buf = Vec::new();
+        let mut boundaries = Vec::new();
+        for data in [&v1, &v2, &v3, &v4] {
+            encoder.set_key(key);
+            encoder.encode_blob(data, &mut buf).unwrap();
+            boundaries.push(buf.len());
+        }
+        // The chain must actually exercise all three modes.
+        assert_eq!(buf[0], 0, "first write is a full blob");
+        assert_eq!(buf[boundaries[0]], 1, "single-byte change picks RLE");
+        assert_eq!(buf[boundaries[1]], 2, "scattered change picks XOR+zstd");
+
+        let mut owned = DiffDecoder::new();
+        let mut borrowed = DiffDecoder::new();
+        let mut owned_cur = Cursor::new(&buf[..]);
+        let mut borrowed_cur = Cursor::new(&buf[..]);
+        for (expected, boundary) in [&v1, &v2, &v3, &v4].iter().zip(&boundaries) {
+            owned.set_key(key);
+            borrowed.set_key(key);
+            let got_owned = owned.decode_blob(&mut owned_cur).unwrap();
+            let got_borrowed = borrowed.decode_blob_ref(&mut borrowed_cur).unwrap();
+            assert_eq!(&got_owned, *expected);
+            assert_eq!(got_borrowed, expected.as_slice());
+            assert_eq!(borrowed_cur.position(), *boundary);
+        }
+    }
+
+    /// Without an active key, a full blob decodes into the internal scratch
+    /// and diff modes fail exactly like the owned path.
+    #[test]
+    fn test_decode_blob_ref_without_key() {
+        let data = vec![9u8; 100];
+        let mut encoder = DiffEncoder::new();
+        let mut buf = Vec::new();
+        encoder.encode_blob(&data, &mut buf).unwrap(); // no key: full blob
+
+        let mut decoder = DiffDecoder::new();
+        let mut cursor = Cursor::new(&buf[..]);
+        assert_eq!(decoder.decode_blob_ref(&mut cursor).unwrap(), &data[..]);
+        assert_eq!(decoder.num_keys(), 0, "keyless blob is not stored");
+    }
+
+    /// Mode 1/2 payloads without a stored old blob must error (not panic,
+    /// not fabricate) on the borrowed path, matching the owned path.
+    #[test]
+    fn test_decode_blob_ref_missing_old_blob_errors() {
+        let old: Vec<u8> = (0..2048).map(|i| (i % 250) as u8).collect();
+        let mut new = old.clone();
+        new[5] ^= 0xAA;
+
+        // Encode a chain so the second segment is a real diff...
+        let mut encoder = DiffEncoder::new();
+        let mut buf = Vec::new();
+        encoder.set_key(1);
+        encoder.encode_blob(&old, &mut buf).unwrap();
+        let diff_start = buf.len();
+        encoder.set_key(1);
+        encoder.encode_blob(&new, &mut buf).unwrap();
+        assert_eq!(buf[diff_start], 1, "second segment must be a diff");
+
+        // ...then decode only the diff with an empty store.
+        let mut decoder = DiffDecoder::new();
+        decoder.set_key(1);
+        let mut cursor = Cursor::new(&buf[diff_start..]);
+        assert!(decoder.decode_blob_ref(&mut cursor).is_err());
     }
 }

@@ -207,27 +207,50 @@ pub fn zstd_compress(input: &[u8]) -> Result<Vec<u8>> {
 /// that inner loop's code footprint.
 #[inline(never)]
 pub fn zstd_decompress(compressed: &[u8], original_len: usize) -> Result<Vec<u8>> {
-    // SAFETY: `out` is immediately passed to `zstd_safe::decompress` which writes
-    // exactly `original_len` bytes (verified below). We never return `out` without
-    // confirming `written == original_len`. Skipping zero-init saves a memset
-    // that zstd would overwrite anyway.
+    let mut out = Vec::new();
+    zstd_decompress_into(compressed, original_len, &mut out)?;
+    Ok(out)
+}
+
+/// [`zstd_decompress`] into a caller-provided buffer whose capacity is
+/// reused — the allocation-free variant for callers that decompress in a
+/// loop (e.g. the diff decoder's borrowed path). `out` is cleared first and
+/// holds exactly the decompressed bytes on success (cleared on error).
+///
+/// `#[inline(never)]` — same i-cache reasoning as [`zstd_decompress`].
+#[inline(never)]
+pub fn zstd_decompress_into(
+    compressed: &[u8],
+    original_len: usize,
+    out: &mut Vec<u8>,
+) -> Result<()> {
+    out.clear();
+    out.reserve(original_len);
+    // SAFETY: `out` is immediately passed to `zstd_safe::decompress` which
+    // writes exactly `original_len` bytes (verified below). On every error
+    // path we clear `out`, so callers never observe the uninitialized
+    // region. Skipping zero-init saves a memset zstd would overwrite anyway.
     #[allow(clippy::uninit_vec)]
-    let mut out: Vec<u8> = unsafe {
-        let mut v = Vec::with_capacity(original_len);
-        v.set_len(original_len);
-        v
-    };
+    unsafe {
+        out.set_len(original_len);
+    }
     #[cfg(feature = "std")]
-    let written = ZSTD_STATE
-        .with(|cell| cell.borrow_mut().dctx.decompress(&mut out[..], compressed))
-        .map_err(|_| Error::InvalidData)?;
-    #[cfg(not(feature = "std"))]
     let written =
-        zstd_safe::decompress(&mut out[..], compressed).map_err(|_| Error::InvalidData)?;
+        ZSTD_STATE.with(|cell| cell.borrow_mut().dctx.decompress(&mut out[..], compressed));
+    #[cfg(not(feature = "std"))]
+    let written = zstd_safe::decompress(&mut out[..], compressed);
+    let written = match written {
+        Ok(written) => written,
+        Err(_) => {
+            out.clear();
+            return Err(Error::InvalidData);
+        }
+    };
     if written != original_len {
+        out.clear();
         return Err(Error::IncorrectLength);
     }
-    Ok(out)
+    Ok(())
 }
 
 /// Returns the frame's declared content size, if present.
