@@ -134,6 +134,8 @@ impl DedupeDecodeable for MyPubkey {
 
 Supported byte types: `Vec<u8>`, `&[u8]`, `[u8; N]`, `VecDeque<u8>`. Set a key via `set_key()` on the diff encoder/decoder before each `encode_ext`/`decode_ext` call to opt in.
 
+On the decode side, `DiffDecoder::decode_blob` returns an owned `Vec<u8>`, while `DiffDecoder::decode_blob_ref` returns a borrow of the reconstruction owned by the decoder's store — the zero‑copy path, allocation‑free in steady state (buffers recycle across calls). Prefer the borrowed variant on hot paths that copy the result into their own storage anyway.
+
 ```rust
 use lencode::prelude::*;
 use lencode::context::{EncoderContext, DecoderContext};

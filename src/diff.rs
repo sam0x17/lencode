@@ -7,7 +7,12 @@
 //! 2. **XOR + zstd** — XOR the old and new blobs, then zstd-compress the result
 //!    (mostly zeros with sparse non-zero bytes compress extremely well)
 //!
-//! [`DiffDecoder`] reconstructs the full blob from either format.
+//! [`DiffDecoder`] reconstructs the full blob from either format. Two decode
+//! flavors are offered: [`decode_blob`](DiffDecoder::decode_blob) returns an
+//! owned `Vec`, while [`decode_blob_ref`](DiffDecoder::decode_blob_ref)
+//! returns a borrow of the reconstruction owned by the decoder's store —
+//! the zero-copy path, allocation-free in steady state and preferred on hot
+//! paths that copy the result into their own storage anyway.
 //!
 //! Diff encoding is automatically wired into `Encode`/`Decode` for `Vec<u8>`,
 //! `&[u8]`, `[u8; N]`, and `VecDeque<u8>` when an [`EncoderContext`]/[`DecoderContext`]
@@ -490,6 +495,29 @@ impl DiffDecoder {
     /// active key the reconstruction lives in an internal scratch until the
     /// next call. The borrow ends at the next decode; copy out (e.g. into
     /// an arena) anything you keep.
+    ///
+    /// ```
+    /// use lencode::diff::{DiffDecoder, DiffEncoder};
+    /// use lencode::io::Cursor;
+    ///
+    /// let v1 = vec![7u8; 256];
+    /// let mut v2 = v1.clone();
+    /// v2[9] = 0; // small change → the second segment encodes as a diff
+    ///
+    /// let mut encoder = DiffEncoder::new();
+    /// let mut buf = Vec::new();
+    /// encoder.set_key(42);
+    /// encoder.encode_blob(&v1, &mut buf).unwrap();
+    /// encoder.set_key(42);
+    /// encoder.encode_blob(&v2, &mut buf).unwrap();
+    ///
+    /// let mut decoder = DiffDecoder::new();
+    /// let mut cursor = Cursor::new(&buf[..]);
+    /// decoder.set_key(42);
+    /// assert_eq!(decoder.decode_blob_ref(&mut cursor).unwrap(), &v1[..]);
+    /// decoder.set_key(42);
+    /// assert_eq!(decoder.decode_blob_ref(&mut cursor).unwrap(), &v2[..]);
+    /// ```
     pub fn decode_blob_ref(&mut self, reader: &mut impl Read) -> Result<&[u8]> {
         let mode = Lencode::decode_varint_u64(reader)?;
 
