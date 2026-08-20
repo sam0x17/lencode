@@ -23,13 +23,13 @@ Compact, fast binary encoding with varints, optional deduplication, and opportun
 
 ```toml
 [dependencies]
-lencode = "0.1"
+lencode = "1.2"
 
 # With standard library types (e.g., Cow)
-lencode = { version = "0.1", features = ["std"] }
+lencode = { version = "1.2", features = ["std"] }
 
 # With Solana type support (implies std)
-lencode = { version = "0.1", features = ["solana"] }
+lencode = { version = "1.2", features = ["solana"] }
 ```
 
 ## Quick start
