@@ -1,6 +1,6 @@
 [workspace]
 members = ["macros", "."]
-package.version = "1.2.0"
+package.version = "1.2.1"
 
 [package]
 name = "lencode"

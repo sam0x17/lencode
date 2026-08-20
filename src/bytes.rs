@@ -117,9 +117,16 @@ pub(crate) fn compress_and_write(
     {
         ZSTD_STATE.with(|cell| {
             let mut state = cell.borrow_mut();
+            // `Vec::reserve` is relative to `len`, not `capacity` — clear
+            // first so `reserve(bound)` guarantees `capacity >= bound`. The
+            // previous arithmetic (`reserve(bound - capacity)`) under-reserved
+            // whenever an earlier smaller-bound call had left `len < capacity`:
+            // `set_len(bound)` then exceeded the allocation and zstd wrote
+            // past the end of the heap block (caught by ASAN on real mainnet
+            // transaction payloads).
+            state.scratch.clear();
             if state.scratch.capacity() < bound {
-                let extra = bound - state.scratch.capacity();
-                state.scratch.reserve(extra);
+                state.scratch.reserve(bound);
             }
             // SAFETY: capacity is at least `bound`; zstd writes only the bytes
             // it returns, and we slice to that length below.
@@ -397,5 +404,50 @@ mod tests {
         let mut w2 = VecWriter::new();
         Encode::encode_ext(&payload, &mut w2, None).unwrap();
         assert_eq!(w1.into_inner(), w2.into_inner());
+    }
+}
+
+#[cfg(all(test, feature = "std"))]
+mod scratch_reserve_regression {
+    use super::*;
+
+    /// Reproduces the scratch under-reservation overflow: a first call sizes
+    /// the scratch allocation exactly to its bound, a second smaller call
+    /// leaves `len < capacity`, and a third call whose bound exceeds capacity
+    /// used to under-reserve (reserve is len-relative), hand zstd phantom
+    /// capacity via `set_len`, and let it write past the heap block. With the
+    /// fix, every call sees a correctly sized scratch; under ASAN the old
+    /// code fails this test with a heap-buffer-overflow.
+    #[test]
+    fn scratch_regrows_after_smaller_bound_call() {
+        let mut sink = crate::io::VecWriter::default();
+
+        // Call 1: compressible, establishes scratch capacity ~= bound(777).
+        let a = vec![0xAB_u8; 777];
+        compress_and_write(&a, &mut sink).unwrap();
+
+        // Call 2: smaller compressible payload drops scratch len below
+        // capacity.
+        let b = vec![0xCD_u8; 200];
+        compress_and_write(&b, &mut sink).unwrap();
+
+        // Call 3: incompressible payload whose bound exceeds capacity but
+        // whose (old, wrong) reserve request fit inside it. zstd's attempt
+        // expands the input and must have real room to do so.
+        let mut x: u32 = 0x1234_5678;
+        let c: Vec<u8> = (0..810)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 17;
+                x ^= x << 5;
+                (x >> 24) as u8
+            })
+            .collect();
+        let res = compress_and_write(&c, &mut sink).unwrap();
+        assert!(res.is_none(), "incompressible payload must not be kept");
+
+        // Scratch must remain coherent for further use.
+        let d = vec![0xEF_u8; 4096];
+        compress_and_write(&d, &mut sink).unwrap();
     }
 }
