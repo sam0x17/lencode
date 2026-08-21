@@ -1,7 +1,7 @@
 {
-  "version": 9,
+  "version": 10,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T21:20:00Z",
+  "updated_at": "2026-08-21T21:45:00Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -638,6 +638,18 @@
     {
       "optimization": "move short-buffer u64 varint decoding out of the always-inlined fast path",
       "reason": "three interleaved primary-corpus A/B pairs improved normalized plain decode by only about 0.6%, while normalized dictionary decode was noisy and slightly worse overall; bytes and fingerprints were identical, so the extra cold helpers were reverted below the 5% keep threshold"
+    },
+    {
+      "optimization": "emit raw-prefix, RLE, and raw-suffix zstd frames for payloads with 128-byte runs",
+      "reason": "the standards-compliant frames round-tripped through the existing decoder and bypassed generic compression for 1,293 primary-corpus payloads, but normalized speed improved only about 0.5-1.5% while plain and dictionary output grew 0.60% and 0.93%; the custom frame builder was removed below threshold"
+    },
+    {
+      "optimization": "relax forced inlining on generic Vec decoding",
+      "reason": "a primary-corpus A/B pair regressed normalized plain and dictionary decode by roughly 6%; inline(always) was restored"
+    },
+    {
+      "optimization": "configure zstd target length 32 through a reusable compression context",
+      "reason": "three interleaved primary-corpus A/B pairs improved normalized plain decode by about 1-2% and plain encode by about 3%, but dictionary encode regressed while plain and dictionary output grew 0.59% and 0.91%; the custom parameter and compress2 path were reverted below threshold"
     }
   ],
   "full_resets": [],
