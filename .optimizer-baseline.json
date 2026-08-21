@@ -1,7 +1,7 @@
 {
   "version": 17,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T23:49:50Z",
+  "updated_at": "2026-08-21T23:59:02Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -914,6 +914,10 @@
     {
       "optimization": "special-case the dominant 0x90 full-width u128 decode header",
       "reason": "paired exact-binary runs left u128 decode unchanged at 6.136 ns versus 6.137 ns; i128 decode improved only 3.7% from 7.146 ns to 6.883 ns, below the keep threshold, so the duplicated safe full-width load path was removed"
+    },
+    {
+      "optimization": "decode homogeneous dictionary IDs through a range-proven u32 varint path",
+      "reason": "an 11-round exact-binary primary-corpus pair moved dictionary decode from 31.852 ms to 32.155 ms; after normalizing to the unchanged wincode control, the candidate was 0.8% slower, and the fresh-context 128-key microbenchmark was unchanged at about 3.9 us, so the width specialization was removed"
     }
   ],
   "full_resets": [],
