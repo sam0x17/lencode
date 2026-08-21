@@ -1,7 +1,7 @@
 {
   "version": 17,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T23:14:25Z",
+  "updated_at": "2026-08-21T23:23:44Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -127,7 +127,7 @@
     "micro_message_wincode_decode": { "value": 58.554, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_encode": { "value": 1616.6, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" },
-    "micro_u64_pack": { "value": 7.054, "unit": "ns/iter" }
+    "micro_u64_pack": { "value": 1.131, "unit": "ns/iter" }
   },
   "final_summary": {
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
@@ -140,7 +140,7 @@
     "micro_message_decode_throughput_vs_wincode": 0.885331,
     "micro_message_encode_time_improvement_vs_original_pct": 43.697,
     "micro_pubkey_vec_dict_encode_time_improvement_vs_original_pct": 21.608,
-    "micro_u64_pack_time_improvement_pct": 11.91,
+    "micro_u64_pack_time_improvement_pct": 85.88,
     "all_feature_tests": { "unit": 186, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
@@ -585,6 +585,41 @@
       },
       "wire_bytes_changed": false,
       "copy_effect": "fixed-width values write their little-endian bytes through buf_mut/advance_mut instead of re-entering the generic writer copy path",
+      "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
+    },
+    {
+      "iteration": 19,
+      "optimization": "borrow fixed-width primitives' native bytes directly on little-endian targets",
+      "commit": null,
+      "kept": true,
+      "validation": "an exact-binary microbenchmark pair and an exact final-source primary-corpus A/B pair",
+      "micro_u64_pack": {
+        "baseline_ns": 7.058,
+        "candidate_ns": 1.131,
+        "latency_improvement_pct": 83.98,
+        "cumulative_vs_pre_direct_pack_ns": 8.008,
+        "cumulative_latency_improvement_pct": 85.88
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 130833722,
+        "baseline_wincode_decode_ns": 21153663,
+        "baseline_lencode_encode_ns": 142442967,
+        "baseline_lencode_decode_ns": 25229948,
+        "baseline_lencode_dict_encode_ns": 116682556,
+        "baseline_lencode_dict_decode_ns": 31902485,
+        "candidate_wincode_encode_ns": 130540781,
+        "candidate_wincode_decode_ns": 21146702,
+        "candidate_lencode_encode_ns": 141729834,
+        "candidate_lencode_decode_ns": 25494879,
+        "candidate_lencode_dict_encode_ns": 116676616,
+        "candidate_lencode_dict_decode_ns": 32148656,
+        "plain_encode_normalized_change_pct": -0.277,
+        "dict_encode_normalized_change_pct": 0.219,
+        "plain_decode_normalized_change_pct": 1.083,
+        "dict_decode_normalized_change_pct": 0.805
+      },
+      "wire_bytes_changed": false,
+      "copy_effect": "on little-endian targets, Pack now borrows Endianness::ne_bytes from the value instead of materializing a GenericArray before copying into the writer; big-endian targets retain the little-endian conversion",
       "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
     }
   ],
