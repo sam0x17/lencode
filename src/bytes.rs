@@ -15,7 +15,7 @@ use crate::prelude::*;
 use alloc::vec::Vec;
 
 /// zstd compression level used for byte-collections.
-const ZSTD_LEVEL: i32 = 1;
+const ZSTD_LEVEL: i32 = 2;
 
 /// Minimum payload size to attempt compression. Below this threshold,
 /// raw bytes are always used because compression overhead outweighs savings.
@@ -59,7 +59,29 @@ pub(crate) fn looks_incompressible(data: &[u8]) -> bool {
     }
     let distinct =
         bits[0].count_ones() + bits[1].count_ones() + bits[2].count_ones() + bits[3].count_ones();
-    distinct >= 28
+    if distinct >= 28 {
+        return true;
+    }
+
+    // Some medium-sized binary records have a structured prefix followed by
+    // mostly unique bytes. Sampling only the prefix sends them through zstd,
+    // where table construction costs far more than this bounded scan before
+    // compression ultimately loses to the raw representation.
+    if (128..=176).contains(&data.len()) {
+        let mut zeros = data[..32].iter().filter(|&&byte| byte == 0).count();
+        for &byte in &data[32..] {
+            bits[(byte >> 6) as usize] |= 1u64 << (byte & 63);
+            zeros += usize::from(byte == 0);
+        }
+        let distinct = bits[0].count_ones()
+            + bits[1].count_ones()
+            + bits[2].count_ones()
+            + bits[3].count_ones();
+        if distinct as usize * 2 >= data.len() && zeros * 12 <= data.len() {
+            return true;
+        }
+    }
+    false
 }
 
 // Thread-local zstd state (std only): a single TLS slot holds the CCtx, the
@@ -352,6 +374,24 @@ mod tests {
     use crate::io::VecWriter;
     use crate::prelude::Encode;
 
+    #[test]
+    fn structured_prefix_does_not_hide_incompressible_remainder() {
+        let mut payload = vec![0u8; 148];
+        for (index, byte) in payload[..32].iter_mut().enumerate() {
+            *byte = (index % 16 + 1) as u8;
+        }
+        for (index, byte) in payload[32..].iter_mut().enumerate() {
+            *byte = ((index * 73 + 19) % 251 + 1) as u8;
+        }
+        assert!(looks_incompressible(&payload));
+    }
+
+    #[test]
+    fn medium_repetitive_payload_remains_compressible() {
+        let payload: Vec<u8> = (0..148).map(|index| (index % 8 + 1) as u8).collect();
+        assert!(!looks_incompressible(&payload));
+    }
+
     /// Verifies that compressing the same input via the thread-local CCtx
     /// (used in the std fast path) produces the same bytes as a fresh
     /// per-call compression. Both feed into the same wire format helper, so
@@ -378,6 +418,24 @@ mod tests {
             writer_b.into_inner(),
             "thread-local CCtx and fresh-context paths must produce identical wire bytes"
         );
+    }
+
+    #[test]
+    fn zstd_level_change_is_wire_compatible() {
+        let payload = vec![0x2Au8; 512];
+        for level in [1, 2] {
+            let bound = zstd_safe::compress_bound(payload.len());
+            let mut compressed = vec![0u8; bound];
+            let written = zstd_safe::compress(&mut compressed[..], &payload, level)
+                .expect("zstd_safe::compress");
+            compressed.truncate(written);
+
+            let mut writer = VecWriter::new();
+            write_flagged_raw(&mut writer, &compressed, 1).unwrap();
+            let decoded: Vec<u8> =
+                crate::decode(&mut crate::io::Cursor::new(writer.as_slice())).unwrap();
+            assert_eq!(decoded, payload);
+        }
     }
 
     /// Round-trip test: encode through the fast path, decode through the

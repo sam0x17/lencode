@@ -35,14 +35,14 @@ impl DedupeDecodeable for Key64 {
 
 fn make_key32s(count: usize) -> Vec<Key32> {
     use rand::rngs::StdRng;
-    use rand::{RngExt, SeedableRng};
+    use rand::{Rng, SeedableRng};
     let mut rng = StdRng::seed_from_u64(0xBAC4);
     (0..count).map(|_| Key32(rng.random())).collect()
 }
 
 fn make_key64s(count: usize) -> Vec<Key64> {
     use rand::rngs::StdRng;
-    use rand::{RngExt, SeedableRng};
+    use rand::{Rng, SeedableRng};
     let mut rng = StdRng::seed_from_u64(0xBAC464);
     (0..count).map(|_| Key64(rng.random())).collect()
 }

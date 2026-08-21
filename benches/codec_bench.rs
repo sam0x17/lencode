@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use lencode::prelude::*;
 use rand::rngs::StdRng;
-use rand::{RngExt, SeedableRng};
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::hint::black_box;
 use std::io::Cursor;

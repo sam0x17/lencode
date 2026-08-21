@@ -2,7 +2,7 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lencode::prelude::*;
-use rand::{RngExt, rng};
+use rand::{Rng, rng};
 use std::collections::VecDeque;
 use std::hint::black_box;
 

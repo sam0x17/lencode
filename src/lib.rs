@@ -265,6 +265,29 @@ pub trait Encode {
         }
         Ok(total)
     }
+
+    /// Encodes a collection with access to the active encoder context.
+    ///
+    /// The default preserves the element-by-element contextual path. Types
+    /// with a bulk contextual representation can override this method.
+    #[inline(always)]
+    fn encode_slice_ext(
+        items: &[Self],
+        writer: &mut impl Write,
+        mut ctx: Option<&mut EncoderContext>,
+    ) -> Result<usize>
+    where
+        Self: Sized,
+    {
+        if ctx.is_none() {
+            return Self::encode_slice(items, writer);
+        }
+        let mut total = 0;
+        for item in items {
+            total += item.encode_ext(writer, ctx.as_deref_mut())?;
+        }
+        Ok(total)
+    }
 }
 
 /// Trait for types that can be decoded from a binary stream.
@@ -317,6 +340,29 @@ pub trait Decode {
         let mut vec = Vec::with_capacity(count);
         for _ in 0..count {
             vec.push(Self::decode_ext(reader, None)?);
+        }
+        Ok(vec)
+    }
+
+    /// Decodes a collection with access to the active decoder context.
+    ///
+    /// The default preserves the element-by-element contextual path. Types
+    /// with a bulk contextual representation can override this method.
+    #[inline(always)]
+    fn decode_vec_ext(
+        reader: &mut impl Read,
+        count: usize,
+        mut ctx: Option<&mut DecoderContext>,
+    ) -> Result<Vec<Self>>
+    where
+        Self: Sized,
+    {
+        if ctx.is_none() {
+            return Self::decode_vec(reader, count);
+        }
+        let mut vec = Vec::with_capacity(count);
+        for _ in 0..count {
+            vec.push(Self::decode_ext(reader, ctx.as_deref_mut())?);
         }
         Ok(vec)
     }
@@ -1183,14 +1229,7 @@ impl<T: Decode + 'static> Decode for Vec<T> {
         }
 
         let len = Self::decode_len(reader)?;
-        if ctx.is_none() {
-            return T::decode_vec(reader, len);
-        }
-        let mut vec = Vec::with_capacity(len);
-        for _ in 0..len {
-            vec.push(T::decode_ext(reader, ctx.as_deref_mut())?);
-        }
-        Ok(vec)
+        T::decode_vec_ext(reader, len, ctx)
     }
 }
 
@@ -1230,14 +1269,9 @@ impl<T: Encode + 'static> Encode for Vec<T> {
         if ctx.is_none() {
             // Pre-reserve to avoid intermediate reallocations: header + payload
             writer.reserve(self.len() * core::mem::size_of::<T>() + 9);
-            total_written += Self::encode_len(self.len(), writer)?;
-            total_written += T::encode_slice(self, writer)?;
-            return Ok(total_written);
         }
         total_written += Self::encode_len(self.len(), writer)?;
-        for item in self {
-            total_written += item.encode_ext(writer, ctx.as_deref_mut())?;
-        }
+        total_written += T::encode_slice_ext(self, writer, ctx)?;
         Ok(total_written)
     }
 }

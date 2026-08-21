@@ -24,7 +24,7 @@ impl DedupeDecodeable for Key32 {
 
 fn make_keys(count: usize, seed: u64) -> Vec<Key32> {
     use rand::rngs::StdRng;
-    use rand::{RngExt, SeedableRng};
+    use rand::{Rng, SeedableRng};
     let mut rng = StdRng::seed_from_u64(seed);
     (0..count).map(|_| Key32(rng.random())).collect()
 }
@@ -32,7 +32,7 @@ fn make_keys(count: usize, seed: u64) -> Vec<Key32> {
 fn make_hotset_keys(count: usize, hotset: &[Key32], hotset_pct: u8, seed: u64) -> Vec<Key32> {
     use rand::rngs::StdRng;
     use rand::seq::SliceRandom;
-    use rand::{RngExt, SeedableRng};
+    use rand::{Rng, SeedableRng};
     let mut rng = StdRng::seed_from_u64(seed);
     let mut out = Vec::with_capacity(count);
     for _ in 0..count {

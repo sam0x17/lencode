@@ -14,7 +14,7 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use lencode::io::VecWriter;
 use lencode::prelude::*;
 use rand::rngs::StdRng;
-use rand::{RngExt, SeedableRng};
+use rand::{Rng, SeedableRng};
 use std::hint::black_box;
 
 fn bench_heuristic_overhead(c: &mut Criterion) {

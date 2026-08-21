@@ -87,6 +87,36 @@ use crate::prelude::*;
 const DEFAULT_INITIAL_CAPACITY: usize = 128;
 const DEFAULT_NUM_TYPES: usize = 4;
 
+trait TypedVecStore: Any + Send + Sync {
+    fn clear(&mut self);
+}
+
+impl<T: Send + Sync + 'static> TypedVecStore for Vec<T> {
+    #[inline]
+    fn clear(&mut self) {
+        Vec::clear(self);
+    }
+}
+
+type TypedVec = (TypeId, Box<dyn TypedVecStore>);
+
+type ClearTypeStore = fn(&mut (dyn Any + Send + Sync));
+
+struct TypeStore {
+    type_id: TypeId,
+    values: SmallBox<dyn Any + Send + Sync, S8>,
+    clear: ClearTypeStore,
+    active: bool,
+}
+
+#[inline]
+fn clear_type_store<T: 'static, S: 'static>(store: &mut (dyn Any + Send + Sync)) {
+    store
+        .downcast_mut::<HashMap<T, usize, S>>()
+        .expect("typed dedupe map must match its TypeId")
+        .clear();
+}
+
 /// Immutable, shareable snapshot of a primed [`DedupeEncoder`].
 ///
 /// Built by calling [`DedupeEncoder::freeze`] on an encoder that has been
@@ -96,7 +126,7 @@ const DEFAULT_NUM_TYPES: usize = 4;
 /// *before* its own scratch layer, paying zero per-instance setup cost.
 pub struct FrozenEncoderState {
     // Per-type primed hashmaps, identical in shape to `DedupeEncoder::type_stores`.
-    type_stores: Vec<(TypeId, SmallBox<dyn Any + Send + Sync, S8>)>,
+    type_stores: Vec<TypeStore>,
     // Number of primed values; equal to the last-assigned ID.
     total_primed: usize,
 }
@@ -106,7 +136,7 @@ pub struct FrozenEncoderState {
 /// Companion to [`FrozenEncoderState`]; see [`DedupeDecoder::freeze`] and
 /// [`DedupeDecoder::with_frozen`].
 pub struct FrozenDecoderState {
-    typed_vec: Option<(TypeId, Box<dyn Any + Send + Sync>)>,
+    typed_vec: Option<TypedVec>,
     boxed_values: Vec<Box<dyn Any + Send + Sync>>,
     total_primed: usize,
 }
@@ -175,6 +205,20 @@ impl<T: DedupeEncodeable> Encode for T {
     fn encode_slice(items: &[Self], writer: &mut impl Write) -> Result<usize> {
         T::pack_slice(items, writer)
     }
+
+    #[inline(always)]
+    fn encode_slice_ext(
+        items: &[Self],
+        writer: &mut impl Write,
+        ctx: Option<&mut crate::context::EncoderContext>,
+    ) -> Result<usize> {
+        if let Some(ctx) = ctx
+            && let Some(encoder) = ctx.dedupe.as_mut()
+        {
+            return encoder.encode_many::<T, T::Hasher>(items, writer);
+        }
+        T::pack_slice(items, writer)
+    }
 }
 
 /// Marker trait for types eligible for deduplicated decoding.
@@ -210,6 +254,20 @@ impl<T: DedupeDecodeable> Decode for T {
     fn decode_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
         T::unpack_vec(reader, count)
     }
+
+    #[inline(always)]
+    fn decode_vec_ext(
+        reader: &mut impl Read,
+        count: usize,
+        ctx: Option<&mut crate::context::DecoderContext>,
+    ) -> Result<Vec<Self>> {
+        if let Some(ctx) = ctx
+            && let Some(decoder) = ctx.dedupe.as_mut()
+        {
+            return decoder.decode_many::<T>(reader, count);
+        }
+        T::unpack_vec(reader, count)
+    }
 }
 
 /// Stateful encoder that replaces repeated values with compact IDs.
@@ -229,7 +287,7 @@ pub struct DedupeEncoder {
     // Typical workloads use 1–4 types, where a linear scan over a Vec is
     // significantly faster than hashing a TypeId through a HashMap.
     // Contains scratch (non-frozen) values only.
-    type_stores: Vec<(TypeId, SmallBox<dyn Any + Send + Sync, S8>)>,
+    type_stores: Vec<TypeStore>,
     // Next ID to assign. Starts at 1 with no frozen state, or at
     // `frozen.total_primed + 1` when frozen.
     next_id: usize,
@@ -305,11 +363,12 @@ impl DedupeEncoder {
     /// Panics if `self` was constructed via [`Self::with_frozen`]. A frozen
     /// encoder's scratch layer is not safe to freeze because its IDs start
     /// after the existing frozen range.
-    pub fn freeze(self) -> FrozenEncoderState {
+    pub fn freeze(mut self) -> FrozenEncoderState {
         assert!(
             self.frozen.is_none(),
             "cannot freeze an encoder that already has a frozen state"
         );
+        self.type_stores.retain(|store| store.active);
         FrozenEncoderState {
             type_stores: self.type_stores,
             total_primed: self.next_id - 1,
@@ -323,7 +382,12 @@ impl DedupeEncoder {
     /// unique IDs above the frozen range. Frozen entries are never cleared.
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.type_stores.clear();
+        for store in &mut self.type_stores {
+            if store.active {
+                (store.clear)(&mut *store.values);
+                store.active = false;
+            }
+        }
         self.next_id = self.frozen_total_primed + 1;
     }
 
@@ -343,20 +407,24 @@ impl DedupeEncoder {
     /// Returns the number of distinct types that have been stored.
     #[inline(always)]
     pub fn num_types(&self) -> usize {
-        self.type_stores.len()
+        self.type_stores.iter().filter(|store| store.active).count()
     }
 
     /// Returns an iterator over the [`TypeId`]s of all stored types.
     #[inline(always)]
     pub fn type_ids(&self) -> impl Iterator<Item = TypeId> + '_ {
-        self.type_stores.iter().map(|(id, _)| *id)
+        self.type_stores
+            .iter()
+            .filter_map(|store| store.active.then_some(store.type_id))
     }
 
     /// Returns `true` if any entries exist for type `T`.
     #[inline]
     pub fn contains_type<T: 'static>(&self) -> bool {
         let type_id = TypeId::of::<T>();
-        self.type_stores.iter().any(|(id, _)| *id == type_id)
+        self.type_stores
+            .iter()
+            .any(|store| store.active && store.type_id == type_id)
     }
 
     /// Returns the number of unique values stored for type `T`.
@@ -372,8 +440,8 @@ impl DedupeEncoder {
         let type_id = TypeId::of::<T>();
         self.type_stores
             .iter()
-            .find(|(id, _)| *id == type_id)
-            .and_then(|(_, store)| store.downcast_ref::<HashMap<T, usize, S>>())
+            .find(|store| store.active && store.type_id == type_id)
+            .and_then(|store| store.values.downcast_ref::<HashMap<T, usize, S>>())
             .map_or(0, |m| m.len())
     }
 
@@ -390,8 +458,8 @@ impl DedupeEncoder {
         let type_id = TypeId::of::<T>();
         self.type_stores
             .iter()
-            .find(|(id, _)| *id == type_id)
-            .and_then(|(_, store)| store.downcast_ref::<HashMap<T, usize, S>>())
+            .find(|store| store.active && store.type_id == type_id)
+            .and_then(|store| store.values.downcast_ref::<HashMap<T, usize, S>>())
             .into_iter()
             .flat_map(|m| m.keys())
     }
@@ -404,7 +472,11 @@ impl DedupeEncoder {
     #[inline]
     pub fn clear_type<T: Hash + Eq + Send + Sync + 'static>(&mut self) {
         let type_id = TypeId::of::<T>();
-        if let Some(pos) = self.type_stores.iter().position(|(id, _)| *id == type_id) {
+        if let Some(pos) = self
+            .type_stores
+            .iter()
+            .position(|store| store.type_id == type_id)
+        {
             self.type_stores.swap_remove(pos);
         }
     }
@@ -415,10 +487,9 @@ impl DedupeEncoder {
     /// This is a rough lower bound: it accounts for the vec overhead and
     /// stored key/value sizes but not allocator metadata.
     #[inline]
-    pub fn memory_usage(&self) -> usize {
+    pub const fn memory_usage(&self) -> usize {
         use core::mem::size_of;
-        let mut total = self.type_stores.capacity()
-            * (size_of::<TypeId>() + size_of::<SmallBox<dyn Any + Send + Sync, S8>>());
+        let mut total = self.type_stores.capacity() * size_of::<TypeStore>();
 
         let entry_count = self.len();
         total += entry_count * size_of::<usize>() * 3;
@@ -453,31 +524,45 @@ impl DedupeEncoder {
         // Check frozen (immutable) state first, if present. Most real-world
         // hits for the horizon use case land here.
         if let Some(frozen) = &self.frozen
-            && let Some((_, store)) = frozen.type_stores.iter().find(|(id, _)| *id == type_id)
+            && let Some(store) = frozen
+                .type_stores
+                .iter()
+                .find(|store| store.type_id == type_id)
         {
             // SAFETY: same invariant as in scratch path — slot was inserted as
             // HashMap<T, usize, S>.
             let typed_store: &HashMap<T, usize, S> = unsafe {
-                &*(&**store as *const (dyn Any + Send + Sync) as *const HashMap<T, usize, S>)
+                &*(&*store.values as *const (dyn Any + Send + Sync) as *const HashMap<T, usize, S>)
             };
             if let Some(&existing_id) = typed_store.get(val) {
-                return Lencode::encode_varint(existing_id, writer);
+                return Lencode::encode_varint_u64(existing_id as u64, writer);
             }
         }
 
         // Linear scan for the type-specific scratch store. For the typical 1–4 types
         // this is faster than hashing a TypeId through a HashMap.
-        let store = match self.type_stores.iter_mut().find(|(id, _)| *id == type_id) {
-            Some((_, store)) => store,
+        let store = match self
+            .type_stores
+            .iter_mut()
+            .find(|store| store.type_id == type_id)
+        {
+            Some(store) => {
+                if !store.active {
+                    store.active = true;
+                }
+                &mut store.values
+            }
             None => {
-                self.type_stores.push((
+                self.type_stores.push(TypeStore {
                     type_id,
-                    smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
+                    values: smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
                         self.initial_capacity,
                         S::default(),
                     )),
-                ));
-                &mut self.type_stores.last_mut().unwrap().1
+                    clear: clear_type_store::<T, S>,
+                    active: true,
+                });
+                &mut self.type_stores.last_mut().unwrap().values
             }
         };
 
@@ -492,7 +577,7 @@ impl DedupeEncoder {
         // Check if we've already seen this value in scratch
         if let Some(&existing_id) = typed_store.get(val) {
             // Value has been seen before, encode its ID
-            return Lencode::encode_varint(existing_id, writer);
+            return Lencode::encode_varint_u64(existing_id as u64, writer);
         }
 
         // New value - assign an ID and store it
@@ -504,8 +589,83 @@ impl DedupeEncoder {
 
         // Encode as new value (ID 0 followed by the actual value)
         let mut total_bytes = 0;
-        total_bytes += Lencode::encode_varint(0usize, writer)?; // Special ID for new values
+        total_bytes += Lencode::encode_varint_u64(0, writer)?; // Special ID for new values
         total_bytes += val.pack(writer)?;
+        Ok(total_bytes)
+    }
+
+    /// Encodes a homogeneous collection after resolving its frozen and
+    /// scratch maps once. The scratch map remains inactive when every value
+    /// is frozen, matching the per-value path's externally visible state.
+    #[inline(never)]
+    fn encode_many<T, S>(&mut self, values: &[T], writer: &mut impl Write) -> Result<usize>
+    where
+        T: Hash + Eq + Pack + Clone + Send + Sync + 'static,
+        S: BuildHasher + Default + Send + Sync + 'static,
+    {
+        if values.is_empty() {
+            return Ok(0);
+        }
+
+        let type_id = TypeId::of::<T>();
+        let frozen_store = self.frozen.as_ref().and_then(|frozen| {
+            frozen
+                .type_stores
+                .iter()
+                .find(|store| store.type_id == type_id)
+                .map(|store| {
+                    store
+                        .values
+                        .downcast_ref::<HashMap<T, usize, S>>()
+                        .expect("typed frozen map must match its TypeId")
+                })
+        });
+
+        let initial_capacity = self.initial_capacity;
+        let store = match self
+            .type_stores
+            .iter_mut()
+            .find(|store| store.type_id == type_id)
+        {
+            Some(store) => store,
+            None => {
+                self.type_stores.push(TypeStore {
+                    type_id,
+                    values: smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
+                        initial_capacity,
+                        S::default(),
+                    )),
+                    clear: clear_type_store::<T, S>,
+                    active: false,
+                });
+                self.type_stores.last_mut().unwrap()
+            }
+        };
+        let active = &mut store.active;
+        let scratch_store = store
+            .values
+            .downcast_mut::<HashMap<T, usize, S>>()
+            .expect("typed scratch map must match its TypeId");
+        let next_id = &mut self.next_id;
+
+        let mut total_bytes = 0;
+        for value in values {
+            if let Some(existing_id) = frozen_store.and_then(|store| store.get(value)).copied() {
+                total_bytes += Lencode::encode_varint_u64(existing_id as u64, writer)?;
+                continue;
+            }
+            if let Some(existing_id) = scratch_store.get(value).copied() {
+                total_bytes += Lencode::encode_varint_u64(existing_id as u64, writer)?;
+                continue;
+            }
+
+            *active = true;
+            let new_id = *next_id;
+            *next_id += 1;
+            scratch_store.insert(value.clone(), new_id);
+            total_bytes += Lencode::encode_varint_u64(0, writer)?;
+            total_bytes += value.pack(writer)?;
+        }
         Ok(total_bytes)
     }
 
@@ -541,17 +701,28 @@ impl DedupeEncoder {
         );
         let type_id = TypeId::of::<T>();
 
-        let store = match self.type_stores.iter_mut().find(|(id, _)| *id == type_id) {
-            Some((_, store)) => store,
+        let store = match self
+            .type_stores
+            .iter_mut()
+            .find(|store| store.type_id == type_id)
+        {
+            Some(store) => {
+                if !store.active {
+                    store.active = true;
+                }
+                &mut store.values
+            }
             None => {
-                self.type_stores.push((
+                self.type_stores.push(TypeStore {
                     type_id,
-                    smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
+                    values: smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
                         self.initial_capacity,
                         S::default(),
                     )),
-                ));
-                &mut self.type_stores.last_mut().unwrap().1
+                    clear: clear_type_store::<T, S>,
+                    active: true,
+                });
+                &mut self.type_stores.last_mut().unwrap().values
             }
         };
 
@@ -589,7 +760,7 @@ pub struct DedupeDecoder {
     frozen_total_primed: usize,
     // Type-erased Vec<T> for the current (or only) decoded type.
     // Contains only scratch (novel) values.
-    typed_vec: Option<(TypeId, Box<dyn Any + Send + Sync>)>,
+    typed_vec: Option<TypedVec>,
     // Fallback for multi-type scenarios: scratch values stored as Box<dyn Any>.
     boxed_values: Vec<Box<dyn Any + Send + Sync>>,
     // Count of values in the scratch layer only.
@@ -666,7 +837,9 @@ impl DedupeDecoder {
     /// Clears cached scratch values. Frozen values are preserved.
     #[inline(always)]
     pub fn clear(&mut self) {
-        self.typed_vec = None;
+        if let Some((_, store)) = self.typed_vec.as_mut() {
+            store.clear();
+        }
         self.boxed_values.clear();
         self.scratch_count = 0;
     }
@@ -705,7 +878,7 @@ impl DedupeDecoder {
         &mut self,
         reader: &mut impl Read,
     ) -> Result<T> {
-        let id = Lencode::decode_varint::<usize>(reader)?;
+        let id = Lencode::decode_varint_u64(reader)? as usize;
         let type_id = TypeId::of::<T>();
         let total_primed = self.frozen_total_primed;
 
@@ -726,7 +899,7 @@ impl DedupeDecoder {
         {
             // SAFETY: we verified TypeId matches; the store holds a Vec<T>.
             let vec: &mut Vec<T> =
-                unsafe { &mut *(store.as_mut() as *mut (dyn Any + Send + Sync) as *mut Vec<T>) };
+                unsafe { &mut *(store.as_mut() as *mut dyn TypedVecStore as *mut Vec<T>) };
             if id == 0 {
                 let value = T::unpack(reader)?;
                 vec.push(value.clone());
@@ -742,7 +915,7 @@ impl DedupeDecoder {
         }
 
         // First call for this type: initialize the typed Vec
-        if self.typed_vec.is_none() && self.boxed_values.is_empty() {
+        if self.scratch_count == 0 && self.boxed_values.is_empty() {
             let mut vec: Vec<T> = Vec::with_capacity(DEFAULT_INITIAL_CAPACITY);
             if id == 0 {
                 let value = T::unpack(reader)?;
@@ -773,6 +946,92 @@ impl DedupeDecoder {
         }
     }
 
+    /// Decodes a homogeneous collection after validating its erased frozen
+    /// and scratch vectors once. Falls back to the general per-value path for
+    /// empty, multi-type, or not-yet-initialized decoder states.
+    #[inline(never)]
+    fn decode_many<T: Pack + Clone + Hash + Eq + Send + Sync + 'static>(
+        &mut self,
+        reader: &mut impl Read,
+        count: usize,
+    ) -> Result<Vec<T>> {
+        let type_id = TypeId::of::<T>();
+        let scratch_compatible = self.boxed_values.is_empty()
+            && self
+                .typed_vec
+                .as_ref()
+                .is_some_and(|(cached_type, _)| *cached_type == type_id);
+        let frozen_compatible = self.frozen_total_primed == 0
+            || self.frozen.as_ref().is_some_and(|frozen| {
+                frozen.boxed_values.is_empty()
+                    && frozen
+                        .typed_vec
+                        .as_ref()
+                        .is_some_and(|(cached_type, _)| *cached_type == type_id)
+            });
+
+        if count == 0 || !scratch_compatible || !frozen_compatible {
+            let mut values = Vec::with_capacity(count);
+            for _ in 0..count {
+                values.push(self.decode::<T>(reader)?);
+            }
+            return Ok(values);
+        }
+
+        let total_primed = self.frozen_total_primed;
+        let frozen_vec = if total_primed == 0 {
+            None
+        } else {
+            let frozen = self
+                .frozen
+                .as_ref()
+                .expect("primed decoder has frozen state");
+            let (_, store) = frozen
+                .typed_vec
+                .as_ref()
+                .expect("compatible frozen state has a typed vector");
+            let store: &dyn Any = store.as_ref();
+            Some(
+                store
+                    .downcast_ref::<Vec<T>>()
+                    .expect("typed frozen vector must match its TypeId"),
+            )
+        };
+
+        let (_, store) = self
+            .typed_vec
+            .as_mut()
+            .expect("compatible scratch state has a typed vector");
+        let store: &mut dyn Any = store.as_mut();
+        let scratch_vec = store
+            .downcast_mut::<Vec<T>>()
+            .expect("typed scratch vector must match its TypeId");
+
+        let mut values = Vec::with_capacity(count);
+        for _ in 0..count {
+            let id = Lencode::decode_varint_u64(reader)? as usize;
+            if id != 0 && id <= total_primed {
+                let value = frozen_vec
+                    .and_then(|vec| vec.get(id - 1))
+                    .ok_or(crate::io::Error::InvalidData)?;
+                values.push(value.clone());
+                continue;
+            }
+            if id == 0 {
+                let value = T::unpack(reader)?;
+                scratch_vec.push(value.clone());
+                self.scratch_count += 1;
+                values.push(value);
+                continue;
+            }
+            let value = scratch_vec
+                .get(id - total_primed - 1)
+                .ok_or(crate::io::Error::InvalidData)?;
+            values.push(value.clone());
+        }
+        Ok(values)
+    }
+
     /// Pre-populates the decoder's cache with a value without reading from any
     /// input stream.
     ///
@@ -798,14 +1057,14 @@ impl DedupeDecoder {
         {
             // SAFETY: TypeId matches; store holds a Vec<T>.
             let vec: &mut Vec<T> =
-                unsafe { &mut *(store.as_mut() as *mut (dyn Any + Send + Sync) as *mut Vec<T>) };
+                unsafe { &mut *(store.as_mut() as *mut dyn TypedVecStore as *mut Vec<T>) };
             vec.push(val);
             self.scratch_count += 1;
             return;
         }
 
         // First call for this type: initialize the typed Vec
-        if self.typed_vec.is_none() && self.boxed_values.is_empty() {
+        if self.scratch_count == 0 && self.boxed_values.is_empty() {
             let mut vec: Vec<T> = Vec::with_capacity(DEFAULT_INITIAL_CAPACITY);
             vec.push(val);
             self.typed_vec = Some((type_id, Box::new(vec)));
@@ -831,8 +1090,7 @@ fn lookup_frozen<T: Clone + 'static>(
         && *cached_type == type_id
     {
         // SAFETY: TypeId matches; store holds a Vec<T>.
-        let vec: &Vec<T> =
-            unsafe { &*(&**store as *const (dyn Any + Send + Sync) as *const Vec<T>) };
+        let vec: &Vec<T> = unsafe { &*(&**store as *const dyn TypedVecStore as *const Vec<T>) };
         if let Some(v) = vec.get(vec_index) {
             return Ok(v.clone());
         }
@@ -850,9 +1108,118 @@ fn lookup_frozen<T: Clone + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{DecoderContext, EncoderContext};
     use crate::io::Cursor;
 
     type H = DefaultDedupeHasher;
+
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    struct BulkValue(u32);
+
+    impl Pack for BulkValue {
+        fn pack(&self, writer: &mut impl Write) -> Result<usize> {
+            self.0.pack(writer)
+        }
+
+        fn unpack(reader: &mut impl Read) -> Result<Self> {
+            u32::unpack(reader).map(Self)
+        }
+    }
+
+    impl DedupeEncodeable for BulkValue {
+        type Hasher = H;
+    }
+
+    impl DedupeDecodeable for BulkValue {
+        type Hasher = H;
+    }
+
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    struct OtherBulkValue(u64);
+
+    impl Pack for OtherBulkValue {
+        fn pack(&self, writer: &mut impl Write) -> Result<usize> {
+            self.0.pack(writer)
+        }
+
+        fn unpack(reader: &mut impl Read) -> Result<Self> {
+            u64::unpack(reader).map(Self)
+        }
+    }
+
+    impl DedupeEncodeable for OtherBulkValue {
+        type Hasher = H;
+    }
+
+    impl DedupeDecodeable for OtherBulkValue {
+        type Hasher = H;
+    }
+
+    #[test]
+    fn test_contextual_vec_decode_fast_path_roundtrip() {
+        let primed = [BulkValue(10), BulkValue(20), BulkValue(30)];
+        let mut primer_enc = DedupeEncoder::new();
+        let mut primer_dec = DedupeDecoder::new();
+        for value in &primed {
+            primer_enc.prime::<BulkValue, H>(value);
+            primer_dec.prime(value.clone());
+        }
+
+        let frozen_enc = Arc::new(primer_enc.freeze());
+        let frozen_dec = Arc::new(primer_dec.freeze());
+        let mut enc_ctx = EncoderContext {
+            dedupe: Some(DedupeEncoder::with_frozen(frozen_enc)),
+            diff: None,
+        };
+        let mut dec_ctx = DecoderContext {
+            dedupe: Some(DedupeDecoder::with_frozen(frozen_dec)),
+            diff: None,
+        };
+        let batches = [
+            vec![BulkValue(20), BulkValue(40), BulkValue(40), BulkValue(10)],
+            vec![BulkValue(30), BulkValue(50), BulkValue(10), BulkValue(50)],
+        ];
+
+        for expected in batches {
+            enc_ctx.dedupe.as_mut().unwrap().clear();
+            dec_ctx.dedupe.as_mut().unwrap().clear();
+            let mut buffer = Vec::new();
+            expected
+                .encode_ext(&mut buffer, Some(&mut enc_ctx))
+                .unwrap();
+            let decoded =
+                Vec::<BulkValue>::decode_ext(&mut Cursor::new(&buffer), Some(&mut dec_ctx))
+                    .unwrap();
+            assert_eq!(decoded, expected);
+        }
+    }
+
+    #[test]
+    fn test_contextual_vec_decode_multi_type_fallback() {
+        let mut enc_ctx = EncoderContext {
+            dedupe: Some(DedupeEncoder::new()),
+            diff: None,
+        };
+        let mut dec_ctx = DecoderContext {
+            dedupe: Some(DedupeDecoder::new()),
+            diff: None,
+        };
+        let first = vec![BulkValue(1), BulkValue(2)];
+        let second = vec![OtherBulkValue(3), OtherBulkValue(4)];
+        let mut buffer = Vec::new();
+        first.encode_ext(&mut buffer, Some(&mut enc_ctx)).unwrap();
+        second.encode_ext(&mut buffer, Some(&mut enc_ctx)).unwrap();
+
+        let mut cursor = Cursor::new(&buffer);
+        assert_eq!(
+            Vec::<BulkValue>::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap(),
+            first,
+        );
+        assert_eq!(
+            Vec::<OtherBulkValue>::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap(),
+            second,
+        );
+    }
 
     #[test]
     fn test_dedupe_encode_decode_roundtrip() {
