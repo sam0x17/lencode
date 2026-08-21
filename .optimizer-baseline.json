@@ -855,6 +855,10 @@
     {
       "optimization": "short-circuit random u128 varint length detection when the top byte is nonzero",
       "reason": "paired exact-binary runs left u128 encode effectively unchanged at 6.530 ns versus 6.537 ns and i128 encode at 6.565 ns versus 6.542 ns; LLVM's existing leading-zero sequence was already optimal, so the extra hot branch was removed below threshold"
+    },
+    {
+      "optimization": "special-case the dominant 0x90 full-width u128 decode header",
+      "reason": "paired exact-binary runs left u128 decode unchanged at 6.136 ns versus 6.137 ns; i128 decode improved only 3.7% from 7.146 ns to 6.883 ns, below the keep threshold, so the duplicated safe full-width load path was removed"
     }
   ],
   "full_resets": [],
