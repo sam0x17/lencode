@@ -1,7 +1,7 @@
 {
   "version": 17,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T23:23:44Z",
+  "updated_at": "2026-08-21T23:49:50Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -127,7 +127,12 @@
     "micro_message_wincode_decode": { "value": 58.554, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_encode": { "value": 1616.6, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" },
-    "micro_u64_pack": { "value": 1.131, "unit": "ns/iter" }
+    "micro_u64_pack": { "value": 1.131, "unit": "ns/iter" },
+    "diff_encode_4kb_1pct_scatter": { "value": 2.2669, "unit": "us/iter" },
+    "diff_encode_4kb_10pct_scatter": { "value": 14.733, "unit": "us/iter" },
+    "diff_encode_4kb_contiguous_64b": { "value": 1.5334, "unit": "us/iter" },
+    "diff_encode_64kb_1pct_scatter": { "value": 32.326, "unit": "us/iter" },
+    "diff_decode_4kb_1pct_scatter": { "value": 471.51, "unit": "ns/iter" }
   },
   "final_summary": {
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
@@ -141,6 +146,7 @@
     "micro_message_encode_time_improvement_vs_original_pct": 43.697,
     "micro_pubkey_vec_dict_encode_time_improvement_vs_original_pct": 21.608,
     "micro_u64_pack_time_improvement_pct": 85.88,
+    "diff_encode_4kb_10pct_time_improvement_pct": 50.635,
     "all_feature_tests": { "unit": 186, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
@@ -621,6 +627,55 @@
       "wire_bytes_changed": false,
       "copy_effect": "on little-endian targets, Pack now borrows Endianness::ne_bytes from the value instead of materializing a GenericArray before copying into the writer; big-endian targets retain the little-endian conversion",
       "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
+    },
+    {
+      "iteration": 20,
+      "optimization": "borrow RLE diff patch payloads directly from the new blob",
+      "commit": null,
+      "kept": true,
+      "validation": "paired exact-binary Criterion measurements, an exact final-source primary-corpus A/B pair, and cross-version wire fingerprints for eight patch shapes",
+      "diff_encode": {
+        "4kb_1pct_scatter": { "baseline_us": 3.1939, "candidate_us": 2.2669, "latency_improvement_pct": 29.024 },
+        "4kb_10pct_scatter": { "baseline_us": 29.845, "candidate_us": 14.733, "latency_improvement_pct": 50.635 },
+        "4kb_contiguous_64b": { "baseline_us": 1.5582, "candidate_us": 1.5334, "latency_improvement_pct": 1.592 },
+        "64kb_1pct_scatter": { "baseline_us": 55.660, "candidate_us": 32.326, "latency_improvement_pct": 41.922 }
+      },
+      "diff_decode_4kb_1pct_scatter": {
+        "baseline_ns": 469.59,
+        "candidate_ns": 471.51,
+        "latency_change_pct": 0.409
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 131027795,
+        "baseline_wincode_decode_ns": 21317494,
+        "baseline_lencode_encode_ns": 142723151,
+        "baseline_lencode_decode_ns": 25473387,
+        "baseline_lencode_dict_encode_ns": 116586682,
+        "baseline_lencode_dict_decode_ns": 32032217,
+        "candidate_wincode_encode_ns": 130659013,
+        "candidate_wincode_decode_ns": 21157724,
+        "candidate_lencode_encode_ns": 142807650,
+        "candidate_lencode_decode_ns": 25429547,
+        "candidate_lencode_dict_encode_ns": 116790232,
+        "candidate_lencode_dict_decode_ns": 31602916,
+        "plain_encode_normalized_change_pct": 0.342,
+        "dict_encode_normalized_change_pct": 0.457,
+        "plain_decode_normalized_change_pct": 0.582,
+        "dict_decode_normalized_change_pct": -0.595
+      },
+      "wire_bytes_changed": false,
+      "wire_fingerprints": {
+        "identical": "78c971855b4c3884",
+        "single": "66e81d400f77cf90",
+        "coalesced": "65759f1ab06790bc",
+        "scatter_1pct": "c01ba57aa8f09090",
+        "scatter_10pct": "6a9023063a124b8a",
+        "contiguous": "f09a89df99e9e495",
+        "appended": "df4ebb2aec89d5a0",
+        "truncated": "d575cdea4a0ae3a4"
+      },
+      "allocation_effect": "each RLE patch borrows its payload from the new blob, and coalescing widens that borrowed range, eliminating the per-patch payload allocation and copy while retaining the prior patch layout through Cow",
+      "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
     }
   ],
   "failed_attempts": [
@@ -892,6 +947,12 @@
       "variance_ratio": 1.22,
       "reruns": 3,
       "resolution": "the candidate binary's unchanged wincode encode control repeatedly ran near 159 ms versus 131 ms for the baseline binary; same-binary normalization showed only a 1-2% plain encode gain and a stable 4% dictionary encode regression, so the candidate was reverted"
+    },
+    {
+      "at_iteration": 20,
+      "variance_ratio": 1.76,
+      "reruns": 3,
+      "resolution": "the unchanged full-blob encode path ranged from 250 to 441 ns in the baseline and 170 to 269 ns in the candidate, so its median was treated as allocator noise; a long exact-binary rerun narrowed 4 KiB 1% scatter decode to 469.59 ns versus 471.51 ns"
     }
   ]
 }

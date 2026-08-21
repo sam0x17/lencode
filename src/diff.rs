@@ -48,7 +48,11 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
+use alloc::borrow::Cow;
+#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::borrow::Cow;
 
 use hashbrown::HashMap;
 
@@ -57,11 +61,11 @@ use crate::prelude::*;
 
 /// A single contiguous region of changed bytes.
 #[derive(Debug)]
-struct Patch {
+struct Patch<'a> {
     /// Byte offset in the new blob where this patch starts.
     offset: usize,
-    /// The changed bytes.
-    data: Vec<u8>,
+    /// Changed bytes borrowed from the new blob.
+    data: Cow<'a, [u8]>,
 }
 
 /// Minimum gap between patches before they get coalesced into one.
@@ -73,7 +77,8 @@ const COALESCE_GAP: usize = 8;
 /// Adjacent patches separated by fewer than [`COALESCE_GAP`] bytes are merged.
 /// Returns `None` if the patch data would exceed half the new blob size (full
 /// blob is more compact in that case).
-fn compute_patches(old: &[u8], new: &[u8]) -> Option<Vec<Patch>> {
+#[inline(never)]
+fn compute_patches<'a>(old: &[u8], new: &'a [u8]) -> Option<Vec<Patch<'a>>> {
     let min_len = old.len().min(new.len());
     let mut patches: Vec<Patch> = Vec::new();
     let mut i = 0;
@@ -88,7 +93,7 @@ fn compute_patches(old: &[u8], new: &[u8]) -> Option<Vec<Patch>> {
             }
             patches.push(Patch {
                 offset: start,
-                data: new[start..i].to_vec(),
+                data: Cow::Borrowed(&new[start..i]),
             });
         } else {
             i += 1;
@@ -99,7 +104,7 @@ fn compute_patches(old: &[u8], new: &[u8]) -> Option<Vec<Patch>> {
     if new.len() > old.len() {
         patches.push(Patch {
             offset: old.len(),
-            data: new[old.len()..].to_vec(),
+            data: Cow::Borrowed(&new[old.len()..]),
         });
     }
 
@@ -112,9 +117,9 @@ fn compute_patches(old: &[u8], new: &[u8]) -> Option<Vec<Patch>> {
             let last_end = last.offset + last.data.len();
             let gap = p.offset - last_end;
             if gap < COALESCE_GAP {
-                // Merge: extend last patch to cover the gap + new patch
-                last.data.extend_from_slice(&new[last_end..p.offset]);
-                last.data.extend_from_slice(&p.data);
+                // Merge by widening the borrowed range to cover the gap.
+                let p_end = p.offset + p.data.len();
+                last.data = Cow::Borrowed(&new[last.offset..p_end]);
             } else {
                 coalesced.push(p);
             }
@@ -344,7 +349,7 @@ impl DiffEncoder {
             let gap = patch.offset - cursor;
             Lencode::encode_varint_u64(gap as u64, &mut buf).ok()?;
             Lencode::encode_varint_u64(patch.data.len() as u64, &mut buf).ok()?;
-            buf.extend_from_slice(&patch.data);
+            buf.extend_from_slice(patch.data.as_ref());
             cursor = patch.offset + patch.data.len();
         }
         Some(buf)
