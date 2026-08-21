@@ -1,7 +1,7 @@
 {
   "version": 8,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T20:15:29Z",
+  "updated_at": "2026-08-21T21:08:22Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -610,6 +610,30 @@
     {
       "optimization": "raise the minimum byte-payload compression length from 96 to 112 bytes",
       "reason": "primary and epoch-940 normalized encode gains stayed near 1-2%, while epoch-959 normalized plain and dictionary encode regressed sharply; cutoff 112 was reverted and 96 retained as the measured knee"
+    },
+    {
+      "optimization": "batch scratch-count updates in homogeneous collection decoding",
+      "reason": "three interleaved primary-corpus A/B pairs improved dictionary decode by only about 1-2% with identical bytes and fingerprints; the error-safe bookkeeping closure was reverted below the 5% keep threshold"
+    },
+    {
+      "optimization": "use hashbrown's default foldhash builder for dedupe tables",
+      "reason": "three interleaved primary-corpus A/B pairs showed about a 4% dictionary-encode regression relative to the unchanged wincode control; ahash was restored"
+    },
+    {
+      "optimization": "remove the cold hint from compress_and_write",
+      "reason": "three interleaved primary-corpus A/B pairs moved normalized plain and dictionary encode by less than 0.3%; the hint was restored below the 5% keep threshold"
+    },
+    {
+      "optimization": "emit a standard zstd RLE frame directly for uniform byte payloads",
+      "reason": "all three 200,000-message corpora produced byte-for-byte identical output to the baseline, proving there were no eligible payloads at the active compression cutoff; the wire-compatible fast path was removed as dead complexity"
+    },
+    {
+      "optimization": "check existing writer capacity before reserving raw byte payloads",
+      "reason": "three interleaved primary-corpus A/B pairs improved normalized plain and dictionary encode by only about 0.3-0.8%; the extra generic-writer branch was reverted below the 5% keep threshold"
+    },
+    {
+      "optimization": "short-circuit medium entropy scans with first/last 32-byte diversity",
+      "reason": "the edge predicate preserved output and rejected no profitable compression across all three corpora, but three primary-corpus A/B pairs improved normalized encode by only about 0.1-0.3%; the extra scan was reverted below threshold"
     }
   ],
   "full_resets": [],
