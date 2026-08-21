@@ -812,6 +812,10 @@
     {
       "optimization": "compress zstd payloads directly into VecWriter spare capacity",
       "reason": "reserving raw-sized output capacity regressed the 512-byte compressible encode benchmark from about 958 ns to 1.004 us; restricting the path to capacity already owned still regressed a paired exact-binary baseline from 960.35 ns to 994.33 ns (3.5%), likely because the reusable compression scratch stays cache-hot, so both zero-copy variants were removed"
+    },
+    {
+      "optimization": "write contiguous transparent byte-array slices through buf_mut/advance_mut",
+      "reason": "an exact-binary A/B left the 128-key 4 KiB pack_slice benchmark effectively unchanged at 298.87 ns versus 298.48 ns, while the stable plain pubkey-vector encode moved from 81.07 ns to 82.50 ns (1.8% slower); the extra branch was removed below the 5% keep threshold"
     }
   ],
   "full_resets": [],
