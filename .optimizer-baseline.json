@@ -1,7 +1,7 @@
 {
-  "version": 13,
+  "version": 14,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T21:45:12Z",
+  "updated_at": "2026-08-21T21:53:15Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -698,6 +698,10 @@
     {
       "optimization": "fuse one-byte Vec<u8> headers with raw or compressed payload decoding",
       "reason": "three interleaved primary-corpus A/B pairs improved normalized dictionary decode by about 0-2% and plain decode by less than 1%, with identical wire output; the duplicated short-header decode path was reverted below the 5% keep threshold"
+    },
+    {
+      "optimization": "give bounded pre-sized VecWriter allocations 50% headroom",
+      "reason": "although 19% of primary messages exceed the benchmark's 512-byte capacity hint, retaining the extra capacity across 200,000 encoded messages increased memory pressure; normalized plain and dictionary encode throughput regressed about 12% and 24%, with larger downstream decode regressions, so exact-capacity construction was restored"
     }
   ],
   "full_resets": [],
