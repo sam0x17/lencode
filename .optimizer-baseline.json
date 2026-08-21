@@ -1,6 +1,7 @@
 {
-  "version": 5,
+  "version": 6,
   "created_at": "2026-08-21T16:32:52Z",
+  "updated_at": "2026-08-21T19:28:26Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -25,12 +26,12 @@
       "trials_per_run": 7,
       "independent_runs": 3,
       "current": {
-        "wincode_encode_ns": 145495749,
-        "wincode_decode_ns": 23120222,
-        "lencode_encode_ns": 198175930,
-        "lencode_decode_ns": 31304615,
-        "lencode_dict_encode_ns": 168652871,
-        "lencode_dict_decode_ns": 37769901,
+        "wincode_encode_ns": 165528178,
+        "wincode_decode_ns": 23175426,
+        "lencode_encode_ns": 212523264,
+        "lencode_decode_ns": 31392386,
+        "lencode_dict_encode_ns": 185793508,
+        "lencode_dict_decode_ns": 38357203,
         "wincode_bytes": 82210679,
         "lencode_dict_bytes": 50670979,
         "lencode_dict_reduction_pct": 38.36,
@@ -44,12 +45,12 @@
       "trials_per_run": 7,
       "independent_runs": 3,
       "current": {
-        "wincode_encode_ns": 173302519,
-        "wincode_decode_ns": 23227842,
-        "lencode_encode_ns": 252293103,
-        "lencode_decode_ns": 35294301,
-        "lencode_dict_encode_ns": 216459350,
-        "lencode_dict_decode_ns": 41107534,
+        "wincode_encode_ns": 172832599,
+        "wincode_decode_ns": 23284418,
+        "lencode_encode_ns": 246665864,
+        "lencode_decode_ns": 35327535,
+        "lencode_dict_encode_ns": 211025165,
+        "lencode_dict_decode_ns": 41523478,
         "wincode_bytes": 84634719,
         "lencode_dict_bytes": 48107788,
         "lencode_dict_reduction_pct": 43.16,
@@ -88,12 +89,12 @@
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2251.7, "unit": "ns/iter" }
   },
   "current_baseline": {
-    "real_wincode_encode": { "value": 132604098, "unit": "ns/200000 messages", "variance": 1315855 },
-    "real_wincode_decode": { "value": 21016094, "unit": "ns/200000 messages", "variance": 179370 },
-    "real_lencode_encode": { "value": 160651150, "unit": "ns/200000 messages", "variance": 1315467 },
-    "real_lencode_decode": { "value": 26762396, "unit": "ns/200000 messages", "variance": 104930 },
-    "real_lencode_dict_encode": { "value": 135780761, "unit": "ns/200000 messages", "variance": 455922 },
-    "real_lencode_dict_decode": { "value": 33283252, "unit": "ns/200000 messages", "variance": 144511 },
+    "real_wincode_encode": { "value": 132472642, "unit": "ns/200000 messages", "variance": 44047 },
+    "real_wincode_decode": { "value": 21150404, "unit": "ns/200000 messages", "variance": 128521 },
+    "real_lencode_encode": { "value": 158808398, "unit": "ns/200000 messages", "variance": 214968 },
+    "real_lencode_decode": { "value": 27045140, "unit": "ns/200000 messages", "variance": 128712 },
+    "real_lencode_dict_encode": { "value": 133495524, "unit": "ns/200000 messages", "variance": 79121 },
+    "real_lencode_dict_decode": { "value": 33243960, "unit": "ns/200000 messages", "variance": 167257 },
     "micro_message_lencode_encode": { "value": 119.19, "unit": "ns/iter" },
     "micro_message_wincode_encode": { "value": 77.151, "unit": "ns/iter" },
     "micro_message_lencode_decode": { "value": 62.977, "unit": "ns/iter" },
@@ -102,13 +103,13 @@
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" }
   },
   "final_summary": {
-    "primary_dict_encode_throughput_vs_wincode": 0.976604469,
-    "primary_dict_decode_throughput_vs_wincode": 0.631431508,
-    "primary_dict_encode_time_improvement_vs_original_pct": 4.090,
-    "primary_dict_decode_time_improvement_vs_original_pct": 36.012,
-    "primary_dict_encode_normalized_improvement_vs_original_pct": 10.424,
-    "primary_dict_decode_normalized_improvement_vs_original_pct": 54.088,
-    "all_feature_tests": { "unit": 183, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
+    "primary_dict_encode_throughput_vs_wincode": 0.992337706,
+    "primary_dict_decode_throughput_vs_wincode": 0.636217948,
+    "primary_dict_encode_time_improvement_vs_original_pct": 5.705,
+    "primary_dict_decode_time_improvement_vs_original_pct": 36.087,
+    "primary_dict_encode_normalized_improvement_vs_original_pct": 12.203,
+    "primary_dict_decode_normalized_improvement_vs_original_pct": 55.256,
+    "all_feature_tests": { "unit": 184, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
     "no_default_features_check": "passed"
@@ -324,6 +325,40 @@
       "primary_bytes_saved": 4799,
       "wire_compatible": true,
       "tests": "level-1 and level-2 frame compatibility test; three seven-trial runs on each corpus; 19 archive round trips"
+    },
+    {
+      "iteration": 13,
+      "optimization": "classify medium high-entropy payloads with up to 20% zero padding as incompressible",
+      "commit": null,
+      "kept": true,
+      "diagnostic": "across three 200,000-message corpora, the relaxed cutoff rejected 2,894 additional zstd attempts that all produced a larger result and rejected zero successful compressions",
+      "primary": {
+        "wincode_encode_ns": 132472642,
+        "lencode_encode_ns": 158808398,
+        "lencode_dict_encode_ns": 133495524,
+        "lencode_dict_decode_ns": 33243960,
+        "plain_encode_normalized_gain_pct": 0.808,
+        "dict_encode_normalized_gain_pct": 0.247,
+        "dict_decode_normalized_gain_pct": 0.625
+      },
+      "epoch_959_interleaved_ab": {
+        "baseline_plain_encode_ratio": 0.730649539,
+        "candidate_plain_encode_ratio": 0.778870863,
+        "plain_encode_normalized_gain_pct": 6.600,
+        "baseline_dict_encode_ratio": 0.861652624,
+        "candidate_dict_encode_ratio": 0.890925521,
+        "dict_encode_normalized_gain_pct": 3.397,
+        "plain_decode_normalized_gain_pct": -0.289,
+        "dict_decode_normalized_gain_pct": -1.505
+      },
+      "epoch_940": {
+        "plain_encode_normalized_gain_pct": 1.910,
+        "dict_encode_normalized_gain_pct": 2.072,
+        "plain_decode_normalized_gain_pct": -0.017,
+        "dict_decode_normalized_gain_pct": -0.270
+      },
+      "wire_bytes_changed": false,
+      "tests": "cargo test --offline --all-features: 192 passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
     }
   ],
   "failed_attempts": [
@@ -414,6 +449,14 @@
     {
       "optimization": "manual Clone implementation for the benchmark's 32-byte transparent pubkey",
       "reason": "about 0.5% movement in the synthetic harness was below the keep threshold and did not justify specializing the public trait path; derive restored"
+    },
+    {
+      "optimization": "reuse hashbrown's scratch lookup probe for insertion via RawEntryMut",
+      "reason": "a named-baseline A/B improved the all-unique 128-key microbenchmark by 3.2%, left single-repeat unchanged, and moved primary real-corpus dictionary encode only 0.2%; exact refactor reverted below the 5% keep threshold"
+    },
+    {
+      "optimization": "decode raw Vec<u8> payloads through slice::to_vec",
+      "reason": "primary plain decode improved only 0.3% after normalization to wincode and dictionary decode was flat; exact safe-copy refactor reverted below the 5% keep threshold"
     }
   ],
   "full_resets": [],
@@ -429,6 +472,12 @@
       "variance_ratio": 1.22,
       "reruns": 6,
       "resolution": "wincode encode rose from about 131 ms to 160 ms while decode and host load stayed stable; two three-run batches agreed that the candidate's wincode-normalized dictionary encode ratio regressed about 1.9%, so it was reverted"
+    },
+    {
+      "at_iteration": 13,
+      "variance_ratio": 1.14,
+      "reruns": 3,
+      "resolution": "whole-program code layout shifted the unchanged wincode encode control by about 14%; three interleaved same-source-path A/B pairs produced stable wincode-normalized ratios, which were used for the keep decision"
     }
   ]
 }

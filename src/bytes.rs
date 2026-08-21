@@ -77,7 +77,9 @@ pub(crate) fn looks_incompressible(data: &[u8]) -> bool {
             + bits[1].count_ones()
             + bits[2].count_ones()
             + bits[3].count_ones();
-        if distinct as usize * 2 >= data.len() && zeros * 12 <= data.len() {
+        // Up to 20% zero padding can still leave these records too diverse
+        // for zstd to beat their raw representation.
+        if distinct as usize * 2 >= data.len() && zeros * 5 <= data.len() {
             return true;
         }
     }
@@ -390,6 +392,17 @@ mod tests {
     fn medium_repetitive_payload_remains_compressible() {
         let payload: Vec<u8> = (0..148).map(|index| (index % 8 + 1) as u8).collect();
         assert!(!looks_incompressible(&payload));
+    }
+
+    #[test]
+    fn medium_high_entropy_payload_with_sparse_zeros_is_skipped() {
+        let mut payload = vec![0u8; 13];
+        payload.extend((0..135).map(|index| ((index * 73) % 251 + 1) as u8));
+        assert_eq!(payload.len(), 148);
+        assert!(looks_incompressible(&payload));
+
+        let mut writer = VecWriter::new();
+        assert!(compress_and_write(&payload, &mut writer).unwrap().is_none());
     }
 
     /// Verifies that compressing the same input via the thread-local CCtx
