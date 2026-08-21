@@ -1,7 +1,7 @@
 {
-  "version": 7,
+  "version": 8,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T19:49:51Z",
+  "updated_at": "2026-08-21T20:10:59Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -26,16 +26,16 @@
       "trials_per_run": 7,
       "independent_runs": 3,
       "current": {
-        "wincode_encode_ns": 151309292,
-        "wincode_decode_ns": 23021281,
-        "lencode_encode_ns": 182606959,
-        "lencode_decode_ns": 29500869,
-        "lencode_dict_encode_ns": 154613747,
-        "lencode_dict_decode_ns": 36031996,
+        "wincode_encode_ns": 165004256,
+        "wincode_decode_ns": 23254074,
+        "lencode_encode_ns": 153502984,
+        "lencode_decode_ns": 29504367,
+        "lencode_dict_encode_ns": 120648015,
+        "lencode_dict_decode_ns": 36096080,
         "wincode_bytes": 82210679,
-        "lencode_dict_bytes": 50719089,
-        "lencode_dict_reduction_pct": 38.31,
-        "lencode_dict_fingerprint": "f4aa78304d5d02ed"
+        "lencode_dict_bytes": 50760828,
+        "lencode_dict_reduction_pct": 38.26,
+        "lencode_dict_fingerprint": "e121ed79921e4262"
       }
     },
     {
@@ -45,16 +45,16 @@
       "trials_per_run": 7,
       "independent_runs": 3,
       "current": {
-        "wincode_encode_ns": 165879132,
-        "wincode_decode_ns": 23389590,
-        "lencode_encode_ns": 224562755,
-        "lencode_decode_ns": 33465212,
-        "lencode_dict_encode_ns": 187750696,
-        "lencode_dict_decode_ns": 39564450,
+        "wincode_encode_ns": 166217859,
+        "wincode_decode_ns": 23274764,
+        "lencode_encode_ns": 197365221,
+        "lencode_decode_ns": 30625361,
+        "lencode_dict_encode_ns": 162351145,
+        "lencode_dict_decode_ns": 36203110,
         "wincode_bytes": 84634719,
-        "lencode_dict_bytes": 48142138,
-        "lencode_dict_reduction_pct": 43.12,
-        "lencode_dict_fingerprint": "c5a207bf97ced112"
+        "lencode_dict_bytes": 48503932,
+        "lencode_dict_reduction_pct": 42.69,
+        "lencode_dict_fingerprint": "2fa84b4865e84e1c"
       }
     }
   ],
@@ -66,7 +66,7 @@
     "roundtrip_verified_on_every_archive": true,
     "lencode_tx_reduction_pct_range": [28.0, 34.8],
     "lencode_slot_reduction_pct_range": [32.9, 40.4],
-    "level_minus_1_spot_check": {
+    "level_minus_1_cutoff_64_spot_check": {
       "source": "/home/sol/horizon/epoch-951.jet",
       "slots": 100,
       "transactions": 112016,
@@ -77,6 +77,19 @@
       "lencode_tx_size_change_vs_level_2_pct": 0.030,
       "lencode_slot_size_change_vs_level_2_pct": 0.032,
       "modeled_shred_counts_changed": false
+    },
+    "level_minus_1_cutoff_96_spot_check": {
+      "source": "/home/sol/horizon/epoch-951.jet",
+      "slots": 100,
+      "transactions": 112016,
+      "roundtrip_verified": true,
+      "wire_bytes": 56638653,
+      "lencode_tx_bytes": 40213405,
+      "lencode_slot_bytes": 37062758,
+      "lencode_tx_size_change_vs_cutoff_64_pct": 0.068,
+      "lencode_slot_size_change_vs_cutoff_64_pct": 0.074,
+      "lencode_tx_data_shreds_changed": false,
+      "lencode_slot_data_shreds_added": 32
     }
   },
   "representative_hasher_check": {
@@ -102,12 +115,12 @@
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2251.7, "unit": "ns/iter" }
   },
   "current_baseline": {
-    "real_wincode_encode": { "value": 130251950, "unit": "ns/200000 messages", "variance": 61846 },
-    "real_wincode_decode": { "value": 21038394, "unit": "ns/200000 messages", "variance": 226692 },
-    "real_lencode_encode": { "value": 145266613, "unit": "ns/200000 messages", "variance": 326403 },
-    "real_lencode_decode": { "value": 25644334, "unit": "ns/200000 messages", "variance": 175122 },
-    "real_lencode_dict_encode": { "value": 119946324, "unit": "ns/200000 messages", "variance": 480937 },
-    "real_lencode_dict_decode": { "value": 31952143, "unit": "ns/200000 messages", "variance": 121081 },
+    "real_wincode_encode": { "value": 131309808, "unit": "ns/200000 messages", "variance": 341751 },
+    "real_wincode_decode": { "value": 21356766, "unit": "ns/200000 messages", "variance": 119520 },
+    "real_lencode_encode": { "value": 143193591, "unit": "ns/200000 messages", "variance": 734282 },
+    "real_lencode_decode": { "value": 25592522, "unit": "ns/200000 messages", "variance": 764943 },
+    "real_lencode_dict_encode": { "value": 116740487, "unit": "ns/200000 messages", "variance": 466322 },
+    "real_lencode_dict_decode": { "value": 31885994, "unit": "ns/200000 messages", "variance": 172660 },
     "micro_message_lencode_encode": { "value": 119.19, "unit": "ns/iter" },
     "micro_message_wincode_encode": { "value": 77.151, "unit": "ns/iter" },
     "micro_message_lencode_decode": { "value": 62.977, "unit": "ns/iter" },
@@ -116,13 +129,13 @@
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" }
   },
   "final_summary": {
-    "primary_dict_encode_throughput_vs_wincode": 1.085918648,
-    "primary_dict_decode_throughput_vs_wincode": 0.658434522,
-    "primary_dict_encode_time_improvement_vs_original_pct": 15.275,
-    "primary_dict_decode_time_improvement_vs_original_pct": 38.571,
-    "primary_dict_encode_normalized_improvement_vs_original_pct": 22.784,
-    "primary_dict_decode_normalized_improvement_vs_original_pct": 60.677,
-    "all_feature_tests": { "unit": 184, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
+    "primary_dict_encode_throughput_vs_wincode": 1.124800927,
+    "primary_dict_decode_throughput_vs_wincode": 0.669785173,
+    "primary_dict_encode_time_improvement_vs_original_pct": 17.540,
+    "primary_dict_decode_time_improvement_vs_original_pct": 38.698,
+    "primary_dict_encode_normalized_improvement_vs_original_pct": 27.180,
+    "primary_dict_decode_normalized_improvement_vs_original_pct": 63.447,
+    "all_feature_tests": { "unit": 185, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
     "no_default_features_check": "passed"
@@ -130,11 +143,11 @@
   "compression_invariants": {
     "real_wincode_bytes": 77214583,
     "real_wincode_fingerprint": "865d4bfa6a1ae6eb",
-    "real_lencode_bytes": 76368933,
-    "real_lencode_fingerprint": "9e7ea9e05d54d5b2",
-    "real_lencode_dict_bytes": 49256323,
-    "real_lencode_dict_fingerprint": "5dd731f4c36677ec",
-    "real_lencode_dict_reduction_pct": 36.21,
+    "real_lencode_bytes": 76418460,
+    "real_lencode_fingerprint": "d860d35d31706560",
+    "real_lencode_dict_bytes": 49305850,
+    "real_lencode_dict_fingerprint": "d72ed0d5adf8007f",
+    "real_lencode_dict_reduction_pct": 36.14,
     "archive_level_2_reference": {
       "wire_bytes": 56638653,
       "lencode_tx_bytes": 40174173,
@@ -142,19 +155,31 @@
       "lencode_tx_reduction_pct": 29.1,
       "lencode_slot_reduction_pct": 34.6
     },
-    "archive_level_minus_1_current": {
+    "archive_level_minus_1_cutoff_64_reference": {
       "wire_bytes": 56638653,
       "lencode_tx_bytes": 40186125,
       "lencode_slot_bytes": 37035478,
+      "lencode_tx_reduction_pct": 29.0,
+      "lencode_slot_reduction_pct": 34.6
+    },
+    "archive_level_minus_1_cutoff_96_current": {
+      "wire_bytes": 56638653,
+      "lencode_tx_bytes": 40213405,
+      "lencode_slot_bytes": 37062758,
       "lencode_tx_reduction_pct": 29.0,
       "lencode_slot_reduction_pct": 34.6
     }
   },
   "wire_compatibility": {
     "zstd_level": -1,
+    "minimum_compress_len": 96,
     "lencode_framing_changed": false,
     "decoder_accepts_tested_levels": [-1, 1, 2],
-    "test": "bytes::tests::zstd_level_change_is_wire_compatible"
+    "decoder_accepts_short_compressed_frames": true,
+    "tests": [
+      "bytes::tests::zstd_level_change_is_wire_compatible",
+      "bytes::tests::compression_cutoff_preserves_older_short_frames"
+    ]
   },
   "history": [
     {
@@ -418,6 +443,43 @@
       "wire_compatible": true,
       "archive_spot_check": "epoch-951, 100 slots, 112,016 transactions: round trip passed, encoded size +0.030% per-transaction and +0.032% per-slot vs level 2, modeled shred counts unchanged",
       "tests": "cargo test --offline --all-features: 192 passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
+    },
+    {
+      "iteration": 15,
+      "optimization": "raise the minimum byte-payload compression length from 64 to 96 bytes",
+      "commit": null,
+      "kept": true,
+      "validation": "three interleaved seven-trial A/B pairs per 200,000-message corpus; primary candidate batch repeated after one encode outlier",
+      "primary": {
+        "wincode_encode_ns": 131309808,
+        "wincode_decode_ns": 21356766,
+        "lencode_encode_ns": 143193591,
+        "lencode_decode_ns": 25592522,
+        "lencode_dict_encode_ns": 116740487,
+        "lencode_dict_decode_ns": 31885994,
+        "plain_encode_normalized_gain_pct": 2.313,
+        "dict_encode_normalized_gain_pct": 3.563,
+        "plain_decode_normalized_gain_pct": 0.876,
+        "dict_decode_normalized_gain_pct": 0.954,
+        "dict_size_change_pct": 0.101
+      },
+      "epoch_959": {
+        "plain_encode_normalized_gain_pct": 29.596,
+        "dict_encode_normalized_gain_pct": 39.321,
+        "plain_decode_normalized_gain_pct": 1.257,
+        "dict_decode_normalized_gain_pct": 0.831,
+        "dict_size_change_pct": 0.082
+      },
+      "epoch_940": {
+        "plain_encode_normalized_gain_pct": 14.240,
+        "dict_encode_normalized_gain_pct": 16.208,
+        "plain_decode_normalized_gain_pct": 7.246,
+        "dict_decode_normalized_gain_pct": 6.995,
+        "dict_size_change_pct": 0.752
+      },
+      "wire_compatible": true,
+      "archive_spot_check": "epoch-951, 100 slots, 112,016 transactions: round trip passed, encoded size +0.068% per-transaction and +0.074% per-slot vs cutoff 64; transaction shred count unchanged, slot mode added 32 data shreds",
+      "tests": "cargo test --offline --all-features: 193 passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
     }
   ],
   "failed_attempts": [
@@ -528,6 +590,18 @@
     {
       "optimization": "lower zstd compression from level 2 to level 1",
       "reason": "compressed output grew by only 4,799 bytes across 200,000 primary messages, but normalized plain and dictionary encode throughput did not improve and decode regressed; level 1 was reverted"
+    },
+    {
+      "optimization": "lower zstd fast compression from level -1 to level -2",
+      "reason": "a same-host binary pair improved normalized plain encode by about 2.3% but regressed normalized dictionary encode by 3.2% and added 59,257 bytes on the primary corpus; level -2 was reverted"
+    },
+    {
+      "optimization": "lower zstd fast compression from level -1 to level -3",
+      "reason": "normalized plain and dictionary encode moved by less than 1% while primary dictionary output grew by 112,270 bytes; level -3 was reverted below the 5% keep threshold"
+    },
+    {
+      "optimization": "classify 64-127 byte payloads with at least 60% distinct values as incompressible",
+      "reason": "the rule rejected 3,497 losing compressions and zero winning compressions across three corpora, but primary and epoch-940 normalized encode throughput stayed within 1%; the full scan was reverted below threshold"
     }
   ],
   "full_resets": [],
@@ -549,6 +623,12 @@
       "variance_ratio": 1.14,
       "reruns": 3,
       "resolution": "whole-program code layout shifted the unchanged wincode encode control by about 14%; three interleaved same-source-path A/B pairs produced stable wincode-normalized ratios, which were used for the keep decision"
+    },
+    {
+      "at_iteration": 15,
+      "variance_ratio": 7.18,
+      "reruns": 3,
+      "resolution": "one primary candidate dictionary-encode sample was about 3% slower than its peers and the epoch-959 binaries shifted the unchanged wincode control; discarded the primary candidate batch, used a stable three-run replacement, and based cross-binary comparisons on wincode-normalized medians"
     }
   ]
 }

@@ -19,7 +19,7 @@ const ZSTD_LEVEL: i32 = -1;
 
 /// Minimum payload size to attempt compression. Below this threshold,
 /// raw bytes are always used because compression overhead outweighs savings.
-pub(crate) const MIN_COMPRESS_LEN: usize = 64;
+pub(crate) const MIN_COMPRESS_LEN: usize = 96;
 
 /// Quick entropy check: returns `true` if a sample of the data appears incompressible.
 ///
@@ -449,6 +449,29 @@ mod tests {
                 crate::decode(&mut crate::io::Cursor::new(writer.as_slice())).unwrap();
             assert_eq!(decoded, payload);
         }
+    }
+
+    #[test]
+    fn compression_cutoff_preserves_older_short_frames() {
+        let payload = vec![0x2Au8; MIN_COMPRESS_LEN - 1];
+
+        let mut current = VecWriter::new();
+        payload.encode_ext(&mut current, None).unwrap();
+        let mut cursor = crate::io::Cursor::new(current.as_slice());
+        let flagged = Lencode::decode_varint_u64(&mut cursor).unwrap();
+        assert_eq!(flagged & 1, 0, "new encoders keep short payloads raw");
+
+        let bound = zstd_safe::compress_bound(payload.len());
+        let mut compressed = vec![0u8; bound];
+        let written = zstd_safe::compress(&mut compressed[..], &payload, ZSTD_LEVEL)
+            .expect("zstd_safe::compress");
+        compressed.truncate(written);
+        let mut legacy = VecWriter::new();
+        write_flagged_raw(&mut legacy, &compressed, 1).unwrap();
+
+        let decoded: Vec<u8> =
+            crate::decode(&mut crate::io::Cursor::new(legacy.as_slice())).unwrap();
+        assert_eq!(decoded, payload, "new decoders accept older short frames");
     }
 
     /// Round-trip test: encode through the fast path, decode through the
