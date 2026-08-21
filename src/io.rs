@@ -250,6 +250,13 @@ impl Write for VecWriter {
 
     #[inline(always)]
     fn reserve(&mut self, additional: usize) {
+        // Leave headroom after the first bounded field so the next field does
+        // not immediately force a reallocation and copy of the encoded prefix.
+        let additional = if self.0.capacity() == 0 && additional != 0 && additional <= 1024 {
+            additional.next_power_of_two()
+        } else {
+            additional
+        };
         self.0.reserve(additional);
     }
 }
@@ -315,4 +322,16 @@ fn test_write_vec() {
     assert_eq!(my_vec, data);
 
     assert_eq!(my_vec, b"Hello, world!".to_vec());
+}
+
+#[test]
+fn test_vec_writer_rounds_bounded_initial_reserve() {
+    let mut writer = VecWriter::new();
+
+    Write::reserve(&mut writer, 0);
+    assert_eq!(writer.0.capacity(), 0);
+
+    Write::reserve(&mut writer, 521);
+    assert!(writer.0.capacity() >= 1024);
+    assert!(writer.0.is_empty());
 }
