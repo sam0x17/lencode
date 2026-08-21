@@ -773,6 +773,10 @@
     {
       "optimization": "store one encoder TypeStore inline with SmallVec",
       "reason": "removing the one-type constructor allocation improved the 128-key microbenchmark only about 2%, while single-new encoding stayed slightly slower at about 113.4 ns versus 112.5 ns because the larger encoder object offset the allocation saving; the dependency and capacity bookkeeping were removed below threshold"
+    },
+    {
+      "optimization": "compress zstd payloads directly into VecWriter spare capacity",
+      "reason": "reserving raw-sized output capacity regressed the 512-byte compressible encode benchmark from about 958 ns to 1.004 us; restricting the path to capacity already owned still regressed a paired exact-binary baseline from 960.35 ns to 994.33 ns (3.5%), likely because the reusable compression scratch stays cache-hot, so both zero-copy variants were removed"
     }
   ],
   "full_resets": [],
