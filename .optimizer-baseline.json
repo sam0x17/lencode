@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "created_at": "2026-08-21T16:32:52Z",
   "updated_at": "2026-08-21T21:45:00Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
@@ -650,6 +650,18 @@
     {
       "optimization": "configure zstd target length 32 through a reusable compression context",
       "reason": "three interleaved primary-corpus A/B pairs improved normalized plain decode by about 1-2% and plain encode by about 3%, but dictionary encode regressed while plain and dictionary output grew 0.59% and 0.91%; the custom parameter and compress2 path were reverted below threshold"
+    },
+    {
+      "optimization": "upgrade direct hashbrown dependency from 0.15.5 to 0.16.1",
+      "reason": "three interleaved primary-corpus A/B pairs left normalized dictionary encode between about 0.5% worse and 0.3% better, with identical wire bytes and fingerprints; the dependency update was reverted below the 5% keep threshold"
+    },
+    {
+      "optimization": "decode a leading run of frozen dictionary IDs from one borrowed input slice",
+      "reason": "the corpus has fully frozen key lists in 73.8% of messages, but the primary-corpus A/B run made normalized dictionary decode about 1% worse; the duplicate safe varint loop was removed"
+    },
+    {
+      "optimization": "tune the default dedupe scratch capacity from 128 to 16 and 256 entries",
+      "reason": "although 99% of primary messages have at most 13 novel keys, capacity 16 regressed wincode-normalized dictionary encode by about 4-5% across three pairs; capacity 256 did not recover the loss in two additional pairs, so the existing sparse 128-entry table was restored"
     }
   ],
   "full_resets": [],
