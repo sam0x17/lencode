@@ -15,7 +15,7 @@ use crate::prelude::*;
 use alloc::vec::Vec;
 
 /// zstd compression level used for byte-collections.
-const ZSTD_LEVEL: i32 = 2;
+const ZSTD_LEVEL: i32 = -1;
 
 /// Minimum payload size to attempt compression. Below this threshold,
 /// raw bytes are always used because compression overhead outweighs savings.
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn zstd_level_change_is_wire_compatible() {
         let payload = vec![0x2Au8; 512];
-        for level in [1, 2] {
+        for level in [-1, 1, 2] {
             let bound = zstd_safe::compress_bound(payload.len());
             let mut compressed = vec![0u8; bound];
             let written = zstd_safe::compress(&mut compressed[..], &payload, level)
