@@ -205,7 +205,16 @@ macro_rules! impl_pack_for_endianness_types {
             impl $crate::pack::Pack for $t {
                 #[inline(always)]
                 fn pack(&self, writer: &mut impl $crate::io::Write) -> $crate::Result<usize> {
-                    writer.write(&endian_cast::Endianness::le_bytes(self))
+                    let bytes = endian_cast::Endianness::le_bytes(self);
+                    let len = core::mem::size_of::<Self>();
+                    if let Some(dst) = writer.buf_mut()
+                        && dst.len() >= len
+                    {
+                        dst[..len].copy_from_slice(&bytes);
+                        writer.advance_mut(len);
+                        return Ok(len);
+                    }
+                    writer.write(&bytes)
                 }
 
                 #[inline]

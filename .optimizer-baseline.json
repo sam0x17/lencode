@@ -1,7 +1,7 @@
 {
   "version": 17,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T23:02:34Z",
+  "updated_at": "2026-08-21T23:14:25Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -126,7 +126,8 @@
     "micro_message_lencode_decode": { "value": 66.138, "unit": "ns/iter" },
     "micro_message_wincode_decode": { "value": 58.554, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_encode": { "value": 1616.6, "unit": "ns/iter" },
-    "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" }
+    "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" },
+    "micro_u64_pack": { "value": 7.054, "unit": "ns/iter" }
   },
   "final_summary": {
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
@@ -139,6 +140,7 @@
     "micro_message_decode_throughput_vs_wincode": 0.885331,
     "micro_message_encode_time_improvement_vs_original_pct": 43.697,
     "micro_pubkey_vec_dict_encode_time_improvement_vs_original_pct": 21.608,
+    "micro_u64_pack_time_improvement_pct": 11.91,
     "all_feature_tests": { "unit": 186, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
@@ -550,6 +552,39 @@
       "epoch_940": "one A/B pair; all normalized movements were within 1%",
       "wire_bytes_changed": false,
       "allocation_effect": "non-frozen 128-key encoding reserves its roughly 4 KiB fixed-size estimate once instead of growing through several allocations and copying the encoded prefix",
+      "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
+    },
+    {
+      "iteration": 18,
+      "optimization": "pack fixed-width endian primitives through the writer's direct output buffer",
+      "commit": null,
+      "kept": true,
+      "validation": "two exact-binary baseline measurements, one candidate measurement, and an exact final-source primary-corpus A/B pair",
+      "micro_u64_pack": {
+        "baseline_ns": 8.008,
+        "candidate_ns": 7.054,
+        "latency_improvement_pct": 11.91
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 130536828,
+        "baseline_wincode_decode_ns": 21201269,
+        "baseline_lencode_encode_ns": 142505128,
+        "baseline_lencode_decode_ns": 25448007,
+        "baseline_lencode_dict_encode_ns": 116979981,
+        "baseline_lencode_dict_decode_ns": 32009264,
+        "candidate_wincode_encode_ns": 130433137,
+        "candidate_wincode_decode_ns": 21112669,
+        "candidate_lencode_encode_ns": 142151986,
+        "candidate_lencode_decode_ns": 25329586,
+        "candidate_lencode_dict_encode_ns": 116865550,
+        "candidate_lencode_dict_decode_ns": 32118994,
+        "plain_encode_normalized_change_pct": -0.169,
+        "dict_encode_normalized_change_pct": -0.018,
+        "plain_decode_normalized_change_pct": -0.048,
+        "dict_decode_normalized_change_pct": 0.764
+      },
+      "wire_bytes_changed": false,
+      "copy_effect": "fixed-width values write their little-endian bytes through buf_mut/advance_mut instead of re-entering the generic writer copy path",
       "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
     }
   ],
