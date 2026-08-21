@@ -1,7 +1,7 @@
 {
   "version": 17,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T22:42:14Z",
+  "updated_at": "2026-08-21T22:56:59Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -765,6 +765,10 @@
     {
       "optimization": "split frozen and non-frozen homogeneous dictionary encoding into separate loops",
       "reason": "two candidate runs regressed the non-frozen 128-key microbenchmark to about 1.71-1.80 us from 1.62-1.64 us; LLVM's compact Option-based loop was restored"
+    },
+    {
+      "optimization": "combine borrowing and advancing contiguous input through a Read::take_buf hook",
+      "reason": "the broad Pack/Decode form improved fresh dictionary decode sharply but regressed primary dictionary decode by 6-8%; narrowing to ordinary arrays and vectors retained a 10% message-micro win but regressed primary plain decode 4.3%, while array-only still regressed normalized primary plain and dictionary decode about 3.2% and 4.0%; all variants were removed despite preserving bytes and adding no unsafe blocks"
     }
   ],
   "full_resets": [],
