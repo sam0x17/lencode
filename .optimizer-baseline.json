@@ -1,7 +1,7 @@
 {
-  "version": 14,
+  "version": 15,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T21:53:15Z",
+  "updated_at": "2026-08-21T21:55:46Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -702,6 +702,10 @@
     {
       "optimization": "give bounded pre-sized VecWriter allocations 50% headroom",
       "reason": "although 19% of primary messages exceed the benchmark's 512-byte capacity hint, retaining the extra capacity across 200,000 encoded messages increased memory pressure; normalized plain and dictionary encode throughput regressed about 12% and 24%, with larger downstream decode regressions, so exact-capacity construction was restored"
+    },
+    {
+      "optimization": "pre-grow a pre-sized VecWriter when its first field consumes at least 75% of capacity",
+      "reason": "the targeted policy anticipated growth for about 4% of primary messages without broad over-allocation, but three interleaved A/B pairs improved normalized plain encode by only about 1-2% and consistently regressed normalized dictionary encode by about 4%; the empty-writer-only policy was restored"
     }
   ],
   "full_resets": [],
@@ -729,6 +733,12 @@
       "variance_ratio": 7.18,
       "reruns": 3,
       "resolution": "one primary candidate dictionary-encode sample was about 3% slower than its peers and the epoch-959 binaries shifted the unchanged wincode control; discarded the primary candidate batch, used a stable three-run replacement, and based cross-binary comparisons on wincode-normalized medians"
+    },
+    {
+      "at_iteration": 17,
+      "variance_ratio": 1.22,
+      "reruns": 3,
+      "resolution": "the candidate binary's unchanged wincode encode control repeatedly ran near 159 ms versus 131 ms for the baseline binary; same-binary normalization showed only a 1-2% plain encode gain and a stable 4% dictionary encode regression, so the candidate was reverted"
     }
   ]
 }
