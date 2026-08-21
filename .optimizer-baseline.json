@@ -1,7 +1,7 @@
 {
-  "version": 8,
+  "version": 9,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T21:08:22Z",
+  "updated_at": "2026-08-21T21:20:00Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -634,6 +634,10 @@
     {
       "optimization": "short-circuit medium entropy scans with first/last 32-byte diversity",
       "reason": "the edge predicate preserved output and rejected no profitable compression across all three corpora, but three primary-corpus A/B pairs improved normalized encode by only about 0.1-0.3%; the extra scan was reverted below threshold"
+    },
+    {
+      "optimization": "move short-buffer u64 varint decoding out of the always-inlined fast path",
+      "reason": "three interleaved primary-corpus A/B pairs improved normalized plain decode by only about 0.6%, while normalized dictionary decode was noisy and slightly worse overall; bytes and fingerprints were identical, so the extra cold helpers were reverted below the 5% keep threshold"
     }
   ],
   "full_resets": [],
