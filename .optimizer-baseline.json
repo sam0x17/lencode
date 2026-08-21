@@ -1,7 +1,7 @@
 {
   "version": 8,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T20:10:59Z",
+  "updated_at": "2026-08-21T20:15:29Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -602,6 +602,14 @@
     {
       "optimization": "classify 64-127 byte payloads with at least 60% distinct values as incompressible",
       "reason": "the rule rejected 3,497 losing compressions and zero winning compressions across three corpora, but primary and epoch-940 normalized encode throughput stayed within 1%; the full scan was reverted below threshold"
+    },
+    {
+      "optimization": "raise the minimum byte-payload compression length from 96 to 128 bytes",
+      "reason": "primary and epoch-940 normalized encode gains stayed near 1-2%, while epoch-959 normalized plain and dictionary encode regressed because the candidate binary's unchanged wincode control shifted much more than lencode; cutoff 128 was reverted"
+    },
+    {
+      "optimization": "raise the minimum byte-payload compression length from 96 to 112 bytes",
+      "reason": "primary and epoch-940 normalized encode gains stayed near 1-2%, while epoch-959 normalized plain and dictionary encode regressed sharply; cutoff 112 was reverted and 96 retained as the measured knee"
     }
   ],
   "full_resets": [],
