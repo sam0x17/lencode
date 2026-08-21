@@ -1,7 +1,7 @@
 {
-  "version": 16,
+  "version": 17,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-21T22:08:19Z",
+  "updated_at": "2026-08-21T22:17:12Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -125,7 +125,7 @@
     "micro_message_wincode_encode": { "value": 88.467, "unit": "ns/iter" },
     "micro_message_lencode_decode": { "value": 66.138, "unit": "ns/iter" },
     "micro_message_wincode_decode": { "value": 58.554, "unit": "ns/iter" },
-    "micro_pubkey_vec_lencode_dict_encode": { "value": 1832.0, "unit": "ns/iter" },
+    "micro_pubkey_vec_lencode_dict_encode": { "value": 1616.6, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" }
   },
   "final_summary": {
@@ -138,6 +138,7 @@
     "micro_message_encode_throughput_vs_wincode": 1.318278,
     "micro_message_decode_throughput_vs_wincode": 0.885331,
     "micro_message_encode_time_improvement_vs_original_pct": 43.697,
+    "micro_pubkey_vec_dict_encode_time_improvement_vs_original_pct": 21.608,
     "all_feature_tests": { "unit": 186, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
@@ -511,6 +512,44 @@
       },
       "wire_bytes_changed": false,
       "allocation_effect": "the 795-byte message now allocates 1024 bytes once instead of reserving 521 bytes and immediately reallocating and copying the encoded prefix",
+      "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
+    },
+    {
+      "iteration": 17,
+      "optimization": "reserve the fixed-size output estimate for non-frozen homogeneous dictionary encoding",
+      "commit": null,
+      "kept": true,
+      "validation": "four interleaved direct microbenchmark pairs, an exact final-source primary-corpus A/B pair, three epoch-959 A/B pairs, and one epoch-940 A/B pair",
+      "micro_pubkey_vec_dict_encode": {
+        "baseline_ns": 1773.7,
+        "candidate_ns": 1616.6,
+        "latency_improvement_pct": 8.857,
+        "vs_recorded_current_pct": 11.758,
+        "vs_original_pct": 21.608,
+        "wire_bytes": 2966
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 130833137,
+        "baseline_wincode_decode_ns": 21259641,
+        "baseline_lencode_encode_ns": 142810213,
+        "baseline_lencode_decode_ns": 26200010,
+        "baseline_lencode_dict_encode_ns": 117395147,
+        "baseline_lencode_dict_decode_ns": 32525524,
+        "candidate_wincode_encode_ns": 130891027,
+        "candidate_wincode_decode_ns": 21078990,
+        "candidate_lencode_encode_ns": 142996454,
+        "candidate_lencode_decode_ns": 25751708,
+        "candidate_lencode_dict_encode_ns": 117689297,
+        "candidate_lencode_dict_decode_ns": 32330503,
+        "plain_encode_normalized_change_pct": -0.086,
+        "dict_encode_normalized_change_pct": -0.206,
+        "plain_decode_normalized_change_pct": 0.876,
+        "dict_decode_normalized_change_pct": -0.252
+      },
+      "epoch_959": "three A/B pairs; median normalized dictionary decode change was about -1.1%, with all other movements within 2%",
+      "epoch_940": "one A/B pair; all normalized movements were within 1%",
+      "wire_bytes_changed": false,
+      "allocation_effect": "non-frozen 128-key encoding reserves its roughly 4 KiB fixed-size estimate once instead of growing through several allocations and copying the encoded prefix",
       "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed"
     }
   ],

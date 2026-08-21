@@ -607,6 +607,12 @@ impl DedupeEncoder {
             return Ok(0);
         }
 
+        if self.frozen.is_none() {
+            // Match plain homogeneous collection encoding: one estimated
+            // allocation avoids repeatedly copying the growing output prefix.
+            writer.reserve(core::mem::size_of_val(values) + 9);
+        }
+
         let type_id = TypeId::of::<T>();
         let frozen_store = self.frozen.as_ref().and_then(|frozen| {
             frozen
