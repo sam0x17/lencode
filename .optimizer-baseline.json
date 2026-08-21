@@ -851,6 +851,10 @@
     {
       "optimization": "write contiguous transparent byte-array slices through buf_mut/advance_mut",
       "reason": "an exact-binary A/B left the 128-key 4 KiB pack_slice benchmark effectively unchanged at 298.87 ns versus 298.48 ns, while the stable plain pubkey-vector encode moved from 81.07 ns to 82.50 ns (1.8% slower); the extra branch was removed below the 5% keep threshold"
+    },
+    {
+      "optimization": "short-circuit random u128 varint length detection when the top byte is nonzero",
+      "reason": "paired exact-binary runs left u128 encode effectively unchanged at 6.530 ns versus 6.537 ns and i128 encode at 6.565 ns versus 6.542 ns; LLVM's existing leading-zero sequence was already optimal, so the extra hot branch was removed below threshold"
     }
   ],
   "full_resets": [],
