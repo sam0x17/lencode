@@ -750,6 +750,9 @@ impl SolanaTransactionTranscoder {
         reader.claim_sequence(count, 1)?;
         append_short_u16(output, count, max_output)?;
         for _ in 0..count {
+            if append_short_raw_instruction(reader, output, max_output)? {
+                continue;
+            }
             let program_id_index = u8::decode(reader)?;
             append_bytes(output, &[program_id_index], max_output)?;
             self.transcode_byte_vec(reader, output, max_output)?;
@@ -784,6 +787,52 @@ impl SolanaTransactionTranscoder {
         append_byte_payload(reader, &mut self.decompressed, output, max_output, true)?;
         Ok(())
     }
+}
+
+#[inline(always)]
+fn append_short_raw_instruction(
+    reader: &mut impl Read,
+    output: &mut Vec<u8>,
+    max_output: usize,
+) -> Result<bool> {
+    let (consumed, accounts_len, data_len) = {
+        let Some(input) = reader.buf() else {
+            return Ok(false);
+        };
+        let Some(&accounts_flagged) = input.get(1) else {
+            return Ok(false);
+        };
+        if accounts_flagged & 0x81 != 0 {
+            return Ok(false);
+        }
+        let accounts_len = usize::from(accounts_flagged >> 1);
+        let data_flag_offset = 2 + accounts_len;
+        let Some(&data_flagged) = input.get(data_flag_offset) else {
+            return Ok(false);
+        };
+        if data_flagged & 0x81 != 0 {
+            return Ok(false);
+        }
+        let data_len = usize::from(data_flagged >> 1);
+        let data_offset = data_flag_offset + 1;
+        let consumed = data_offset + data_len;
+        if consumed > input.len() {
+            return Ok(false);
+        }
+
+        ensure_output(output, accounts_len + data_len + 3, max_output)?;
+        output.push(input[0]);
+        output.push(accounts_len as u8);
+        output.extend_from_slice(&input[2..data_flag_offset]);
+        output.push(data_len as u8);
+        output.extend_from_slice(&input[data_offset..consumed]);
+        (consumed, accounts_len, data_len)
+    };
+
+    reader.claim_sequence(accounts_len, 1)?;
+    reader.claim_sequence(data_len, 1)?;
+    reader.advance(consumed);
+    Ok(true)
 }
 
 fn append_byte_payload(
