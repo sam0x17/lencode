@@ -153,6 +153,10 @@ impl SolanaTransactionTranscoder {
         let output_limit = output_start
             .checked_add(limits.max_output_bytes)
             .ok_or(Error::DecodeLimitExceeded)?;
+        // One bounded reservation keeps every checked field append allocation-free.
+        output
+            .try_reserve(limits.max_output_bytes)
+            .map_err(|_| Error::DecodeLimitExceeded)?;
 
         let decode_limits = DecodeLimits::new(
             limits.max_input_bytes,
@@ -524,9 +528,8 @@ fn ensure_output(output: &mut Vec<u8>, additional: usize, max_output: usize) -> 
     if new_len > max_output {
         return Err(Error::DecodeLimitExceeded);
     }
-    output
-        .try_reserve(additional)
-        .map_err(|_| Error::DecodeLimitExceeded)
+    debug_assert!(new_len <= output.capacity());
+    Ok(())
 }
 
 #[cfg(test)]
