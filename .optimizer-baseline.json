@@ -2084,6 +2084,18 @@
       {
         "optimization": "force-inline the canonical transaction writer and all append helpers",
         "reason": "a CPU-affined screen regressed canonical LZ4 leader time by 0.62% with identical payload and wire bytes; the annotations were removed before longer benchmarking"
+      },
+      {
+        "optimization": "reserve each fixed-width canonical Solana address and signature block once",
+        "reason": "three alternating CPU-affined seven-trial primary-corpus pairs improved median control-normalized leader time by only 0.21% and regressed validator time by 0.38%; three production-fixture pairs regressed leader time by 0.48% and improved validator time by only 0.12%, so the lencode-only batching path was removed below the 1% gate"
+      },
+      {
+        "optimization": "guard canonical writer and decoder reserves with explicit capacity checks",
+        "reason": "three alternating CPU-affined seven-trial primary-corpus pairs regressed median control-normalized leader time by 0.78% and improved validator time by only 0.26%; the redundant guards were removed below the 1% gate"
+      },
+      {
+        "optimization": "emit common one-byte-length canonical Solana instructions in one checked append",
+        "reason": "three alternating CPU-affined seven-trial primary-corpus pairs improved median control-normalized leader and validator time by only 0.07% and 0.16%, with one leader pair regressing 1.43%; the common-case branch was removed below the 1% gate"
       }
     ],
     "full_resets": [
