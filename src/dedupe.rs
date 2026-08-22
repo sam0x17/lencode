@@ -972,7 +972,7 @@ impl DedupeDecoder {
     /// are unpacked directly into scratch storage, also avoiding the clone that
     /// the owned [`Self::decode`] API requires. The borrow remains valid until
     /// the next mutable access to this decoder.
-    #[inline]
+    #[inline(always)]
     pub fn decode_ref<'a, T: Pack + Hash + Eq + Send + Sync + 'static>(
         &'a mut self,
         reader: &mut impl Read,
