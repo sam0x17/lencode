@@ -1,12 +1,12 @@
 {
-  "version": 58,
+  "version": 59,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T15:20:43Z",
+  "updated_at": "2026-08-22T15:50:03Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 13,
+    "version": 14,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -158,6 +158,77 @@
           "production_codec": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b"
         },
         "decision": "reverted because the calibrated receiver-path validator regression exceeded the 2% ceiling; protected sources and the exact benchmark binary were restored"
+      },
+      "selective_coalescing": {
+        "change": "for canonical LZ4 only, coalesce through the first tightly packed boundary to a 1.5-typical-FEC canonical input target; legacy wincode retains its exact prior batching behavior",
+        "status": "kept",
+        "latency_contract": "the 50 ms receive deadline and oversized-entry behavior are unchanged",
+        "isolated_agave_baseline_commit": "ef210d67f2fabeee1730498188fa78854260c679",
+        "isolated_agave_worktree_fingerprint": "93ccabf318cbb75493b978da80491b98af69325bc1d101a7732988d1cb47a96e",
+        "profile_basis": {
+          "protocol": "perf record at 999 Hz on CPU 28 over the exact Rust 1.98.0 Blockstore binary with 101 alternating warmed trials",
+          "samples": 7000,
+          "self_cycles_pct": {
+            "rocksdb_iterator_next": 10.91,
+            "lz4_decompress_safe": 9.43,
+            "block_component_parse": 8.61,
+            "memcmp": 8.22,
+            "memmove": 8.18
+          }
+        },
+        "paced_receiver_model": {
+          "protocol": "deliver each source slot through the actual channel and receive function over 400 ms, pacing entries by cumulative serialized bytes; benchmark the emitted fixture in three interleaved CPU-28 processes with 31 alternating format trials per process",
+          "model_limit": "entry timing is synthetic because the source corpus has no BankingStage timestamps",
+          "baseline": {
+            "components": 1974,
+            "fixture_sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72",
+            "wincode_leader_ns": 463414025,
+            "wincode_validator_ns": 22178646,
+            "lencode_leader_ns": 267986317,
+            "lencode_validator_ns": 23867111,
+            "lencode_payload_bytes": 34545514,
+            "lencode_wire_bytes": 161729568
+          },
+          "candidate": {
+            "components": 1533,
+            "entries": 68392,
+            "transactions": 124218,
+            "component_bytes": { "min": 56, "median": 45576, "p95": 46165, "max": 46224 },
+            "exited_hit_max": 1420,
+            "exited_tightly_packed": 0,
+            "exited_slot_ended": 100,
+            "exited_timeout": 13,
+            "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+            "wincode_leader_ns": 352475569,
+            "wincode_validator_ns": 21778975,
+            "lencode_leader_ns": 222162127,
+            "lencode_validator_ns": 23800062,
+            "lencode_payload_bytes": 33559843,
+            "lencode_wire_bytes": 127812256
+          },
+          "component_reduction_pct": 22.340,
+          "lencode_leader_improvement_pct": 17.099,
+          "lencode_validator_improvement_pct": 0.281,
+          "lencode_payload_reduction_pct": 2.853,
+          "lencode_wire_reduction_pct": 20.972,
+          "candidate_vs_legacy": {
+            "leader_improvement_pct": 52.060,
+            "validator_regression_pct": 7.311,
+            "wire_reduction_pct": 59.211,
+            "leader_speedup": 2.086,
+            "validator_throughput": 0.932
+          }
+        },
+        "benchmark_binary_sha256": "953fac34562551a152a1e9422fab9805d9ede5f972dd094a8b103bce6fc583b2",
+        "source_sha256": {
+          "broadcast_utils": "b5c4b19838a68bc58d84f59a75033e02a37ea4a00180a51a6ab1f0185fd465d1",
+          "standard_broadcast_run": "75bf241b1f4e5813bb17cf461272b6b61ccd4c87d66017624cb8b2eb11fc8782",
+          "broadcast_duplicates_run": "f7faaada659fbdf95b8d4be0b5bfe683b351a8f5b8c354b33e9c032199952ad1",
+          "production_codec": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b"
+        },
+        "wire_compatibility": "canonical LCSH v1 bytes and shred encoding are unchanged; only canonical component boundaries change",
+        "unsafe_code_added": false,
+        "validation": "48 Turbine library tests passed, including the explicit canonical target and retained LCSH v1 integration tests; strict Turbine library Clippy passed with warnings denied; temporary fixture tools and dependencies were removed"
       }
     },
     "blockstore_component_benchmark": {
@@ -818,6 +889,28 @@
         "wire_compatibility": "canonical LCSH v1 and shred bytes retain their existing formats; only component boundaries change",
         "unsafe_code_added": false,
         "validation": "legacy calibration landed within 0.4% of the frozen component count; three 31-trial process pairs confirmed the validator regression, then protected sources and the exact binary were restored"
+      },
+      {
+        "iteration": 13,
+        "optimization": "coalesce canonical LZ4 components to a 1.5-typical-FEC input target",
+        "kept": true,
+        "integration": "Agave StandardBroadcastRun receive batching",
+        "legacy_behavior_changed": false,
+        "receive_deadline_changed": false,
+        "component_reduction_pct": 22.340,
+        "lencode_leader_improvement_pct": 17.099,
+        "lencode_validator_improvement_pct": 0.281,
+        "lencode_wire_reduction_pct": 20.972,
+        "wire_reduction_vs_legacy_wincode_pct": 59.211,
+        "leader_speedup_vs_legacy_wincode": 2.086,
+        "validator_throughput_vs_legacy_wincode": 0.932,
+        "benchmark_binary_sha256": "953fac34562551a152a1e9422fab9805d9ede5f972dd094a8b103bce6fc583b2",
+        "baseline_fixture_sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72",
+        "candidate_fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "model_limit": "actual receiver path with 400 ms synthetic per-slot pacing; the source corpus has no original entry-arrival timestamps",
+        "wire_compatibility": "canonical LCSH v1 and shred bytes retain their existing formats; only canonical component boundaries change",
+        "unsafe_code_added": false,
+        "validation": "three CPU-affined 31-trial process pairs cleared the 5% gate with no latency regression; 48 Turbine tests and strict Clippy passed"
       }
     ],
     "failed_attempts": [
