@@ -1,7 +1,7 @@
 {
-  "version": 45,
+  "version": 46,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T11:52:05Z",
+  "updated_at": "2026-08-22T11:56:14Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -33,10 +33,10 @@
       "lencode_validator_throughput": 0.504601927
     },
     "current_baseline": {
-      "wincode_leader": { "value": 276055157, "unit": "ns/100 blocks" },
-      "wincode_validator": { "value": 18879689, "unit": "ns/100 blocks" },
-      "lencode_leader": { "value": 182832037, "unit": "ns/100 blocks" },
-      "lencode_validator": { "value": 23489865, "unit": "ns/100 blocks" },
+      "wincode_leader": { "value": 275639861, "unit": "ns/100 blocks" },
+      "wincode_validator": { "value": 18684453, "unit": "ns/100 blocks" },
+      "lencode_leader": { "value": 182979068, "unit": "ns/100 blocks" },
+      "lencode_validator": { "value": 23312928, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
       "lencode_wire_bytes": 80592512,
       "mode": "canonical wincode entry batch compressed into a single caller-owned LZ4 frame arena"
@@ -282,6 +282,42 @@
         "leader_speedup_vs_wincode": 1.510,
         "validator_throughput_vs_wincode": 0.804,
         "validation": "three interleaved exact-binary 11-trial pairs retained the 5.5% absolute leader improvement with no regression over 2%; 343 ledger tests and 47 turbine tests passed, strict ledger library and benchmark Clippy passed, and the exact-wire codec assertion passed"
+      },
+      {
+        "iteration": 9,
+        "optimization": "retain the block-component encoding arena across StandardBroadcastRun components",
+        "kept": true,
+        "integration": "Agave StandardBroadcastRun and Shredder API",
+        "results": {
+          "wincode_leader": { "value": 275639861, "unit": "ns/100 blocks" },
+          "wincode_validator": { "value": 18684453, "unit": "ns/100 blocks" },
+          "lencode_leader": { "value": 182979068, "unit": "ns/100 blocks" },
+          "lencode_validator": { "value": 23312928, "unit": "ns/100 blocks" },
+          "wincode_payload_bytes": 66587751,
+          "lencode_payload_bytes": 30292964,
+          "wincode_data_shreds": 71136,
+          "wincode_coding_shreds": 71136,
+          "lencode_data_shreds": 33152,
+          "lencode_coding_shreds": 33152,
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 80592512
+        },
+        "production_effect": "StandardBroadcastRun now owns the encoder Vec and passes it through Shredder, so every active component reuses the same allocation as the retained benchmark path",
+        "allocation_test": "the turbine integration test encodes two components and verifies that the buffer pointer and capacity remain unchanged",
+        "candidate_binary_sha256": "41262fb660eefe8b4bd7f4f8f82edeeaca5554f22b799ccbcb037e751be2af50",
+        "frozen_benchmark_source_sha256": "b7a411364318cf25aab26add6e5a521c8b6416d0044d7cac407aca500b2b22db",
+        "candidate_benchmark_source_sha256": "55f9e6160b554333a59898198a28dbb3f45dcd58922e0f8e1308a8fb7cab69a9",
+        "shredder_source_sha256": "756fe858ce013a251a4d1354f51c049a200f5361809fb41d52488e341694e71d",
+        "broadcast_source_sha256": "8fc035e067f664c956bd555ba2fc557fe13ee7ab3555bc21090f60544b83b31b",
+        "leader_change_vs_single_arena_pct": 0.080,
+        "leader_change_vs_single_arena_normalized_pct": 0.231,
+        "validator_improvement_vs_single_arena_pct": 0.753,
+        "validator_change_vs_single_arena_normalized_pct": 0.284,
+        "wire_change_vs_single_arena_pct": 0.0,
+        "wire_reduction_vs_wincode_pct": 53.396,
+        "leader_speedup_vs_wincode": 1.506,
+        "validator_throughput_vs_wincode": 0.801,
+        "validation": "343 ledger tests and 47 turbine tests passed; strict ledger and turbine Clippy passed; the retained 11-trial benchmark stayed within 1% and all payload, shred-count, and wire totals remained exact"
       }
     ],
     "failed_attempts": [
