@@ -533,6 +533,7 @@ fn ensure_output(output: &mut Vec<u8>, additional: usize, max_output: usize) -> 
 mod tests {
     use super::*;
     use crate::{Encode, dedupe::DedupeEncoder, io::VecWriter};
+    use rand::{Rng, SeedableRng, rngs::StdRng};
     use solana_address_v2::Address;
     use solana_hash_v4::Hash;
     use solana_message_v4::{
@@ -626,6 +627,24 @@ mod tests {
         assert_eq!(wincode::serialize(&expected).unwrap(), actual);
         let decoded: VersionedTransaction = wincode::deserialize(actual).unwrap();
         assert_eq!(decoded, expected);
+    }
+
+    fn random_bytes(rng: &mut StdRng, max_len: usize) -> Vec<u8> {
+        (0..rng.random_range(0..=max_len))
+            .map(|_| rng.random())
+            .collect()
+    }
+
+    fn random_instructions(rng: &mut StdRng, address_count: usize) -> Vec<TestInstruction> {
+        (0..rng.random_range(0..=4))
+            .map(|_| TestInstruction {
+                program_id_index: rng.random_range(0..address_count) as u8,
+                accounts: (0..rng.random_range(0..=16))
+                    .map(|_| rng.random_range(0..address_count) as u8)
+                    .collect(),
+                data: random_bytes(rng, 128),
+            })
+            .collect()
     }
 
     #[test]
@@ -897,5 +916,224 @@ mod tests {
             Err(Error::DecodeLimitExceeded)
         ));
         assert!(output.is_empty());
+    }
+
+    #[test]
+    fn randomized_frames_match_current_wincode() {
+        let mut rng = StdRng::seed_from_u64(0x51_4f_4c_41_4e_41);
+        for version in 0..=2 {
+            for _ in 0..128 {
+                let dictionary: Vec<[u8; 32]> = (0..4).map(|_| rng.random()).collect();
+                let (frozen_encoder, frozen_decoder) = frozen_dictionary(&dictionary);
+                let mut encoder = DedupeEncoder::with_frozen(frozen_encoder);
+                let signature_count = rng.random_range(0..=3usize);
+                let signatures: Vec<[u8; 64]> =
+                    (0..signature_count).map(|_| rng.random()).collect();
+                let address_count = rng.random_range(signature_count.max(1)..=16);
+                let addresses: Vec<[u8; 32]> = (0..address_count)
+                    .map(|_| {
+                        if rng.random::<bool>() {
+                            dictionary[rng.random_range(0..dictionary.len())]
+                        } else {
+                            rng.random()
+                        }
+                    })
+                    .collect();
+                let hash: [u8; 32] = rng.random();
+                let instructions = random_instructions(&mut rng, address_count);
+                let readonly_signed = rng.random_range(0..=signature_count) as u8;
+                let readonly_unsigned = rng.random_range(0..=address_count - signature_count) as u8;
+                let header = [signature_count as u8, readonly_signed, readonly_unsigned];
+
+                let mut input = VecWriter::new();
+                write_signatures(&signatures, &mut input);
+                write_len(version, &mut input);
+                write_header(header, &mut input);
+
+                let message = match version {
+                    0 => {
+                        write_addresses(&addresses, &mut encoder, &mut input);
+                        hash.encode(&mut input).unwrap();
+                        write_instructions(&instructions, &mut input);
+                        VersionedMessage::Legacy(LegacyMessage {
+                            header: MessageHeader {
+                                num_required_signatures: header[0],
+                                num_readonly_signed_accounts: header[1],
+                                num_readonly_unsigned_accounts: header[2],
+                            },
+                            account_keys: addresses
+                                .iter()
+                                .copied()
+                                .map(canonical_address)
+                                .collect(),
+                            recent_blockhash: Hash::new_from_array(hash),
+                            instructions: instructions.iter().map(canonical_instruction).collect(),
+                        })
+                    }
+                    1 => {
+                        write_addresses(&addresses, &mut encoder, &mut input);
+                        hash.encode(&mut input).unwrap();
+                        write_instructions(&instructions, &mut input);
+                        let lookups: Vec<TestLookup> = (0..rng.random_range(0..=3))
+                            .map(|_| TestLookup {
+                                address: dictionary[rng.random_range(0..dictionary.len())],
+                                writable: random_bytes(&mut rng, 8),
+                                readonly: random_bytes(&mut rng, 8),
+                            })
+                            .collect();
+                        write_len(lookups.len(), &mut input);
+                        for lookup in &lookups {
+                            encoder
+                                .encode::<[u8; 32], crate::dedupe::DefaultDedupeHasher>(
+                                    &lookup.address,
+                                    &mut input,
+                                )
+                                .unwrap();
+                            lookup.writable.encode(&mut input).unwrap();
+                            lookup.readonly.encode(&mut input).unwrap();
+                        }
+                        VersionedMessage::V0(V0Message {
+                            header: MessageHeader {
+                                num_required_signatures: header[0],
+                                num_readonly_signed_accounts: header[1],
+                                num_readonly_unsigned_accounts: header[2],
+                            },
+                            account_keys: addresses
+                                .iter()
+                                .copied()
+                                .map(canonical_address)
+                                .collect(),
+                            recent_blockhash: Hash::new_from_array(hash),
+                            instructions: instructions.iter().map(canonical_instruction).collect(),
+                            address_table_lookups: lookups
+                                .iter()
+                                .map(|lookup| MessageAddressTableLookup {
+                                    account_key: canonical_address(lookup.address),
+                                    writable_indexes: lookup.writable.clone(),
+                                    readonly_indexes: lookup.readonly.clone(),
+                                })
+                                .collect(),
+                        })
+                    }
+                    2 => {
+                        let config = TransactionConfig {
+                            priority_fee: rng.random::<bool>().then(|| rng.random()),
+                            compute_unit_limit: rng
+                                .random::<bool>()
+                                .then(|| rng.random_range(1..=1_400_000)),
+                            loaded_accounts_data_size_limit: rng
+                                .random::<bool>()
+                                .then(|| rng.random_range(1..=64 * 1024 * 1024)),
+                            heap_size: rng
+                                .random::<bool>()
+                                .then(|| rng.random_range(32..=256) * 1024),
+                        };
+                        let mut mask = 0u32;
+                        if config.priority_fee.is_some() {
+                            mask |= 0b11;
+                        }
+                        if config.compute_unit_limit.is_some() {
+                            mask |= 0b100;
+                        }
+                        if config.loaded_accounts_data_size_limit.is_some() {
+                            mask |= 0b1000;
+                        }
+                        if config.heap_size.is_some() {
+                            mask |= 0b1_0000;
+                        }
+                        mask.encode(&mut input).unwrap();
+                        if let Some(value) = config.priority_fee {
+                            value.encode(&mut input).unwrap();
+                        }
+                        if let Some(value) = config.compute_unit_limit {
+                            value.encode(&mut input).unwrap();
+                        }
+                        if let Some(value) = config.loaded_accounts_data_size_limit {
+                            value.encode(&mut input).unwrap();
+                        }
+                        if let Some(value) = config.heap_size {
+                            value.encode(&mut input).unwrap();
+                        }
+                        hash.encode(&mut input).unwrap();
+                        write_addresses(&addresses, &mut encoder, &mut input);
+                        write_instructions(&instructions, &mut input);
+                        VersionedMessage::V1(V1Message {
+                            header: MessageHeader {
+                                num_required_signatures: header[0],
+                                num_readonly_signed_accounts: header[1],
+                                num_readonly_unsigned_accounts: header[2],
+                            },
+                            config,
+                            lifetime_specifier: Hash::new_from_array(hash),
+                            account_keys: addresses
+                                .iter()
+                                .copied()
+                                .map(canonical_address)
+                                .collect(),
+                            instructions: instructions.iter().map(canonical_instruction).collect(),
+                        })
+                    }
+                    _ => unreachable!(),
+                };
+
+                let expected = VersionedTransaction {
+                    signatures: signatures.into_iter().map(Signature::from).collect(),
+                    message,
+                };
+                let mut output = Vec::new();
+                SolanaTransactionTranscoder::with_frozen(frozen_decoder)
+                    .transcode_exact(
+                        input.as_slice(),
+                        &mut output,
+                        TransactionWireLimits::CURRENT,
+                    )
+                    .unwrap();
+                assert_matches_current_wincode(expected, &output);
+            }
+        }
+    }
+
+    #[test]
+    fn malformed_frames_never_panic_and_roll_back_appends() {
+        let mut rng = StdRng::seed_from_u64(0x42_4f_55_4e_44_53);
+        let mut transcoder = SolanaTransactionTranscoder::new();
+        for _ in 0..10_000 {
+            let input = random_bytes(&mut rng, 512);
+            let prefix = [1, 2, 3, 4, 5];
+            let mut output = prefix.to_vec();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                transcoder.transcode_append_exact(
+                    &input,
+                    &mut output,
+                    TransactionWireLimits::new(512, 4096, 512, 8192),
+                )
+            }));
+            let result = result.expect("malformed compact frame panicked");
+            if result.is_err() {
+                assert_eq!(output, prefix);
+            }
+        }
+
+        let mut input = VecWriter::new();
+        write_signatures(&[[7u8; 64]], &mut input);
+        write_len(0, &mut input);
+        write_header([1, 0, 0], &mut input);
+        write_addresses(&[[8u8; 32]], &mut DedupeEncoder::new(), &mut input);
+        [9u8; 32].encode(&mut input).unwrap();
+        write_instructions(&[], &mut input);
+        for truncated_len in 0..input.as_slice().len() {
+            let prefix = [6, 7, 8];
+            let mut output = prefix.to_vec();
+            assert!(
+                transcoder
+                    .transcode_append_exact(
+                        &input.as_slice()[..truncated_len],
+                        &mut output,
+                        TransactionWireLimits::CURRENT,
+                    )
+                    .is_err()
+            );
+            assert_eq!(output, prefix);
+        }
     }
 }

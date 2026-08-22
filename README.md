@@ -17,6 +17,8 @@ Compact, fast binary encoding with varints, optional deduplication, and opportun
 - no_std + alloc: works without `std` (uses `zstd-safe`)
 - Derive macros: `#[derive(Encode, Decode)]` for your types, `#[derive(Pack)]` for dedupe/bulk types
 - Solana support: feature `solana` adds v2/v3 SDK types
+- Agave transaction bridge: feature `std` includes a bounded, reusable compact-to-canonical
+  transcoder for current legacy, v0, and v1 transaction wire layouts
 - Big-endian ready: CI runs tests on s390x
 
 ## Install
@@ -166,9 +168,24 @@ let result: Vec<u8> = Vec::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap();
 assert_eq!(result, data2);
 ```
 
-### Writer pre‑allocation
+### Writer pre-allocation
 
-The `Write` trait provides a `reserve(additional)` hint. Growable writers like `VecWriter` use this to pre‑allocate capacity before encoding large collections, reducing intermediate reallocations.
+The `Write` trait provides a `reserve(additional)` hint. Growable writers like `VecWriter` use this to pre-allocate capacity before encoding large collections, reducing intermediate reallocations.
+
+### Agave transaction wire reconstruction
+
+`solana_wire::SolanaTransactionTranscoder` reconstructs the canonical transaction bytes consumed
+by current Agave byte-backed transaction views. It is independent of a particular Solana SDK crate
+version, borrows frozen address-dictionary hits, reuses decompression scratch space, and can append
+directly to a reusable block-component buffer. Every transaction is independently length-framed and
+decoded with explicit input, output, sequence, and allocation limits.
+
+This is a bridge into Agave's existing zero-copy parser, not a drop-in Turbine wire change. Putting
+the compact representation into shreds changes Merkle roots and shred signatures, so a network
+deployment needs an explicit feature activation, format version, and identical dictionary identity
+on leaders and validators. `transcode_exact` and `transcode_append_exact` reject trailing data and
+roll back their output on failure; callers should reject unknown versions or dictionary IDs rather
+than trying another codec.
 
 ## Supported types
 
@@ -186,7 +203,7 @@ Note: `HashMap`/`HashSet` are not implemented.
 ## Cargo features
 
 - `default`: core + `no_std` (uses `alloc`)
-- `std`: enables `std` adapters and `Cow`
+- `std`: enables `std` adapters, `Cow`, and the Agave transaction wire transcoder
 - `solana`: Solana SDK v2 + Agave v3 types (implies `std`)
 
 ## Big‑endian and portability
