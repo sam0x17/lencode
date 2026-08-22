@@ -1,12 +1,12 @@
 {
-  "version": 51,
+  "version": 52,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T13:53:59Z",
+  "updated_at": "2026-08-22T14:04:00Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 6,
+    "version": 7,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -299,7 +299,79 @@
         "wire_bytes_changed": false,
         "unsafe_code_added": false
       },
-      "conclusion": "the borrowed range scan more than halves wincode Blockstore latency and cuts canonical LZ4 latency by 46.1% on Rust 1.98.0 while preserving the 47.4% Turbine wire reduction; canonical decoding now trades 15.5% read latency for that wire reduction"
+      "reused_framed_input_result": {
+        "change": "retain the compressed deshred Vec allocation across canonical framed components; decompressed bytes still transfer directly into returned parsed views, while legacy payloads retain their existing allocation-transfer path",
+        "protocol": "median of three paired independent processes on logical CPU 28, each with 31 alternating warmed trials per format",
+        "baseline": {
+          "description": "exact retained Rust 1.98.0 borrowed-range-scan binary",
+          "binary_sha256": "b52b904e2b5b9dde8f5b43823dd4605d1d3ba93dd6e6e14f648a87191d9fc880",
+          "wincode_validator": { "value": 27537654, "unit": "ns/100 Blockstore slots", "range": [27424515, 27568065] },
+          "lencode_validator": { "value": 31828633, "unit": "ns/100 Blockstore slots", "range": [31642502, 31843142] }
+        },
+        "candidate": {
+          "binary_sha256": "bfa7c7d191f804e3dd9cf69c375adf41d026311fae2c3914cb14ca7776ad2120",
+          "wincode_validator": { "value": 27421364, "unit": "ns/100 Blockstore slots", "range": [27389334, 27506615] },
+          "lencode_validator": { "value": 29271992, "unit": "ns/100 Blockstore slots", "range": [29099861, 29441393] },
+          "wincode_latency_improvement_pct": 0.422,
+          "lencode_latency_improvement_pct": 8.033,
+          "lencode_validator_throughput_vs_wincode": 0.937,
+          "lencode_latency_over_wincode_pct": 6.749
+        },
+        "cumulative": {
+          "vs_rust_1_98_sorted": {
+            "wincode_latency_improvement_pct": 54.356,
+            "lencode_latency_improvement_pct": 50.370
+          },
+          "vs_rust_1_97_sorted": {
+            "wincode_latency_improvement_pct": 52.926,
+            "lencode_latency_improvement_pct": 48.847,
+            "note": "includes the accepted Rust 1.98.0 compiler regression"
+          }
+        },
+        "contention_event": {
+          "discarded_baseline_wincode_validator_ns": 33114670,
+          "discarded_baseline_lencode_validator_ns": 36760465,
+          "reason": "one short baseline process was about 20% slower than the other baseline and candidate processes",
+          "resolution": "discarded the first short set and reran three complete paired processes; the rerun was stable"
+        },
+        "source_sha256": {
+          "blockstore": "ae2f69dafadcb6891736577a4eb9c9fa627a403b80c84bb2aee06cb376529fc5",
+          "blockstore_db": "e878ae7fe85c91c05b01744bded6801e4a4218bc613502f0a080b4c6988c0c66",
+          "blockstore_tests": "c35ea0b1962a8b210252f89108f878c988634169974caa11c4b08d9e3e4032c7",
+          "shredder": "084c5f92ef51b76c3e2c0290339ae48bfd9c799f33fc43a5439b883735501cd8",
+          "production_codec": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b",
+          "frozen_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d"
+        },
+        "retained_profile": {
+          "protocol": "perf record at 999 Hz on logical CPU 28 over the exact retained binary with 31 alternating warmed trials per format",
+          "data_sha256": "5c4ee971f80caedf942108e5776a7c448b6c89663de263fe4bff2a84e5e70369",
+          "samples": 3628,
+          "lost_samples": 0,
+          "wincode_validator_ns": 27753214,
+          "lencode_validator_ns": 29736712,
+          "self_cycles_pct": {
+            "rocksdb_iterator_next": 7.31,
+            "lz4_decompress_safe": 6.60,
+            "block_component_parse": 6.05,
+            "memcmp": 5.64,
+            "transaction_frame_parse": 3.00,
+            "range_scan": 0.92,
+            "malloc": 0.74,
+            "deshred_push": 0.51
+          }
+        },
+        "validation": {
+          "ledger_tests": "347 passed, 3 ignored",
+          "allocation_test": "framed reconstruction preserves the input pointer and capacity while returning exact canonical bytes",
+          "strict_clippy": "ledger library and both frozen Blockstore benches passed; Turbine library passed on Rust 1.98.0",
+          "exact_binary_reproduced": true
+        },
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false,
+        "public_api_change": "additive"
+      },
+      "conclusion": "the borrowed range scan plus framed-input allocation reuse cuts canonical Blockstore latency by 50.4% on Rust 1.98.0 while preserving the 47.4% Turbine wire reduction; canonical decoding now costs 6.7% more latency than wincode"
     },
     "history": [
       {
