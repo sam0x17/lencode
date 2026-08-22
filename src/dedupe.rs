@@ -877,6 +877,24 @@ impl DedupeDecoder {
         self.frozen_total_primed + self.scratch_count
     }
 
+    #[cfg(feature = "std")]
+    #[inline(always)]
+    pub(crate) const fn frozen_len(&self) -> usize {
+        self.frozen_total_primed
+    }
+
+    #[cfg(feature = "std")]
+    #[inline]
+    pub(crate) fn frozen_values<T: 'static>(&self) -> Option<&[T]> {
+        let frozen = self.frozen.as_ref()?;
+        let (type_id, store) = frozen.typed_vec.as_ref()?;
+        if *type_id != TypeId::of::<T>() {
+            return None;
+        }
+        let store: &dyn Any = store.as_ref();
+        store.downcast_ref::<Vec<T>>().map(Vec::as_slice)
+    }
+
     /// Returns `true` if the cache is empty.
     #[inline(always)]
     pub const fn is_empty(&self) -> bool {

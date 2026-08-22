@@ -374,6 +374,8 @@ impl SolanaEntryBatchTranscoder {
 pub struct SolanaTransactionTranscoder {
     decoder: DedupeDecoder,
     decompressed: Vec<u8>,
+    address_offsets: Vec<usize>,
+    direct_addresses: bool,
 }
 
 impl Default for SolanaTransactionTranscoder {
@@ -388,6 +390,8 @@ impl SolanaTransactionTranscoder {
         Self {
             decoder: DedupeDecoder::new(),
             decompressed: Vec::new(),
+            address_offsets: Vec::new(),
+            direct_addresses: false,
         }
     }
 
@@ -396,6 +400,8 @@ impl SolanaTransactionTranscoder {
         Self {
             decoder: DedupeDecoder::with_frozen(frozen),
             decompressed: Vec::new(),
+            address_offsets: Vec::new(),
+            direct_addresses: false,
         }
     }
 
@@ -447,7 +453,10 @@ impl SolanaTransactionTranscoder {
             limits.max_total_allocation,
         );
         let mut reader = LimitedReader::new(Cursor::new(input), decode_limits);
+        self.address_offsets.clear();
+        self.direct_addresses = true;
         let result = self.transcode_inner(&mut reader, output, output_limit, output_start);
+        self.direct_addresses = false;
         if let Err(error) = result {
             output.truncate(output_start);
             return Err(error);
@@ -465,6 +474,8 @@ impl SolanaTransactionTranscoder {
     /// [`Self::transcode_append_exact_continuing`].
     pub fn reset_context(&mut self) {
         self.decoder.clear();
+        self.address_offsets.clear();
+        self.direct_addresses = false;
     }
 
     /// Transcodes one exact frame without clearing values decoded from preceding frames.
@@ -479,6 +490,7 @@ impl SolanaTransactionTranscoder {
         output: &mut Vec<u8>,
         limits: TransactionWireLimits,
     ) -> Result<usize> {
+        self.direct_addresses = false;
         let output_start = output.len();
         if input.len() > limits.max_input_bytes {
             return Err(Error::DecodeLimitExceeded);
@@ -647,9 +659,63 @@ impl SolanaTransactionTranscoder {
         max_output: usize,
         count: usize,
     ) -> Result<()> {
+        if self.direct_addresses {
+            let frozen_len = self.decoder.frozen_len();
+            if frozen_len == 0 {
+                return Self::transcode_address_values_direct(
+                    reader,
+                    output,
+                    max_output,
+                    count,
+                    &[],
+                    &mut self.address_offsets,
+                );
+            }
+            if let Some(frozen) = self.decoder.frozen_values::<[u8; 32]>() {
+                return Self::transcode_address_values_direct(
+                    reader,
+                    output,
+                    max_output,
+                    count,
+                    frozen,
+                    &mut self.address_offsets,
+                );
+            }
+        }
         for _ in 0..count {
             let address = self.decoder.decode_ref::<[u8; 32]>(reader)?;
             append_bytes(output, address, max_output)?;
+        }
+        Ok(())
+    }
+
+    fn transcode_address_values_direct(
+        reader: &mut impl Read,
+        output: &mut Vec<u8>,
+        max_output: usize,
+        count: usize,
+        frozen: &[[u8; 32]],
+        offsets: &mut Vec<usize>,
+    ) -> Result<()> {
+        for _ in 0..count {
+            let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
+                .map_err(|_| Error::DecodeLimitExceeded)?;
+            if id == 0 {
+                reader.claim_allocation(32)?;
+                offsets.push(output.len());
+                append_input(reader, output, 32, max_output)?;
+            } else if let Some(address) = frozen.get(id - 1) {
+                append_bytes(output, address, max_output)?;
+            } else {
+                let index = id - frozen.len() - 1;
+                let offset = *offsets.get(index).ok_or(Error::InvalidData)?;
+                let end = offset.checked_add(32).ok_or(Error::DecodeLimitExceeded)?;
+                if end > output.len() {
+                    return Err(Error::InvalidData);
+                }
+                ensure_output(output, 32, max_output)?;
+                output.extend_from_within(offset..end);
+            }
         }
         Ok(())
     }
@@ -682,8 +748,7 @@ impl SolanaTransactionTranscoder {
         reader.claim_sequence(count, 1)?;
         append_short_u16(output, count, max_output)?;
         for _ in 0..count {
-            let address = self.decoder.decode_ref::<[u8; 32]>(reader)?;
-            append_bytes(output, address, max_output)?;
+            self.transcode_address_values(reader, output, max_output, 1)?;
             self.transcode_byte_vec(reader, output, max_output)?;
             self.transcode_byte_vec(reader, output, max_output)?;
         }
@@ -1274,7 +1339,9 @@ mod tests {
     #[test]
     fn v0_reconstructs_lookups_and_compressed_data() {
         let signatures = [[5u8; 64]];
-        let address = [6u8; 32];
+        let frozen_address = [6u8; 32];
+        let novel_address = [16u8; 32];
+        let addresses = [frozen_address, novel_address];
         let hash = [7u8; 32];
         let instructions = [TestInstruction {
             program_id_index: 0,
@@ -1282,17 +1349,17 @@ mod tests {
             data: vec![0; 512],
         }];
         let lookups = [TestLookup {
-            address,
+            address: novel_address,
             writable: vec![1, 2],
             readonly: vec![3],
         }];
-        let (frozen_encoder, frozen_decoder) = frozen_dictionary(&[address]);
+        let (frozen_encoder, frozen_decoder) = frozen_dictionary(&[frozen_address]);
         let mut encoder = DedupeEncoder::with_frozen(frozen_encoder);
         let mut input = VecWriter::new();
         write_signatures(&signatures, &mut input);
         write_len(1, &mut input);
         write_header([1, 0, 0], &mut input);
-        write_addresses(&[address], &mut encoder, &mut input);
+        write_addresses(&addresses, &mut encoder, &mut input);
         hash.encode(&mut input).unwrap();
         write_instructions(&instructions, &mut input);
         write_len(lookups.len(), &mut input);
@@ -1307,13 +1374,15 @@ mod tests {
         let mut expected = Vec::new();
         expected.push(1);
         expected.extend_from_slice(&signatures[0]);
-        expected.extend_from_slice(&[V0_PREFIX, 1, 0, 0, 1]);
-        expected.extend_from_slice(&address);
+        expected.extend_from_slice(&[V0_PREFIX, 1, 0, 0, 2]);
+        for address in addresses {
+            expected.extend_from_slice(&address);
+        }
         expected.extend_from_slice(&hash);
         expected.extend_from_slice(&[1, 0, 1, 0, 0x80, 0x04]);
         expected.extend_from_slice(&[0; 512]);
         expected.push(1);
-        expected.extend_from_slice(&address);
+        expected.extend_from_slice(&novel_address);
         expected.extend_from_slice(&[2, 1, 2, 1, 3]);
 
         let mut transcoder = SolanaTransactionTranscoder::with_frozen(frozen_decoder);
@@ -1335,7 +1404,7 @@ mod tests {
                         num_readonly_signed_accounts: 0,
                         num_readonly_unsigned_accounts: 0,
                     },
-                    account_keys: vec![canonical_address(address)],
+                    account_keys: addresses.map(canonical_address).to_vec(),
                     recent_blockhash: Hash::new_from_array(hash),
                     instructions: instructions.iter().map(canonical_instruction).collect(),
                     address_table_lookups: lookups

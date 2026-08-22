@@ -1,12 +1,12 @@
 {
-  "version": 66,
+  "version": 67,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T18:09:18Z",
+  "updated_at": "2026-08-22T18:39:20Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 21,
+    "version": 22,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -50,8 +50,9 @@
       "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
       "rust_version": "1.98.0",
       "baseline_binary_sha256": "b02ce959b3a6d572cab3c0de2ea6e4fe9d8197ae187d9d3211b7ee96644a172a",
-      "current_binary_sha256": "3a2ae775349721c0f6a4ac1ce53ef86782ff15057c5e62ab8e48f04c13dc8389",
-      "lencode_solana_wire_sha256": "382696e7dc6311263547a2a7212d4ceabd6b49540157585037578d85f1fa1527",
+      "current_binary_sha256": "9c94a47f8172e65813335ee998d5ee278633b02c78ea347d755df4035f52c301",
+      "lencode_dedupe_sha256": "c9c1e43c33e6a52475855331d0bd7f56bf986cc0d94acaa756382b1bbadd756b",
+      "lencode_solana_wire_sha256": "17e5d5a879be133a6a8cb1b1ab735903d5ddb577102b2a01669dae39c98d4eef",
       "baseline": {
         "wincode_leader": { "value": 278394918, "unit": "ns/100 blocks" },
         "wincode_validator": { "value": 21970679, "unit": "ns/100 blocks" },
@@ -59,10 +60,10 @@
         "lencode_validator": { "value": 41877890, "unit": "ns/100 blocks" }
       },
       "current": {
-        "wincode_leader": { "value": 278456964, "unit": "ns/100 blocks" },
-        "wincode_validator": { "value": 21827822, "unit": "ns/100 blocks" },
-        "lencode_leader": { "value": 219666204, "unit": "ns/100 blocks" },
-        "lencode_validator": { "value": 40514793, "unit": "ns/100 blocks" }
+        "wincode_leader": { "value": 278221598, "unit": "ns/100 blocks" },
+        "wincode_validator": { "value": 21854109, "unit": "ns/100 blocks" },
+        "lencode_leader": { "value": 218545632, "unit": "ns/100 blocks" },
+        "lencode_validator": { "value": 39085842, "unit": "ns/100 blocks" }
       },
       "lencode_payload_bytes": 47784650,
       "wincode_wire_bytes": 172931616,
@@ -1321,6 +1322,36 @@
         "zero_copy_effect": "the caller's retained Vec allocation is moved into VecWriter without copying, enabling direct spare-capacity varint and fixed-width writes, then moved back before return",
         "unsafe_code_added": false,
         "validation": "three alternating CPU-affined 31-trial exact-binary pairs after one validator outlier was discarded and replaced; every run reconstructed exact canonical bytes and retained 47,784,650 payload bytes and 125,011,744 Turbine wire bytes; 217 lencode tests and 5 doctests passed, one doctest remained ignored; no-default, std-only, and all-feature all-target checks, formatting, and strict Clippy passed"
+      },
+      {
+        "iteration": 22,
+        "optimization": "reconstruct novel reference-Solana addresses directly into canonical output and reuse them by offset",
+        "kept": true,
+        "integration": "lencode SolanaTransactionTranscoder only",
+        "baseline_binary_sha256": "3a2ae775349721c0f6a4ac1ce53ef86782ff15057c5e62ab8e48f04c13dc8389",
+        "candidate_binary_sha256": "9c94a47f8172e65813335ee998d5ee278633b02c78ea347d755df4035f52c301",
+        "baseline_medians_ns": {
+          "wincode_leader": 277856478,
+          "wincode_validator": 21762709,
+          "lencode_leader": 219447655,
+          "lencode_validator": 40695478
+        },
+        "candidate_medians_ns": {
+          "wincode_leader": 278221598,
+          "wincode_validator": 21854109,
+          "lencode_leader": 218545632,
+          "lencode_validator": 39085842
+        },
+        "lencode_leader_improvement_pct": 0.413,
+        "lencode_leader_control_normalized_improvement_pct": 0.545,
+        "lencode_validator_improvement_pct": 4.118,
+        "lencode_validator_control_normalized_improvement_pct": 4.555,
+        "current_leader_speedup_vs_wincode": 1.273,
+        "current_validator_throughput_vs_wincode": 0.559,
+        "wire_bytes_changed": false,
+        "zero_copy_effect": "novel 32-byte addresses are copied once from compact input into the caller-owned canonical output; repeated scratch IDs copy from that output by retained offset instead of first materializing a decoder-owned Vec<[u8; 32]>",
+        "unsafe_code_added": false,
+        "validation": "one reverse-order CPU-affined 31-trial exact-binary pair plus 31 alternating single-trial process pairs; every run reconstructed exact canonical bytes for 100 blocks, 68,392 entries, and 124,218 transactions and retained 47,784,650 payload bytes and 125,011,744 Turbine wire bytes; a v0 regression test covers a novel account key reused as a lookup-table key; 217 lencode tests and 5 doctests passed, one doctest remained ignored; no-default, std-only, and all-feature all-target checks, formatting, and strict Clippy passed"
       }
     ],
     "failed_attempts": [
@@ -1778,8 +1809,8 @@
   },
   "final_summary": {
     "qualifying_scope": "lencode-owned changes and Agave replacement-call-site adapters only; general Agave optimizations are historical and excluded",
-    "native_entry_batch_leader_speedup_vs_wincode": 1.268,
-    "native_entry_batch_validator_throughput_vs_wincode": 0.539,
+    "native_entry_batch_leader_speedup_vs_wincode": 1.273,
+    "native_entry_batch_validator_throughput_vs_wincode": 0.559,
     "native_entry_batch_payload_reduction_vs_wincode_pct": 28.238,
     "native_entry_batch_turbine_wire_reduction_vs_wincode_pct": 27.710,
     "agave_production_batch_leader_speedup_vs_wincode": 2.086,
