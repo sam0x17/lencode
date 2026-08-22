@@ -1,7 +1,7 @@
 [workspace]
 members = ["macros", "."]
 package.version = "1.2.1"
-package.rust-version = "1.98.0"
+package.rust-version = "1.97.1"
 
 [package]
 name = "lencode"
