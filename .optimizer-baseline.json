@@ -1,12 +1,12 @@
 {
-  "version": 46,
+  "version": 47,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T11:56:14Z",
+  "updated_at": "2026-08-22T12:13:51Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 1,
+    "version": 2,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -40,6 +40,60 @@
       "wincode_wire_bytes": 172931616,
       "lencode_wire_bytes": 80592512,
       "mode": "canonical wincode entry batch compressed into a single caller-owned LZ4 frame arena"
+    },
+    "production_batch_benchmark": {
+      "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench --offline -p solana-ledger --bench lencode_shreds_canonical_lz4 -- /tmp/agave-shred-broadcast-batches.bin",
+      "fixture": {
+        "source_path": "/tmp/agave-shred-corpus.bin",
+        "source_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "path": "/tmp/agave-shred-broadcast-batches.bin",
+        "sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "construction": "split each slot's entries with StandardBroadcastRun's timeout-free coalescing byte rules: 30816 bytes per typical FEC batch, a two-batch default target, and less than 5% acceptable tail padding",
+        "scope_note": "the frozen benchmark treats each resulting component as an independent Shredder invocation; this isolates production component sizing without modeling the 50 ms receive timeout or chained slot state",
+        "slots": 100,
+        "components": 1982,
+        "entries": 68392,
+        "transactions": 124218,
+        "component_bytes": { "min": 56, "median": 29793, "p95": 60502, "max": 61620 },
+        "trials_per_run": 11,
+        "independent_runs": 3
+      },
+      "original_baseline": {
+        "wincode_leader": { "value": 453973312, "unit": "ns/1982 components", "range": [453492751, 454272054] },
+        "wincode_validator": { "value": 19480688, "unit": "ns/1982 components", "range": [19463458, 19555977] },
+        "lencode_leader": { "value": 280270740, "unit": "ns/1982 components", "range": [279882010, 280328700] },
+        "lencode_validator": { "value": 23506622, "unit": "ns/1982 components", "range": [23497221, 23535701] },
+        "wincode_payload_bytes": 66602807,
+        "lencode_payload_bytes": 33108727,
+        "wincode_data_shreds": 125472,
+        "wincode_coding_shreds": 125472,
+        "lencode_data_shreds": 65152,
+        "lencode_coding_shreds": 65152,
+        "wincode_wire_bytes": 305022432,
+        "lencode_wire_bytes": 158384512,
+        "wire_reduction_vs_wincode_pct": 48.074,
+        "lencode_leader_speedup": 1.620,
+        "lencode_validator_throughput": 0.829,
+        "codec": "LZ4 FAST(1) for every component"
+      },
+      "current_baseline": {
+        "wincode_leader": { "value": 455658053, "unit": "ns/1982 components", "range": [454213047, 455759413] },
+        "wincode_validator": { "value": 19545178, "unit": "ns/1982 components", "range": [19449218, 19616908] },
+        "lencode_leader": { "value": 267159448, "unit": "ns/1982 components", "range": [266952277, 267877810] },
+        "lencode_validator": { "value": 22970090, "unit": "ns/1982 components", "range": [22925000, 23068320] },
+        "wincode_payload_bytes": 66602807,
+        "lencode_payload_bytes": 34593294,
+        "wincode_data_shreds": 125472,
+        "wincode_coding_shreds": 125472,
+        "lencode_data_shreds": 65984,
+        "lencode_coding_shreds": 65984,
+        "wincode_wire_bytes": 305022432,
+        "lencode_wire_bytes": 160407104,
+        "wire_reduction_vs_wincode_pct": 47.411,
+        "lencode_leader_speedup": 1.706,
+        "lencode_validator_throughput": 0.851,
+        "codec": "LZ4 FAST(4) through the normal two-FEC input limit and FAST(1) above it"
+      }
     },
     "history": [
       {
@@ -318,6 +372,53 @@
         "leader_speedup_vs_wincode": 1.506,
         "validator_throughput_vs_wincode": 0.801,
         "validation": "343 ledger tests and 47 turbine tests passed; strict ledger and turbine Clippy passed; the retained 11-trial benchmark stayed within 1% and all payload, shred-count, and wire totals remained exact"
+      },
+      {
+        "iteration": 10,
+        "optimization": "use LZ4 FAST(4) for normal two-FEC broadcast components and retain FAST(1) for oversized components",
+        "kept": true,
+        "integration": "Agave shred block-component codec",
+        "production_batch_results": {
+          "wincode_leader": { "value": 455658053, "unit": "ns/1982 components" },
+          "wincode_validator": { "value": 19545178, "unit": "ns/1982 components" },
+          "lencode_leader": { "value": 267159448, "unit": "ns/1982 components" },
+          "lencode_validator": { "value": 22970090, "unit": "ns/1982 components" },
+          "wincode_payload_bytes": 66602807,
+          "lencode_payload_bytes": 34593294,
+          "wincode_data_shreds": 125472,
+          "wincode_coding_shreds": 125472,
+          "lencode_data_shreds": 65984,
+          "lencode_coding_shreds": 65984,
+          "wincode_wire_bytes": 305022432,
+          "lencode_wire_bytes": 160407104
+        },
+        "historical_whole_slot_results": {
+          "wincode_payload_bytes": 66587751,
+          "lencode_payload_bytes": 30292964,
+          "wincode_data_shreds": 71136,
+          "wincode_coding_shreds": 71136,
+          "lencode_data_shreds": 33152,
+          "lencode_coding_shreds": 33152,
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 80592512
+        },
+        "policy": "inputs at or below StandardBroadcastRun's two-typical-FEC target use FAST(4); larger inputs use FAST(1)",
+        "wire_compatibility": "both accelerations emit the same LZ4 block format; a focused test decodes prior FAST(1) frames, and oversized historical-corpus bytes remain exact",
+        "baseline_binary_sha256": "41262fb660eefe8b4bd7f4f8f82edeeaca5554f22b799ccbcb037e751be2af50",
+        "candidate_binary_sha256": "2400f36321bdf2540f8eb1445966d5ba5e15ddb114995caaf88e17b5513d5bcb",
+        "frozen_benchmark_source_sha256": "55f9e6160b554333a59898198a28dbb3f45dcd58922e0f8e1308a8fb7cab69a9",
+        "production_fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "production_codec_source_sha256": "915184c31dafd6b3c512b4f527e8656ab2ceb6beb7ff974cae1d9a3df69087ba",
+        "leader_improvement_vs_production_baseline_pct": 4.678,
+        "leader_improvement_vs_production_baseline_normalized_pct": 5.031,
+        "validator_improvement_vs_production_baseline_pct": 2.282,
+        "validator_improvement_vs_production_baseline_normalized_pct": 2.605,
+        "payload_regression_vs_production_baseline_pct": 4.484,
+        "wire_regression_vs_production_baseline_pct": 1.277,
+        "wire_reduction_vs_wincode_pct": 47.411,
+        "leader_speedup_vs_wincode": 1.706,
+        "validator_throughput_vs_wincode": 0.851,
+        "validation": "three independent 11-trial runs cleared the 5% control-normalized leader threshold with no measured regression above 2%; 345 ledger tests and 47 turbine tests passed, strict ledger and turbine Clippy passed, and focused tests covered both acceleration paths and prior FAST(1) decoding"
       }
     ],
     "failed_attempts": [
@@ -444,6 +545,10 @@
       {
         "optimization": "raise canonical LZ4 acceleration from FAST(1) to FAST(4)",
         "reason": "an exact 11-trial run improved leader time from 182.832 ms to 174.491 ms (4.6% absolute, 4.8% normalized) and validator time by 3.0% normalized, both below the 5% keep threshold, while Turbine wire bytes increased 2.4%; FAST(1) was restored"
+      },
+      {
+        "optimization": "fall back to raw canonical bytes when LZ4 expands a production-sized component",
+        "reason": "all 1,982 timeout-free production-sized components compressed smaller, including the 56-byte minimum; payload bytes, shred counts, wire bytes, and measured work were unchanged, so the redundant branch was removed"
       }
     ],
     "contention_events": [
