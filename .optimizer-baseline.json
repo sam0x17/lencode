@@ -1,26 +1,26 @@
 {
-  "version": 72,
+  "version": 73,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T20:16:11Z",
+  "updated_at": "2026-08-22T20:52:25Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 27,
+    "version": 28,
     "created_at": "2026-08-22T06:19:02Z",
-    "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
+    "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "agave_baseline_commit": "ef210d67f2fabeee1730498188fa78854260c679",
-    "agave_worktree_fingerprint": "tracked:05b52ae98afe3de7c214547e8d420cdd0ebc950ae42c1bcc5d7d2efe03a770ea;ledger/benches/lencode_shreds.rs:6caa3683e7475d3f3b1a119c905e9c7aec49618c124113b1c485bac7d46d3537",
+    "agave_worktree_fingerprint": "tracked:05b52ae98afe3de7c214547e8d420cdd0ebc950ae42c1bcc5d7d2efe03a770ea;ledger/benches/lencode_shreds.rs:0ed52edd0a92ff02032305fc8ad7a5492043482a5ba75eb65cf05113f4ad9e09",
     "qualifying_scope": "native lencode library changes and Agave call-site substitutions from wincode to lencode; general Agave optimizations are excluded",
-    "keep_gate": "at least 1% improvement in a relevant metric, no measured regression above 2%, unchanged wire compatibility, and low complexity",
+    "keep_gate": "at least 1% improvement in a relevant metric, no measured regression above 2%, backward-compatible existing frames or explicitly versioned and feature-gated wire evolution, and low complexity",
     "sample": {
       "path": "/tmp/agave-shred-corpus.bin",
       "blocks": 100,
       "entries": 68392,
       "transactions": 124218,
-      "trials_per_run": 11,
+      "trials_per_run": 31,
       "independent_runs": 3
     },
     "original_baseline": {
@@ -46,14 +46,14 @@
     },
     "native_reference_path": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
-      "benchmark_source_sha256": "6caa3683e7475d3f3b1a119c905e9c7aec49618c124113b1c485bac7d46d3537",
+      "benchmark_source_sha256": "0ed52edd0a92ff02032305fc8ad7a5492043482a5ba75eb65cf05113f4ad9e09",
       "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
       "rust_version": "1.98.0",
       "baseline_binary_sha256": "b02ce959b3a6d572cab3c0de2ea6e4fe9d8197ae187d9d3211b7ee96644a172a",
-      "current_binary_sha256": "9e62536858dc58b935158bb115c6079c92d7ee28470578dd57e551806400a2f8",
+      "current_binary_sha256": "29977ad5460aa126365d95787f2a3fd43358c9859cdb93a890d4709040871e96",
       "lencode_dedupe_sha256": "c9c1e43c33e6a52475855331d0bd7f56bf986cc0d94acaa756382b1bbadd756b",
       "lencode_solana_sha256": "79799bea99929e0913bb1b6107ac1398de862e30ee5c97ce0ea8227333467628",
-      "lencode_solana_wire_sha256": "e4d7c6d3c940c402e8b2868434e08af1a2b0d3318936a694903012048751f059",
+      "lencode_solana_wire_sha256": "cc6df44ce53c50606f47e81938ef0a9160141024ed6b15c44080c20b2cd43b3a",
       "baseline": {
         "wincode_leader": { "value": 278394918, "unit": "ns/100 blocks" },
         "wincode_validator": { "value": 21970679, "unit": "ns/100 blocks" },
@@ -61,16 +61,16 @@
         "lencode_validator": { "value": 41877890, "unit": "ns/100 blocks" }
       },
       "current": {
-        "wincode_leader": { "value": 278108913, "unit": "ns/100 blocks" },
-        "wincode_validator": { "value": 21817165, "unit": "ns/100 blocks" },
-        "lencode_leader": { "value": 211781302, "unit": "ns/100 blocks" },
-        "lencode_validator": { "value": 36143531, "unit": "ns/100 blocks" }
+        "wincode_leader": { "value": 278625081, "unit": "ns/100 blocks" },
+        "wincode_validator": { "value": 22004636, "unit": "ns/100 blocks" },
+        "lencode_leader": { "value": 194238466, "unit": "ns/100 blocks" },
+        "lencode_validator": { "value": 36330516, "unit": "ns/100 blocks" }
       },
-      "lencode_payload_bytes": 47849490,
+      "lencode_payload_bytes": 42318581,
       "wincode_wire_bytes": 172931616,
-      "lencode_wire_bytes": 125089536,
-      "wire_reduction_vs_wincode_pct": 27.665,
-      "frame": "LCSH version 1, native lencode dictionary flag 2",
+      "lencode_wire_bytes": 111709312,
+      "wire_reduction_vs_wincode_pct": 35.403,
+      "frame": "LCSH version 1, contextual native lencode dictionary flag 4; independent flag 2 remains accepted",
       "scope_status": "qualifying lencode-owned codec with an Agave replacement-call-site adapter"
     },
     "production_batch_benchmark": {
@@ -1509,6 +1509,44 @@
         "agave_adapter": "the replacement benchmark primes the frozen encoder with the matching reference Solana hasher; its Rust 1.98 as_chunks cleanup runs before timed work and is excluded from the measured optimization",
         "unsafe_code_added": false,
         "validation": "three alternating CPU-affined 31-trial exact-final-binary pairs; every run reconstructed exact canonical bytes for 100 blocks, 68,392 entries, and 124,218 transactions and retained 47,849,490 payload bytes and 125,089,536 Turbine wire bytes; 217 lencode tests and 5 doctests passed, one doctest remained ignored; no-default, std-only, and all-feature all-target checks, lencode strict Clippy, and Agave replacement-benchmark strict Clippy passed"
+      },
+      {
+        "iteration": 28,
+        "optimization": "share novel reference-Solana address IDs across one lencode entry batch",
+        "kept": true,
+        "integration": "lencode SolanaEntryBatchEncoder and SolanaEntryBatchTranscoder; Agave only selects the contextual constructor at lencode replacement sites",
+        "baseline_binary_sha256": "9e62536858dc58b935158bb115c6079c92d7ee28470578dd57e551806400a2f8",
+        "candidate_binary_sha256": "29977ad5460aa126365d95787f2a3fd43358c9859cdb93a890d4709040871e96",
+        "baseline_benchmark_source_sha256": "6caa3683e7475d3f3b1a119c905e9c7aec49618c124113b1c485bac7d46d3537",
+        "candidate_benchmark_source_sha256": "0ed52edd0a92ff02032305fc8ad7a5492043482a5ba75eb65cf05113f4ad9e09",
+        "baseline_medians_ns": {
+          "wincode_leader": 277673613,
+          "wincode_validator": 21888257,
+          "lencode_leader": 211468202,
+          "lencode_validator": 36195106
+        },
+        "candidate_medians_ns": {
+          "wincode_leader": 278625081,
+          "wincode_validator": 22004636,
+          "lencode_leader": 194238466,
+          "lencode_validator": 36330516
+        },
+        "lencode_leader_improvement_pct": 8.870,
+        "lencode_leader_control_normalized_improvement_pct": 9.243,
+        "lencode_validator_regression_pct": 0.373,
+        "lencode_validator_control_normalized_improvement_pct": 0.157,
+        "current_leader_speedup_vs_wincode": 1.434,
+        "current_validator_throughput_vs_wincode": 0.606,
+        "payload_bytes": 42318581,
+        "payload_reduction_vs_prior_lencode_pct": 11.559,
+        "turbine_wire_bytes": 111709312,
+        "turbine_wire_reduction_vs_prior_lencode_pct": 10.697,
+        "wire_reduction_vs_wincode_pct": 35.403,
+        "zero_copy_effect": "the decoder writes each novel address directly into caller-owned canonical output and retains its offset for later transactions in the batch; repeated IDs copy from canonical output without a decoder-owned address Vec",
+        "wire_compatibility": "new contextual batches use explicit flag 4, old independent flag-2 batches remain accepted, and both reconstruct the same canonical wincode bytes; deployment therefore requires feature-gating flag-4 production until readers are upgraded",
+        "agave_adapter": "the benchmark changes only three lencode replacement sites from with_frozen to with_frozen_contextual; the wincode path and measurement loops are unchanged",
+        "unsafe_code_added": false,
+        "validation": "three alternating CPU-affined 31-trial exact-final-binary pairs; every run reconstructed exact canonical bytes for 100 blocks, 68,392 entries, and 124,218 transactions; 211 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, and all-feature all-target checks, lencode strict Clippy, and Agave replacement-benchmark strict Clippy passed"
       }
     ],
     "failed_attempts": [
@@ -1772,6 +1810,14 @@
       {
         "optimization": "insert novel dedupe values through hashbrown's borrowed entry API",
         "reason": "two reverse-order CPU-affined 31-trial exact-binary pairs improved native lencode leader time by about 0.5% with unchanged wire bytes; the extra branch form was removed below the 1% gate before testing the retained reference Solana hasher"
+      },
+      {
+        "optimization": "store internal dedupe IDs as u32",
+        "reason": "an exact CPU-affined 31-trial pair was neutral after normalization to the wincode control and slightly increased lencode leader time, so the internal representation change was removed below the 1% gate"
+      },
+      {
+        "optimization": "write fixed Solana signatures and message discriminants through direct spare-capacity paths",
+        "reason": "the fixed-signature path improved normalized lencode leader time by only about 0.6% in one exact pair, and combining it with direct discriminant writes regressed the result; both paths were removed below the 1% gate"
       }
     ],
     "full_resets": [
@@ -1994,10 +2040,10 @@
   },
   "final_summary": {
     "qualifying_scope": "lencode-owned changes and Agave replacement-call-site adapters only; general Agave optimizations are historical and excluded",
-    "native_entry_batch_leader_speedup_vs_wincode": 1.313,
-    "native_entry_batch_validator_throughput_vs_wincode": 0.604,
-    "native_entry_batch_payload_reduction_vs_wincode_pct": 28.141,
-    "native_entry_batch_turbine_wire_reduction_vs_wincode_pct": 27.665,
+    "native_entry_batch_leader_speedup_vs_wincode": 1.434,
+    "native_entry_batch_validator_throughput_vs_wincode": 0.606,
+    "native_entry_batch_payload_reduction_vs_wincode_pct": 36.447,
+    "native_entry_batch_turbine_wire_reduction_vs_wincode_pct": 35.403,
     "agave_production_batch_leader_speedup_vs_wincode": 2.086,
     "agave_production_batch_validator_throughput_vs_wincode": 0.932,
     "agave_turbine_wire_reduction_vs_wincode_pct": 59.211,
@@ -2033,7 +2079,7 @@
     "diff_in_place_xor_decode_4kb_25pct_time_improvement_pct": 48.588,
     "diff_in_place_xor_decode_64kb_10pct_time_improvement_pct": 59.050,
     "diff_in_place_xor_decode_256kb_10pct_time_improvement_pct": 58.318,
-    "all_feature_tests": { "unit": 209, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
+    "all_feature_tests": { "unit": 211, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
     "no_default_features_check": "passed",

@@ -19,7 +19,9 @@
 //! use lencode's flagged raw-or-zstd byte representation. Message versions are
 //! `0` for legacy, `1` for v0, and `2` for v1. A caller that stores a stream of
 //! transactions should length-frame each compact transaction so this module
-//! can enforce exact consumption and per-transaction recovery.
+//! can enforce exact consumption. The entry-batch envelope supports both
+//! independently recoverable transactions and a contextual mode that shares
+//! novel address IDs across the batch.
 //!
 //! With `solana-types`, `SolanaEntryBatchEncoder` accepts current reference
 //! `VersionedTransaction` values and owns the complete compact `LCSH` batch
@@ -51,8 +53,10 @@ use solana_transaction::versioned::VersionedTransaction;
 pub const SOLANA_ENTRY_BATCH_MAGIC: [u8; 4] = *b"LCSH";
 /// Compact Solana entry-batch format version.
 pub const SOLANA_ENTRY_BATCH_VERSION: u8 = 1;
-/// Frame flag for native lencode transactions using an address dictionary.
+/// Frame flag for independently recoverable lencode transactions using an address dictionary.
 pub const SOLANA_ENTRY_BATCH_DICTIONARY_FLAG: u8 = 2;
+/// Frame flag for native lencode transactions sharing address IDs across the batch.
+pub const SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG: u8 = 4;
 /// Bytes used to identify the frozen address dictionary.
 pub const SOLANA_DICTIONARY_ID_BYTES: usize = 16;
 /// Fixed compact entry-batch header size.
@@ -172,6 +176,7 @@ pub struct SolanaEntryRef<'a> {
 pub struct SolanaEntryBatchEncoder {
     dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
     context: EncoderContext,
+    contextual: bool,
 }
 
 #[cfg(feature = "solana-types")]
@@ -187,6 +192,26 @@ impl SolanaEntryBatchEncoder {
                 dedupe: Some(DedupeEncoder::with_frozen(frozen)),
                 diff: None,
             },
+            contextual: false,
+        }
+    }
+
+    /// Creates an encoder that shares novel address IDs across one entry batch.
+    ///
+    /// Context is reset at each batch boundary. A corrupted transaction makes
+    /// the remainder of that batch undecodable, so consumers must reject the
+    /// complete batch on any error.
+    pub fn with_frozen_contextual(
+        dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+        frozen: Arc<FrozenEncoderState>,
+    ) -> Self {
+        Self {
+            dictionary_id,
+            context: EncoderContext {
+                dedupe: Some(DedupeEncoder::with_frozen(frozen)),
+                diff: None,
+            },
+            contextual: true,
         }
     }
 
@@ -217,20 +242,34 @@ impl SolanaEntryBatchEncoder {
         }
         output.0.extend_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
         output.0.push(SOLANA_ENTRY_BATCH_VERSION);
-        output.0.push(SOLANA_ENTRY_BATCH_DICTIONARY_FLAG);
+        output.0.push(if self.contextual {
+            SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG
+        } else {
+            SOLANA_ENTRY_BATCH_DICTIONARY_FLAG
+        });
         output.0.extend_from_slice(&self.dictionary_id);
         write_len(entry_count, output)?;
+
+        if self.contextual {
+            self.context
+                .dedupe
+                .as_mut()
+                .expect("compact entry-batch encoder requires dedupe")
+                .clear();
+        }
 
         for entry in entries {
             entry.num_hashes.encode(output)?;
             output.0.extend_from_slice(entry.hash.as_bytes());
             write_len(entry.transactions.len(), output)?;
             for transaction in entry.transactions {
-                self.context
-                    .dedupe
-                    .as_mut()
-                    .expect("compact entry-batch encoder requires dedupe")
-                    .clear();
+                if !self.contextual {
+                    self.context
+                        .dedupe
+                        .as_mut()
+                        .expect("compact entry-batch encoder requires dedupe")
+                        .clear();
+                }
                 let frame_len_offset = output.0.len();
                 output.0.extend_from_slice(&[0, 0]);
                 let frame_start = output.0.len();
@@ -291,10 +330,17 @@ impl SolanaEntryBatchTranscoder {
             || input.len() < SOLANA_ENTRY_BATCH_HEADER_BYTES
             || input[..4] != SOLANA_ENTRY_BATCH_MAGIC
             || input[4] != SOLANA_ENTRY_BATCH_VERSION
-            || input[5] != SOLANA_ENTRY_BATCH_DICTIONARY_FLAG
             || input[6..SOLANA_ENTRY_BATCH_HEADER_BYTES] != self.dictionary_id
         {
             return Err(Error::InvalidData);
+        }
+        let contextual = match input[5] {
+            SOLANA_ENTRY_BATCH_DICTIONARY_FLAG => false,
+            SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG => true,
+            _ => return Err(Error::InvalidData),
+        };
+        if contextual {
+            self.transaction.reset_context();
         }
 
         let body = &input[SOLANA_ENTRY_BATCH_HEADER_BYTES..];
@@ -348,11 +394,19 @@ impl SolanaEntryBatchTranscoder {
                 let mut transaction_limits = limits.transaction;
                 transaction_limits.max_output_bytes =
                     transaction_limits.max_output_bytes.min(remaining_output);
-                self.transaction.transcode_append_exact(
-                    &frame[..frame_len],
-                    output,
-                    transaction_limits,
-                )?;
+                if contextual {
+                    self.transaction.transcode_append_exact_continuing(
+                        &frame[..frame_len],
+                        output,
+                        transaction_limits,
+                    )?;
+                } else {
+                    self.transaction.transcode_append_exact(
+                        &frame[..frame_len],
+                        output,
+                        transaction_limits,
+                    )?;
+                }
                 reader.advance(frame_len);
             }
         }
@@ -369,8 +423,9 @@ impl SolanaEntryBatchTranscoder {
 /// Reconstructs canonical Solana transaction bytes into a reusable buffer.
 ///
 /// Address dictionary entries must be primed as `[u8; 32]` in the same order
-/// on the encoder and decoder. Scratch dedupe state is reset for every call,
-/// which keeps each transaction independently recoverable.
+/// on the encoder and decoder. The ordinary entry points reset scratch dedupe
+/// state for independently recoverable transactions; the contextual entry
+/// point retains it until [`Self::reset_context`] is called.
 pub struct SolanaTransactionTranscoder {
     decoder: DedupeDecoder,
     decompressed: Vec<u8>,
@@ -490,7 +545,6 @@ impl SolanaTransactionTranscoder {
         output: &mut Vec<u8>,
         limits: TransactionWireLimits,
     ) -> Result<usize> {
-        self.direct_addresses = false;
         let output_start = output.len();
         if input.len() > limits.max_input_bytes {
             return Err(Error::DecodeLimitExceeded);
@@ -508,7 +562,9 @@ impl SolanaTransactionTranscoder {
             limits.max_total_allocation,
         );
         let mut reader = LimitedReader::new(Cursor::new(input), decode_limits);
+        self.direct_addresses = true;
         let result = self.transcode_inner(&mut reader, output, output_limit, output_start);
+        self.direct_addresses = false;
         if let Err(error) = result {
             output.truncate(output_start);
             return Err(error);
@@ -544,10 +600,16 @@ impl SolanaTransactionTranscoder {
                 // V1 canonical wire order is message followed by fixed-count
                 // signatures. Remove the legacy/v0 signature length prefix,
                 // append the message, then rotate in place.
+                let address_offset_start = self.address_offsets.len();
                 output.copy_within(output_start + signature_prefix_len.., output_start);
                 output.truncate(output_start + signature_bytes);
                 self.transcode_v1(reader, output, max_output, signature_count)?;
                 output[output_start..].rotate_left(signature_bytes);
+                for offset in &mut self.address_offsets[address_offset_start..] {
+                    *offset = offset
+                        .checked_sub(signature_bytes)
+                        .ok_or(Error::InvalidData)?;
+                }
                 Ok(())
             }
             _ => Err(Error::InvalidData),
@@ -1243,6 +1305,108 @@ mod tests {
         assert!(compact.is_empty());
     }
 
+    #[cfg(feature = "solana-types")]
+    #[test]
+    fn contextual_entry_batch_reuses_addresses_across_entries() {
+        let address = canonical_address([6u8; 32]);
+        let transaction = |signature: u8, blockhash: u8| VersionedTransaction {
+            signatures: vec![Signature::from([signature; 64])],
+            message: VersionedMessage::Legacy(LegacyMessage {
+                header: MessageHeader {
+                    num_required_signatures: 1,
+                    num_readonly_signed_accounts: 0,
+                    num_readonly_unsigned_accounts: 0,
+                },
+                account_keys: vec![address],
+                recent_blockhash: Hash::new_from_array([blockhash; 32]),
+                instructions: Vec::new(),
+            }),
+        };
+        let first_transactions = [transaction(1, 2)];
+        let second_transactions = [transaction(3, 4)];
+        let first_hash = Hash::new_from_array([7u8; 32]);
+        let second_hash = Hash::new_from_array([8u8; 32]);
+        let entries = [
+            SolanaEntryRef {
+                num_hashes: 9,
+                hash: &first_hash,
+                transactions: &first_transactions,
+            },
+            SolanaEntryRef {
+                num_hashes: 10,
+                hash: &second_hash,
+                transactions: &second_transactions,
+            },
+        ];
+        let dictionary_id = [11u8; SOLANA_DICTIONARY_ID_BYTES];
+        let (frozen_encoder, frozen_decoder) = frozen_dictionary(&[]);
+
+        let mut independent_encoder =
+            SolanaEntryBatchEncoder::with_frozen(dictionary_id, Arc::clone(&frozen_encoder));
+        let mut independent = Vec::new();
+        independent_encoder
+            .encode(entries.iter().copied(), &mut independent)
+            .unwrap();
+
+        let mut contextual_encoder =
+            SolanaEntryBatchEncoder::with_frozen_contextual(dictionary_id, frozen_encoder);
+        let mut contextual = Vec::new();
+        contextual_encoder
+            .encode(entries.iter().copied(), &mut contextual)
+            .unwrap();
+        let mut contextual_again = Vec::new();
+        contextual_encoder
+            .encode(entries.iter().copied(), &mut contextual_again)
+            .unwrap();
+
+        assert_eq!(independent[5], SOLANA_ENTRY_BATCH_DICTIONARY_FLAG);
+        assert_eq!(contextual[5], SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG);
+        assert_eq!(independent.len() - contextual.len(), 32);
+        assert_eq!(contextual_again, contextual);
+
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&2u64.to_le_bytes());
+        for (num_hashes, hash, transactions) in [
+            (9u64, &first_hash, &first_transactions[..]),
+            (10u64, &second_hash, &second_transactions[..]),
+        ] {
+            expected.extend_from_slice(&num_hashes.to_le_bytes());
+            expected.extend_from_slice(hash.as_bytes());
+            expected.extend_from_slice(&1u64.to_le_bytes());
+            expected.extend_from_slice(&wincode::serialize(&transactions[0]).unwrap());
+        }
+        let limits = EntryBatchWireLimits::new(
+            independent.len(),
+            expected.len(),
+            u16::MAX as usize,
+            expected.len(),
+            TransactionWireLimits::CURRENT,
+        );
+        let mut transcoder = SolanaEntryBatchTranscoder::with_frozen(dictionary_id, frozen_decoder);
+        let mut canonical = Vec::new();
+        transcoder
+            .transcode_exact(&independent, &mut canonical, limits)
+            .unwrap();
+        assert_eq!(canonical, expected);
+        transcoder
+            .transcode_exact(&contextual, &mut canonical, limits)
+            .unwrap();
+        assert_eq!(canonical, expected);
+        transcoder
+            .transcode_exact(&contextual_again, &mut canonical, limits)
+            .unwrap();
+        assert_eq!(canonical, expected);
+
+        let mut unknown = contextual;
+        unknown[5] = 8;
+        assert!(
+            transcoder
+                .transcode_exact(&unknown, &mut canonical, limits)
+                .is_err()
+        );
+        assert!(canonical.is_empty());
+    }
+
     fn canonical_address(bytes: [u8; 32]) -> Pubkey {
         Pubkey::new_from_array(bytes)
     }
@@ -1418,6 +1582,62 @@ mod tests {
                 .is_err()
         );
         assert_eq!(output, prefix);
+    }
+
+    #[test]
+    fn contextual_v1_addresses_track_signature_reordering() {
+        let address = [34u8; 32];
+        let mut encoder = DedupeEncoder::new();
+        let encode_frame = |encoder: &mut DedupeEncoder, signature: u8, hash: [u8; 32]| {
+            let mut input = VecWriter::new();
+            write_signatures(&[[signature; 64]], &mut input);
+            write_len(2, &mut input);
+            write_header([1, 0, 0], &mut input);
+            0u32.encode(&mut input).unwrap();
+            hash.encode(&mut input).unwrap();
+            write_addresses(&[address], encoder, &mut input);
+            write_instructions(&[], &mut input);
+            input.into_inner()
+        };
+        let first_hash = [35u8; 32];
+        let second_hash = [36u8; 32];
+        let first = encode_frame(&mut encoder, 37, first_hash);
+        let second = encode_frame(&mut encoder, 38, second_hash);
+        assert_eq!(first.len() - second.len(), 32);
+
+        let expected = |signature, hash| {
+            wincode::serialize(&VersionedTransaction {
+                signatures: vec![Signature::from([signature; 64])],
+                message: VersionedMessage::V1(V1Message {
+                    header: MessageHeader {
+                        num_required_signatures: 1,
+                        num_readonly_signed_accounts: 0,
+                        num_readonly_unsigned_accounts: 0,
+                    },
+                    config: TransactionConfig::empty(),
+                    lifetime_specifier: Hash::new_from_array(hash),
+                    account_keys: vec![canonical_address(address)],
+                    instructions: Vec::new(),
+                }),
+            })
+            .unwrap()
+        };
+        let expected_first = expected(37, first_hash);
+        let expected_second = expected(38, second_hash);
+
+        let mut transcoder = SolanaTransactionTranscoder::new();
+        transcoder.reset_context();
+        let mut output = Vec::new();
+        let first_len = transcoder
+            .transcode_append_exact_continuing(&first, &mut output, TransactionWireLimits::CURRENT)
+            .unwrap();
+        let second_len = transcoder
+            .transcode_append_exact_continuing(&second, &mut output, TransactionWireLimits::CURRENT)
+            .unwrap();
+        assert_eq!(first_len, expected_first.len());
+        assert_eq!(second_len, expected_second.len());
+        assert_eq!(&output[..first_len], expected_first);
+        assert_eq!(&output[first_len..], expected_second);
     }
 
     #[test]
