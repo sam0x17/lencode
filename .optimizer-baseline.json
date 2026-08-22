@@ -1,7 +1,7 @@
 {
   "version": 23,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T07:08:22Z",
+  "updated_at": "2026-08-22T07:34:11Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -77,6 +77,26 @@
       {
         "optimization": "batch canonical address writes into one pre-sized output region",
         "reason": "three interleaved exact-binary 11-trial runs increased median lencode validator time from 41.594 ms to 41.893 ms (0.7% absolute, 0.7% normalized to wincode); wire bytes were unchanged, so the candidate was removed"
+      },
+      {
+        "optimization": "replace LimitedReader over Cursor with a fused slice-backed transaction reader",
+        "reason": "three interleaved exact-binary 11-trial runs increased median lencode validator time from 41.676 ms to 41.796 ms (0.3% absolute) while improving only 0.5% after normalization to wincode; the private reader added code without a tangible gain and was removed"
+      },
+      {
+        "optimization": "raise the byte compression cutoff from 96 bytes to 1024 bytes",
+        "reason": "three interleaved exact-binary 11-trial runs improved median lencode leader time by 1.2% and validator time by 1.0% normalized to wincode, below the 5% keep threshold, while increasing Turbine wire bytes by 1.5%; the 96-byte cutoff was restored"
+      },
+      {
+        "optimization": "force-inline the legacy and v0 transaction reconstruction state machine",
+        "reason": "three interleaved exact-binary 11-trial runs increased median lencode validator time from 41.687 ms to 42.265 ms (1.4% absolute, 1.8% normalized to wincode); wire bytes were unchanged, so the annotation was removed"
+      },
+      {
+        "optimization": "inline frozen dedupe hits and outline scratch decoding",
+        "reason": "three interleaved exact-binary 11-trial runs reduced median lencode validator time from 41.811 ms to 40.968 ms (2.0% absolute, 1.4% normalized to wincode), below the 5% keep threshold; wire bytes were unchanged, so the split was removed"
+      },
+      {
+        "optimization": "inline one-byte Solana collection lengths with the general varint decoder outlined",
+        "reason": "three interleaved exact-binary 11-trial runs increased median lencode validator time from 41.768 ms to 42.241 ms (1.1% absolute) and were flat after normalization to wincode; wire bytes were unchanged, so the split was removed"
       }
     ],
     "contention_events": [
