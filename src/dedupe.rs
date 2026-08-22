@@ -89,12 +89,21 @@ const DEFAULT_NUM_TYPES: usize = 4;
 
 trait TypedVecStore: Any + Send + Sync {
     fn clear(&mut self);
+    fn into_boxed_values(self: Box<Self>) -> Vec<Box<dyn Any + Send + Sync>>;
 }
 
 impl<T: Send + Sync + 'static> TypedVecStore for Vec<T> {
     #[inline]
     fn clear(&mut self) {
         Vec::clear(self);
+    }
+
+    #[inline]
+    fn into_boxed_values(self: Box<Self>) -> Vec<Box<dyn Any + Send + Sync>> {
+        (*self)
+            .into_iter()
+            .map(|value| Box::new(value) as Box<dyn Any + Send + Sync>)
+            .collect()
     }
 }
 
@@ -780,6 +789,18 @@ impl Default for DedupeDecoder {
 }
 
 impl DedupeDecoder {
+    /// Moves the single-type scratch store into the global-ID-ordered erased
+    /// store before a second value type is introduced.
+    #[inline]
+    fn promote_scratch_to_boxed(&mut self) {
+        let Some((_, store)) = self.typed_vec.take() else {
+            return;
+        };
+        debug_assert!(self.boxed_values.is_empty());
+        self.boxed_values = store.into_boxed_values();
+        debug_assert_eq!(self.boxed_values.len(), self.scratch_count);
+    }
+
     /// Creates a new empty `DedupeDecoder`.
     #[inline(always)]
     pub fn new() -> Self {
@@ -935,7 +956,10 @@ impl DedupeDecoder {
             }
         }
 
-        // Multi-type fallback: use Box<dyn Any> per value
+        // A second type switches scratch storage to a global-ID-ordered erased
+        // vector. Keeping every prior value in the vector is required because
+        // IDs are shared across types.
+        self.promote_scratch_to_boxed();
         if id == 0 {
             let value = T::unpack(reader)?;
             self.boxed_values.push(Box::new(value.clone()));
@@ -944,9 +968,10 @@ impl DedupeDecoder {
         } else {
             let index = id - scratch_id_base - 1;
             if let Some(boxed_value) = self.boxed_values.get(index) {
-                let typed_value: &T =
-                    unsafe { &*(&**boxed_value as *const (dyn Any + Send + Sync) as *const T) };
-                return Ok(typed_value.clone());
+                return boxed_value
+                    .downcast_ref::<T>()
+                    .cloned()
+                    .ok_or(crate::io::Error::InvalidData);
             }
             Err(crate::io::Error::InvalidData)
         }
@@ -1078,7 +1103,9 @@ impl DedupeDecoder {
             return;
         }
 
-        // Multi-type fallback
+        // A second type must preserve the global ID positions assigned to the
+        // first type before adding its value.
+        self.promote_scratch_to_boxed();
         self.boxed_values.push(Box::new(val));
         self.scratch_count += 1;
     }
@@ -1102,11 +1129,13 @@ fn lookup_frozen<T: Clone + 'static>(
         }
         return Err(crate::io::Error::InvalidData);
     }
-    // Multi-type fallback
+    // Multi-type fallback. The erased vector is global-ID ordered, and a
+    // mismatched requested type is malformed input rather than a valid cast.
     if let Some(boxed_value) = frozen.boxed_values.get(vec_index) {
-        let typed_value: &T =
-            unsafe { &*(&**boxed_value as *const (dyn Any + Send + Sync) as *const T) };
-        return Ok(typed_value.clone());
+        return boxed_value
+            .downcast_ref::<T>()
+            .cloned()
+            .ok_or(crate::io::Error::InvalidData);
     }
     Err(crate::io::Error::InvalidData)
 }
@@ -1225,6 +1254,70 @@ mod tests {
             Vec::<OtherBulkValue>::decode_ext(&mut cursor, Some(&mut dec_ctx)).unwrap(),
             second,
         );
+    }
+
+    #[test]
+    fn test_multi_type_references_preserve_global_ids() {
+        let mut encoder = DedupeEncoder::new();
+        let mut decoder = DedupeDecoder::new();
+        let mut buffer = Vec::new();
+
+        encoder.encode::<u32, H>(&11, &mut buffer).unwrap(); // ID 1
+        encoder.encode::<u64, H>(&22, &mut buffer).unwrap(); // ID 2
+        encoder.encode::<u32, H>(&11, &mut buffer).unwrap(); // ID 1
+        encoder.encode::<u64, H>(&22, &mut buffer).unwrap(); // ID 2
+        encoder.encode::<u32, H>(&33, &mut buffer).unwrap(); // ID 3
+        encoder.encode::<u64, H>(&22, &mut buffer).unwrap(); // ID 2
+        encoder.encode::<u32, H>(&33, &mut buffer).unwrap(); // ID 3
+
+        let mut cursor = Cursor::new(&buffer);
+        assert_eq!(decoder.decode::<u32>(&mut cursor).unwrap(), 11);
+        assert_eq!(decoder.decode::<u64>(&mut cursor).unwrap(), 22);
+        assert_eq!(decoder.decode::<u32>(&mut cursor).unwrap(), 11);
+        assert_eq!(decoder.decode::<u64>(&mut cursor).unwrap(), 22);
+        assert_eq!(decoder.decode::<u32>(&mut cursor).unwrap(), 33);
+        assert_eq!(decoder.decode::<u64>(&mut cursor).unwrap(), 22);
+        assert_eq!(decoder.decode::<u32>(&mut cursor).unwrap(), 33);
+    }
+
+    #[test]
+    fn test_frozen_multi_type_decoder_preserves_global_ids() {
+        let mut primer_encoder = DedupeEncoder::new();
+        let mut primer_decoder = DedupeDecoder::new();
+        for value in [1u32, 2] {
+            primer_encoder.prime::<u32, H>(&value);
+            primer_decoder.prime(value);
+        }
+        primer_encoder.prime::<u64, H>(&7);
+        primer_decoder.prime(7u64);
+
+        let mut encoder = DedupeEncoder::with_frozen(Arc::new(primer_encoder.freeze()));
+        let mut decoder = DedupeDecoder::with_frozen(Arc::new(primer_decoder.freeze()));
+        let mut buffer = Vec::new();
+        encoder.encode::<u32, H>(&2, &mut buffer).unwrap();
+        encoder.encode::<u64, H>(&7, &mut buffer).unwrap();
+        encoder.encode::<u32, H>(&1, &mut buffer).unwrap();
+
+        let mut cursor = Cursor::new(&buffer);
+        assert_eq!(decoder.decode::<u32>(&mut cursor).unwrap(), 2);
+        assert_eq!(decoder.decode::<u64>(&mut cursor).unwrap(), 7);
+        assert_eq!(decoder.decode::<u32>(&mut cursor).unwrap(), 1);
+    }
+
+    #[test]
+    fn test_multi_type_reference_rejects_wrong_type() {
+        let mut decoder = DedupeDecoder::new();
+        let mut buffer = Vec::new();
+        Lencode::encode_varint_u64(0, &mut buffer).unwrap();
+        11u32.pack(&mut buffer).unwrap();
+        Lencode::encode_varint_u64(1, &mut buffer).unwrap();
+
+        let mut cursor = Cursor::new(&buffer);
+        assert_eq!(decoder.decode::<u32>(&mut cursor).unwrap(), 11);
+        assert!(matches!(
+            decoder.decode::<u64>(&mut cursor),
+            Err(crate::io::Error::InvalidData)
+        ));
     }
 
     #[test]
