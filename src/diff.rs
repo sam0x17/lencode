@@ -671,6 +671,39 @@ impl DiffDecoder {
                 let num_patches = Lencode::decode_varint_u64(reader)? as usize;
 
                 let key = self.current_key.ok_or(Error::InvalidData)?;
+                let old_len = self.store.get(&key).ok_or(Error::InvalidData)?.len();
+
+                // Same-length RLE frames can update the cached blob directly
+                // when the reader exposes its remaining bytes. Validate the
+                // complete patch stream first so malformed input never leaves
+                // the cache partially updated, then copy only changed bytes.
+                if new_len == old_len {
+                    if num_patches == 0 {
+                        return Ok(self
+                            .store
+                            .get(&key)
+                            .expect("old blob was checked above")
+                            .as_slice());
+                    }
+                    if let Some(input) = reader.buf() {
+                        let consumed = visit_rle_patches(input, new_len, num_patches, |_, _| {})?;
+                        let slot = self
+                            .store
+                            .get_mut(&key)
+                            .expect("old blob was checked above");
+                        visit_rle_patches(
+                            &input[..consumed],
+                            new_len,
+                            num_patches,
+                            |offset, patch| {
+                                slot[offset..offset + patch.len()].copy_from_slice(patch);
+                            },
+                        )?;
+                        reader.advance(consumed);
+                        return Ok(slot.as_slice());
+                    }
+                }
+
                 // Assemble into the scratch while borrowing `old` from the
                 // store (disjoint fields), then swap the finished blob into
                 // the store slot below.
@@ -780,6 +813,38 @@ impl DiffDecoder {
             _ => Err(Error::InvalidData),
         }
     }
+}
+
+/// Walks an RLE patch stream while checking every range before invoking
+/// `visit`. Returns the number of input bytes consumed by the patches.
+#[inline]
+fn visit_rle_patches(
+    input: &[u8],
+    blob_len: usize,
+    num_patches: usize,
+    mut visit: impl FnMut(usize, &[u8]),
+) -> Result<usize> {
+    let mut cursor = Cursor::new(input);
+    let mut previous_end = 0usize;
+
+    for _ in 0..num_patches {
+        let gap = Lencode::decode_varint_u64(&mut cursor)? as usize;
+        let patch_len = Lencode::decode_varint_u64(&mut cursor)? as usize;
+        let patch_start = previous_end.checked_add(gap).ok_or(Error::InvalidData)?;
+        let patch_end = patch_start
+            .checked_add(patch_len)
+            .filter(|end| *end <= blob_len)
+            .ok_or(Error::InvalidData)?;
+        let remaining = cursor.buf().expect("Cursor always exposes its buffer");
+        if remaining.len() < patch_len {
+            return Err(Error::ReaderOutOfData);
+        }
+        visit(patch_start, &remaining[..patch_len]);
+        cursor.advance(patch_len);
+        previous_end = patch_end;
+    }
+
+    Ok(cursor.position())
 }
 
 /// Reads exactly `len` bytes into `dest`, reusing its capacity (no
@@ -1680,5 +1745,69 @@ mod tests {
         decoder.set_key(1);
         let mut cursor = Cursor::new(&buf[diff_start..]);
         assert!(decoder.decode_blob_ref(&mut cursor).is_err());
+    }
+
+    #[test]
+    fn test_decode_blob_ref_applies_same_length_rle_in_place() {
+        let key = 91u64;
+        let original: Vec<u8> = (0..4096).map(|i| (i % 251) as u8).collect();
+        let mut modified = original.clone();
+        modified[17] ^= 0x55;
+        modified[3000] ^= 0xAA;
+
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+
+        let mut full = Vec::new();
+        encoder.set_key(key);
+        encoder.encode_blob(&original, &mut full).unwrap();
+        decoder.set_key(key);
+        let original_ptr = decoder
+            .decode_blob_ref(&mut Cursor::new(&full[..]))
+            .unwrap()
+            .as_ptr();
+
+        let mut diff = Vec::new();
+        encoder.set_key(key);
+        encoder.encode_blob(&modified, &mut diff).unwrap();
+        assert_eq!(diff[0], 1, "sparse same-length update must use RLE");
+
+        decoder.set_key(key);
+        let decoded = decoder
+            .decode_blob_ref(&mut Cursor::new(&diff[..]))
+            .unwrap();
+        assert_eq!(decoded, modified);
+        assert_eq!(
+            decoded.as_ptr(),
+            original_ptr,
+            "cached allocation is reused"
+        );
+    }
+
+    #[test]
+    fn test_in_place_rle_validation_preserves_cached_blob_on_error() {
+        let key = 92u64;
+        let original = vec![7u8; 32];
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+
+        let mut full = Vec::new();
+        encoder.set_key(key);
+        encoder.encode_blob(&original, &mut full).unwrap();
+        decoder.set_key(key);
+        decoder
+            .decode_blob_ref(&mut Cursor::new(&full[..]))
+            .unwrap();
+
+        // mode=RLE, same length, one patch at byte 31 whose declared length
+        // extends past the cached blob. Validation must fail before mutation.
+        let malformed = [1u8, 32, 1, 31, 2, 0xAA, 0xBB];
+        decoder.set_key(key);
+        assert!(
+            decoder
+                .decode_blob_ref(&mut Cursor::new(&malformed[..]))
+                .is_err()
+        );
+        assert_eq!(decoder.store.get(&key).unwrap(), &original);
     }
 }

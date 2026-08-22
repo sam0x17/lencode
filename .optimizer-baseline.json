@@ -1,7 +1,7 @@
 {
-  "version": 21,
+  "version": 22,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T01:13:56Z",
+  "updated_at": "2026-08-22T01:38:11Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -137,7 +137,15 @@
     "diff_encode_64kb_contiguous_1kb": { "value": 7.5634, "unit": "us/iter" },
     "diff_encode_256kb_0_1pct_scatter": { "value": 34.756, "unit": "us/iter" },
     "diff_encode_256kb_10pct_scatter": { "value": 1131.9, "unit": "us/iter" },
-    "diff_decode_4kb_1pct_scatter": { "value": 471.51, "unit": "ns/iter" }
+    "diff_decode_4kb_1pct_scatter": { "value": 413.48, "unit": "ns/iter" },
+    "diff_decode_4kb_contiguous_64b": { "value": 166.10, "unit": "ns/iter" },
+    "diff_decode_4kb_identical": { "value": 150.71, "unit": "ns/iter" },
+    "diff_decode_4kb_10pct_scatter": { "value": 8.0835, "unit": "us/iter" },
+    "diff_decode_64kb_1pct_scatter": { "value": 9.3648, "unit": "us/iter" },
+    "diff_decode_64kb_contiguous_1kb": { "value": 1.5452, "unit": "us/iter" },
+    "diff_decode_64kb_10pct_scatter": { "value": 117.87, "unit": "us/iter" },
+    "diff_decode_256kb_0_1pct_scatter": { "value": 8.3259, "unit": "us/iter" },
+    "diff_decode_256kb_10pct_scatter": { "value": 531.08, "unit": "us/iter" }
   },
   "final_summary": {
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
@@ -159,7 +167,12 @@
     "diff_block_scan_4kb_identical_time_improvement_pct": 65.142,
     "diff_block_scan_64kb_contiguous_time_improvement_pct": 61.437,
     "diff_block_scan_256kb_0_1pct_time_improvement_pct": 56.559,
-    "all_feature_tests": { "unit": 186, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
+    "diff_in_place_decode_4kb_1pct_time_improvement_pct": 21.384,
+    "diff_in_place_decode_4kb_contiguous_time_improvement_pct": 43.555,
+    "diff_in_place_decode_4kb_identical_time_improvement_pct": 46.471,
+    "diff_in_place_decode_64kb_contiguous_time_improvement_pct": 43.445,
+    "diff_in_place_decode_256kb_0_1pct_time_improvement_pct": 30.704,
+    "all_feature_tests": { "unit": 188, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
     "no_default_features_check": "passed"
@@ -1009,6 +1022,86 @@
       },
       "copy_effect": "two zero-copy edge probes select a sparse scanner that compares 32-byte borrowed blocks and skips equal blocks wholesale; dense inputs retain the compact bytewise scanner, and patch coalescing preserves the exact prior wire layout",
       "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
+    },
+    {
+      "iteration": 25,
+      "optimization": "apply validated same-length RLE diffs in place",
+      "commit": null,
+      "kept": true,
+      "validation": "CPU-pinned paired exact-binary Criterion runs with 80-100 samples, isolated full-frame and XOR controls, a seven-round primary-corpus A/B pair, transactional malformed-frame tests, and the full validation suite",
+      "diff_decode": {
+        "4kb_1pct_scatter": {
+          "baseline_ns": 525.95,
+          "candidate_ns": 413.48,
+          "latency_improvement_pct": 21.384
+        },
+        "4kb_contiguous_64b": {
+          "baseline_ns": 294.27,
+          "candidate_ns": 166.10,
+          "latency_improvement_pct": 43.555
+        },
+        "4kb_identical": {
+          "baseline_ns": 281.55,
+          "candidate_ns": 150.71,
+          "latency_improvement_pct": 46.471
+        },
+        "4kb_10pct_scatter_control": {
+          "baseline_us": 8.0060,
+          "candidate_us": 8.0835,
+          "latency_change_pct": 0.968
+        },
+        "64kb_1pct_scatter": {
+          "baseline_us": 9.8369,
+          "candidate_us": 9.3648,
+          "latency_improvement_pct": 4.799
+        },
+        "64kb_contiguous_1kb": {
+          "baseline_us": 2.7322,
+          "candidate_us": 1.5452,
+          "latency_improvement_pct": 43.445
+        },
+        "64kb_10pct_scatter_control": {
+          "baseline_us": 117.90,
+          "candidate_us": 117.87,
+          "latency_improvement_pct": 0.025
+        },
+        "256kb_0_1pct_scatter": {
+          "baseline_us": 12.015,
+          "candidate_us": 8.3259,
+          "latency_improvement_pct": 30.704
+        },
+        "256kb_10pct_scatter_control": {
+          "baseline_us": 527.37,
+          "candidate_us": 531.08,
+          "latency_change_pct": 0.703
+        },
+        "4kb_full_blob_control": {
+          "baseline_ns": 247.76,
+          "candidate_ns": 249.46,
+          "latency_change_pct": 0.686
+        }
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 130935926,
+        "baseline_wincode_decode_ns": 21185947,
+        "baseline_lencode_encode_ns": 143411791,
+        "baseline_lencode_decode_ns": 25873094,
+        "baseline_lencode_dict_encode_ns": 117974258,
+        "baseline_lencode_dict_decode_ns": 32158777,
+        "candidate_wincode_encode_ns": 130860486,
+        "candidate_wincode_decode_ns": 21211917,
+        "candidate_lencode_encode_ns": 143007300,
+        "candidate_lencode_decode_ns": 25582533,
+        "candidate_lencode_dict_encode_ns": 117641298,
+        "candidate_lencode_dict_decode_ns": 31880606,
+        "plain_encode_normalized_throughput_change_pct": 0.225,
+        "plain_decode_normalized_throughput_change_pct": 1.260,
+        "dict_encode_normalized_throughput_change_pct": 0.225,
+        "dict_decode_normalized_throughput_change_pct": 0.996
+      },
+      "wire_bytes_changed": false,
+      "copy_effect": "same-length RLE frames exposed through Read::buf are validated transactionally, then applied directly to the cached allocation; decode_blob_ref copies only patch payloads, identical frames copy nothing, and the owned wrapper performs only its required final clone",
+      "tests": "cargo test --offline --all-features: 188 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
     }
   ],
   "failed_attempts": [
@@ -1312,6 +1405,12 @@
       "variance_ratio": 5.11,
       "reruns": 3,
       "resolution": "grouped full-blob decode samples shifted between about 260 ns and 1.33 us despite an unchanged path, while isolated encode controls converged at 225.81 ns versus 226.03 ns; one primary pair showed a 2.2% normalized dictionary-decode shift, but the next two measured 0.2% and 0.4%, so the median was used"
+    },
+    {
+      "at_iteration": 25,
+      "variance_ratio": 5.31,
+      "reruns": 4,
+      "resolution": "an initial grouped candidate run put the unchanged 4 KiB full-frame control at 1.325 us; isolated exact binaries converged at 247.76 ns versus 249.46 ns, and CPU-pinned long runs produced stable paired RLE wins with every XOR control inside 1%"
     }
   ]
 }
