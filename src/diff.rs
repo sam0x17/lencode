@@ -68,6 +68,12 @@ struct Patch<'a> {
     data: Cow<'a, [u8]>,
 }
 
+/// An RLE diff whose wire size is known, but whose frame has not been staged.
+struct RleCandidate<'a> {
+    patches: Vec<Patch<'a>>,
+    encoded_len: usize,
+}
+
 /// Minimum gap between patches before they get coalesced into one.
 /// Coalescing avoids 2 varint headers (gap + len) when the gap is tiny.
 const COALESCE_GAP: usize = 8;
@@ -147,6 +153,43 @@ fn compute_patches<'a>(old: &[u8], new: &'a [u8]) -> Option<Vec<Patch<'a>>> {
         }
         Some(patches)
     }
+}
+
+/// Plan an RLE frame without copying its patch payloads into a staging buffer.
+fn plan_rle<'a>(old: &[u8], new: &'a [u8]) -> Option<RleCandidate<'a>> {
+    let patches = compute_patches(old, new)?;
+    let mut encoded_len = 1 + varint_len(new.len()) + varint_len(patches.len());
+    let mut cursor = 0usize;
+    for patch in &patches {
+        encoded_len +=
+            varint_len(patch.offset - cursor) + varint_len(patch.data.len()) + patch.data.len();
+        cursor = patch.offset + patch.data.len();
+    }
+    Some(RleCandidate {
+        patches,
+        encoded_len,
+    })
+}
+
+/// Materialize a planned RLE frame after it has won candidate selection.
+fn encode_rle_candidate(candidate: &RleCandidate<'_>, new_len: usize) -> Option<Vec<u8>> {
+    // VecWriter's direct varint path requires 17 spare bytes. Keep that
+    // slack so the exact-size staging buffer never has to grow at the end.
+    let mut buf = VecWriter::with_capacity(candidate.encoded_len.checked_add(16)?);
+    // Mode 1 = RLE patches
+    Lencode::encode_varint_u64(1, &mut buf).ok()?;
+    Lencode::encode_varint_u64(new_len as u64, &mut buf).ok()?;
+    Lencode::encode_varint_u64(candidate.patches.len() as u64, &mut buf).ok()?;
+
+    let mut cursor = 0usize;
+    for patch in &candidate.patches {
+        let gap = patch.offset - cursor;
+        Lencode::encode_varint_u64(gap as u64, &mut buf).ok()?;
+        Lencode::encode_varint_u64(patch.data.len() as u64, &mut buf).ok()?;
+        buf.write(patch.data.as_ref()).ok()?;
+        cursor = patch.offset + patch.data.len();
+    }
+    Some(buf.into_inner())
 }
 
 /// Compute XOR of old and new, zero-padding for length differences.
@@ -297,13 +340,14 @@ impl DiffEncoder {
     pub fn encode_blob(&mut self, data: &[u8], writer: &mut impl Write) -> Result<usize> {
         if let Some(key) = self.current_key {
             if let Some(old) = self.store.get(&key) {
-                // Try RLE first (cheap)
-                let rle_candidate = self.encode_rle_to_buf(old, data);
+                // Plan RLE first without staging its payload. If XOR wins, the
+                // discarded RLE frame never allocates or copies patch bytes.
+                let rle_candidate = plan_rle(old, data);
 
                 // Skip the expensive XOR+zstd when RLE is already compact (< 10% of blob)
                 let rle_is_tiny = rle_candidate
                     .as_ref()
-                    .is_some_and(|buf| buf.len() * 10 <= data.len());
+                    .is_some_and(|candidate| candidate.encoded_len * 10 <= data.len());
 
                 let xor_candidate = if rle_is_tiny {
                     None
@@ -311,21 +355,21 @@ impl DiffEncoder {
                     self.encode_xor_to_buf(old, data)
                 };
 
-                let winner = match (&rle_candidate, &xor_candidate) {
+                let winner = match (rle_candidate, xor_candidate) {
                     (Some(rle), Some(xor)) => {
-                        if rle.len() <= xor.len() {
-                            rle_candidate.as_ref()
+                        if rle.encoded_len <= xor.len() {
+                            encode_rle_candidate(&rle, data.len())
                         } else {
-                            xor_candidate.as_ref()
+                            Some(xor)
                         }
                     }
-                    (Some(_), None) => rle_candidate.as_ref(),
-                    (None, Some(_)) => xor_candidate.as_ref(),
+                    (Some(rle), None) => encode_rle_candidate(&rle, data.len()),
+                    (None, Some(xor)) => Some(xor),
                     (None, None) => None,
                 };
 
                 if let Some(buf) = winner {
-                    let n = writer.write(buf)?;
+                    let n = writer.write(&buf)?;
                     self.store.insert(key, data.to_vec());
                     return Ok(n);
                 }
@@ -346,31 +390,8 @@ impl DiffEncoder {
     /// Encode RLE patches into a temporary buffer. Returns `None` if patches
     /// are too large (would exceed half the blob size).
     pub fn encode_rle_to_buf(&self, old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
-        let patches = compute_patches(old, new)?;
-        let mut encoded_len = 1 + varint_len(new.len()) + varint_len(patches.len());
-        let mut cursor = 0usize;
-        for patch in &patches {
-            encoded_len +=
-                varint_len(patch.offset - cursor) + varint_len(patch.data.len()) + patch.data.len();
-            cursor = patch.offset + patch.data.len();
-        }
-        // VecWriter's direct varint path requires 17 spare bytes. Keep that
-        // slack so the exact-size staging buffer never has to grow at the end.
-        let mut buf = VecWriter::with_capacity(encoded_len.checked_add(16)?);
-        // Mode 1 = RLE patches
-        Lencode::encode_varint_u64(1, &mut buf).ok()?;
-        Lencode::encode_varint_u64(new.len() as u64, &mut buf).ok()?;
-        Lencode::encode_varint_u64(patches.len() as u64, &mut buf).ok()?;
-
-        let mut cursor = 0usize;
-        for patch in &patches {
-            let gap = patch.offset - cursor;
-            Lencode::encode_varint_u64(gap as u64, &mut buf).ok()?;
-            Lencode::encode_varint_u64(patch.data.len() as u64, &mut buf).ok()?;
-            buf.write(patch.data.as_ref()).ok()?;
-            cursor = patch.offset + patch.data.len();
-        }
-        Some(buf.into_inner())
+        let candidate = plan_rle(old, new)?;
+        encode_rle_candidate(&candidate, new.len())
     }
 
     /// Encode XOR+zstd into a temporary buffer. Returns `None` if the

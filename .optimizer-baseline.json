@@ -1,7 +1,7 @@
 {
-  "version": 17,
+  "version": 18,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T00:23:06Z",
+  "updated_at": "2026-08-22T00:34:50Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -128,11 +128,14 @@
     "micro_pubkey_vec_lencode_dict_encode": { "value": 1616.6, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" },
     "micro_u64_pack": { "value": 1.131, "unit": "ns/iter" },
-    "diff_encode_4kb_1pct_scatter": { "value": 1.9345, "unit": "us/iter" },
-    "diff_encode_4kb_10pct_scatter": { "value": 14.663, "unit": "us/iter" },
-    "diff_encode_4kb_contiguous_64b": { "value": 1.2905, "unit": "us/iter" },
-    "diff_encode_4kb_identical": { "value": 1.2478, "unit": "us/iter" },
-    "diff_encode_64kb_1pct_scatter": { "value": 32.132, "unit": "us/iter" },
+    "diff_encode_4kb_1pct_scatter": { "value": 1.9963, "unit": "us/iter" },
+    "diff_encode_4kb_10pct_scatter": { "value": 13.654, "unit": "us/iter" },
+    "diff_encode_4kb_contiguous_64b": { "value": 1.2935, "unit": "us/iter" },
+    "diff_encode_4kb_identical": { "value": 1.2704, "unit": "us/iter" },
+    "diff_encode_64kb_1pct_scatter": { "value": 28.675, "unit": "us/iter" },
+    "diff_encode_64kb_10pct_scatter": { "value": 205.16, "unit": "us/iter" },
+    "diff_encode_256kb_0_1pct_scatter": { "value": 80.563, "unit": "us/iter" },
+    "diff_encode_256kb_10pct_scatter": { "value": 1197.7, "unit": "us/iter" },
     "diff_decode_4kb_1pct_scatter": { "value": 471.51, "unit": "ns/iter" }
   },
   "final_summary": {
@@ -147,8 +150,10 @@
     "micro_message_encode_time_improvement_vs_original_pct": 43.697,
     "micro_pubkey_vec_dict_encode_time_improvement_vs_original_pct": 21.608,
     "micro_u64_pack_time_improvement_pct": 85.88,
-    "diff_encode_4kb_10pct_time_improvement_pct": 50.635,
+    "diff_encode_4kb_10pct_time_improvement_pct": 54.250,
     "diff_rle_staging_4kb_1pct_time_improvement_pct": 17.223,
+    "diff_deferred_rle_4kb_10pct_time_improvement_pct": 5.554,
+    "diff_deferred_rle_256kb_10pct_time_improvement_pct": 6.590,
     "all_feature_tests": { "unit": 186, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
@@ -738,6 +743,95 @@
         "truncated": "c06f1ae7fb0161f9"
       },
       "copy_effect": "RLE frame size is computed once, then varints and borrowed patch payloads are written through VecWriter's direct spare-capacity path into one allocation, eliminating staging-buffer growth and prefix copies",
+      "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
+    },
+    {
+      "iteration": 22,
+      "optimization": "defer RLE diff frame staging until after candidate selection",
+      "commit": null,
+      "kept": true,
+      "validation": "paired exact-binary Criterion measurements with long isolated XOR winners and RLE controls, an 11-round primary-corpus A/B pair, and cross-version fingerprints for eight patch shapes",
+      "diff_encode": {
+        "4kb_1pct_scatter": {
+          "baseline_us": 1.9837,
+          "candidate_us": 1.9963,
+          "latency_change_pct": 0.635
+        },
+        "4kb_10pct_scatter": {
+          "baseline_us": 14.457,
+          "candidate_us": 13.654,
+          "latency_improvement_pct": 5.554
+        },
+        "4kb_contiguous_64b": {
+          "baseline_us": 1.2941,
+          "candidate_us": 1.2935,
+          "latency_improvement_pct": 0.046
+        },
+        "4kb_identical": {
+          "baseline_us": 1.2464,
+          "candidate_us": 1.2704,
+          "latency_change_pct": 1.926
+        },
+        "64kb_1pct_scatter": {
+          "baseline_us": 28.668,
+          "candidate_us": 28.675,
+          "latency_change_pct": 0.024
+        },
+        "64kb_contiguous_1kb": {
+          "baseline_us": 19.309,
+          "candidate_us": 19.390,
+          "latency_change_pct": 0.419
+        },
+        "64kb_10pct_scatter": {
+          "baseline_us": 208.79,
+          "candidate_us": 205.16,
+          "latency_improvement_pct": 1.739
+        },
+        "256kb_0_1pct_scatter": {
+          "baseline_us": 81.169,
+          "candidate_us": 80.563,
+          "latency_improvement_pct": 0.747
+        },
+        "256kb_10pct_scatter": {
+          "baseline_us": 1282.2,
+          "candidate_us": 1197.7,
+          "latency_improvement_pct": 6.590
+        }
+      },
+      "diff_decode_controls": {
+        "4kb_1pct_change_pct": 0.996,
+        "256kb_10pct_change_pct": -1.069
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 130578621,
+        "baseline_wincode_decode_ns": 21160293,
+        "baseline_lencode_encode_ns": 142640708,
+        "baseline_lencode_decode_ns": 25893872,
+        "baseline_lencode_dict_encode_ns": 117095828,
+        "baseline_lencode_dict_decode_ns": 32021215,
+        "candidate_wincode_encode_ns": 130806982,
+        "candidate_wincode_decode_ns": 21144313,
+        "candidate_lencode_encode_ns": 143041529,
+        "candidate_lencode_decode_ns": 25613380,
+        "candidate_lencode_dict_encode_ns": 117472790,
+        "candidate_lencode_dict_decode_ns": 31778784,
+        "plain_encode_normalized_change_pct": 0.106,
+        "dict_encode_normalized_change_pct": 0.147,
+        "plain_decode_normalized_change_pct": -1.008,
+        "dict_decode_normalized_change_pct": -0.682
+      },
+      "wire_bytes_changed": false,
+      "wire_fingerprints": {
+        "identical": "152268ea6ef80dfe",
+        "single": "e9579dc75d07d57d",
+        "scatter_1pct": "bcc1decfa901be2f",
+        "scatter_10pct": "7dac679a4b0a0bfb",
+        "contiguous": "03ac37670f684af9",
+        "appended": "f6b19344f2d82fbc",
+        "truncated": "c06f1ae7fb0161f9",
+        "large_scatter_10pct": "6f9a3cbbd7e1e58f"
+      },
+      "copy_effect": "RLE patch payloads remain borrowed while candidate selection uses their exact planned wire length; when XOR wins, the discarded RLE frame is never allocated or copied, avoiding 1,331 bytes of staging at 4 KiB and 88,314 bytes at 256 KiB in the measured cases",
       "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
     }
   ],
