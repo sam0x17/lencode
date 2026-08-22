@@ -1,7 +1,7 @@
 {
-  "version": 22,
+  "version": 23,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T01:38:11Z",
+  "updated_at": "2026-08-22T01:49:57Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -137,15 +137,16 @@
     "diff_encode_64kb_contiguous_1kb": { "value": 7.5634, "unit": "us/iter" },
     "diff_encode_256kb_0_1pct_scatter": { "value": 34.756, "unit": "us/iter" },
     "diff_encode_256kb_10pct_scatter": { "value": 1131.9, "unit": "us/iter" },
-    "diff_decode_4kb_1pct_scatter": { "value": 413.48, "unit": "ns/iter" },
-    "diff_decode_4kb_contiguous_64b": { "value": 166.10, "unit": "ns/iter" },
-    "diff_decode_4kb_identical": { "value": 150.71, "unit": "ns/iter" },
-    "diff_decode_4kb_10pct_scatter": { "value": 8.0835, "unit": "us/iter" },
-    "diff_decode_64kb_1pct_scatter": { "value": 9.3648, "unit": "us/iter" },
-    "diff_decode_64kb_contiguous_1kb": { "value": 1.5452, "unit": "us/iter" },
-    "diff_decode_64kb_10pct_scatter": { "value": 117.87, "unit": "us/iter" },
-    "diff_decode_256kb_0_1pct_scatter": { "value": 8.3259, "unit": "us/iter" },
-    "diff_decode_256kb_10pct_scatter": { "value": 531.08, "unit": "us/iter" }
+    "diff_decode_4kb_1pct_scatter": { "value": 393.23, "unit": "ns/iter" },
+    "diff_decode_4kb_contiguous_64b": { "value": 156.18, "unit": "ns/iter" },
+    "diff_decode_4kb_identical": { "value": 151.86, "unit": "ns/iter" },
+    "diff_decode_4kb_10pct_scatter": { "value": 3.6560, "unit": "us/iter" },
+    "diff_decode_4kb_25pct_scatter": { "value": 4.7606, "unit": "us/iter" },
+    "diff_decode_64kb_1pct_scatter": { "value": 5.6637, "unit": "us/iter" },
+    "diff_decode_64kb_contiguous_1kb": { "value": 1.5486, "unit": "us/iter" },
+    "diff_decode_64kb_10pct_scatter": { "value": 48.256, "unit": "us/iter" },
+    "diff_decode_256kb_0_1pct_scatter": { "value": 8.2576, "unit": "us/iter" },
+    "diff_decode_256kb_10pct_scatter": { "value": 223.23, "unit": "us/iter" }
   },
   "final_summary": {
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
@@ -172,7 +173,11 @@
     "diff_in_place_decode_4kb_identical_time_improvement_pct": 46.471,
     "diff_in_place_decode_64kb_contiguous_time_improvement_pct": 43.445,
     "diff_in_place_decode_256kb_0_1pct_time_improvement_pct": 30.704,
-    "all_feature_tests": { "unit": 188, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
+    "diff_in_place_xor_decode_4kb_10pct_time_improvement_pct": 55.024,
+    "diff_in_place_xor_decode_4kb_25pct_time_improvement_pct": 48.588,
+    "diff_in_place_xor_decode_64kb_10pct_time_improvement_pct": 59.050,
+    "diff_in_place_xor_decode_256kb_10pct_time_improvement_pct": 58.318,
+    "all_feature_tests": { "unit": 189, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
     "no_default_features_check": "passed"
@@ -1102,6 +1107,86 @@
       "wire_bytes_changed": false,
       "copy_effect": "same-length RLE frames exposed through Read::buf are validated transactionally, then applied directly to the cached allocation; decode_blob_ref copies only patch payloads, identical frames copy nothing, and the owned wrapper performs only its required final clone",
       "tests": "cargo test --offline --all-features: 188 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
+    },
+    {
+      "iteration": 26,
+      "optimization": "borrow and apply same-length XOR diffs in place",
+      "commit": null,
+      "kept": true,
+      "validation": "CPU-pinned paired exact-binary Criterion runs with 80-100 samples, repeated isolated full-frame controls, a stable reverse-order nine-round primary-corpus A/B pair, malformed-frame state-preservation testing, and the full validation suite",
+      "diff_decode": {
+        "4kb_10pct_scatter": {
+          "baseline_us": 8.1287,
+          "candidate_us": 3.6560,
+          "latency_improvement_pct": 55.024
+        },
+        "4kb_25pct_scatter": {
+          "baseline_us": 9.2597,
+          "candidate_us": 4.7606,
+          "latency_improvement_pct": 48.588
+        },
+        "64kb_10pct_scatter": {
+          "baseline_us": 117.84,
+          "candidate_us": 48.256,
+          "latency_improvement_pct": 59.050
+        },
+        "256kb_10pct_scatter": {
+          "baseline_us": 535.56,
+          "candidate_us": 223.23,
+          "latency_improvement_pct": 58.318
+        },
+        "4kb_1pct_scatter_control": {
+          "baseline_ns": 411.29,
+          "candidate_ns": 393.23,
+          "latency_improvement_pct": 4.391
+        },
+        "64kb_1pct_scatter_control": {
+          "baseline_us": 6.1281,
+          "candidate_us": 5.6637,
+          "latency_improvement_pct": 7.578
+        },
+        "4kb_contiguous_64b_control": {
+          "baseline_ns": 156.92,
+          "candidate_ns": 156.18,
+          "latency_improvement_pct": 0.472
+        },
+        "64kb_contiguous_1kb_control": {
+          "baseline_us": 1.5555,
+          "candidate_us": 1.5486,
+          "latency_improvement_pct": 0.444
+        },
+        "256kb_0_1pct_scatter_control": {
+          "baseline_us": 8.2850,
+          "candidate_us": 8.2576,
+          "latency_improvement_pct": 0.331
+        },
+        "4kb_full_blob_isolated_median_control": {
+          "baseline_ns": 249.16,
+          "candidate_ns": 253.31,
+          "latency_change_pct": 1.666
+        }
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 131070695,
+        "baseline_wincode_decode_ns": 21136668,
+        "baseline_lencode_encode_ns": 143323970,
+        "baseline_lencode_decode_ns": 25589365,
+        "baseline_lencode_dict_encode_ns": 117321743,
+        "baseline_lencode_dict_decode_ns": 31932668,
+        "candidate_wincode_encode_ns": 130648333,
+        "candidate_wincode_decode_ns": 21099297,
+        "candidate_lencode_encode_ns": 142717627,
+        "candidate_lencode_decode_ns": 25489434,
+        "candidate_lencode_dict_encode_ns": 116747102,
+        "candidate_lencode_dict_decode_ns": 31813477,
+        "plain_encode_normalized_throughput_change_pct": 0.101,
+        "plain_decode_normalized_throughput_change_pct": 0.215,
+        "dict_encode_normalized_throughput_change_pct": 0.168,
+        "dict_decode_normalized_throughput_change_pct": 0.197
+      },
+      "wire_bytes_changed": false,
+      "copy_effect": "buffer-backed readers now lend compressed XOR bytes directly to zstd, and successful same-length frames XOR into the cached blob in place; this removes compressed staging plus full reconstruction while preserving the fallback for generic readers and length changes",
+      "tests": "cargo test --offline --all-features: 189 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
     }
   ],
   "failed_attempts": [
@@ -1411,6 +1496,12 @@
       "variance_ratio": 5.31,
       "reruns": 4,
       "resolution": "an initial grouped candidate run put the unchanged 4 KiB full-frame control at 1.325 us; isolated exact binaries converged at 247.76 ns versus 249.46 ns, and CPU-pinned long runs produced stable paired RLE wins with every XOR control inside 1%"
+    },
+    {
+      "at_iteration": 26,
+      "variance_ratio": 5.34,
+      "reruns": 5,
+      "resolution": "grouped full-frame controls again alternated between about 250 ns and 1.33 us; repeated isolated CPU-pinned runs put the median candidate movement at +1.67%. The first primary pair also shifted wincode decode by 7.7%, so it was discarded in favor of a stable reverse-order nine-round pair with all normalized movements positive and below 0.3%"
     }
   ]
 }

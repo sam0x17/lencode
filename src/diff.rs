@@ -771,47 +771,74 @@ impl DiffDecoder {
                 // XOR + zstd diff
                 let new_len = Lencode::decode_varint_u64(reader)? as usize;
                 let compressed_len = Lencode::decode_varint_u64(reader)? as usize;
-
                 let key = self.current_key.ok_or(Error::InvalidData)?;
-                let old_len = self.store.get(&key).ok_or(Error::InvalidData)?.len();
-
-                // Read compressed XOR data into the reused staging buffer.
-                read_exact_into(reader, compressed_len, &mut self.compressed_scratch)?;
-
-                // Decompress the XOR buffer into its reused staging buffer.
-                let xor_len = old_len.max(new_len);
-                bytes::zstd_decompress_into(
-                    &self.compressed_scratch,
-                    xor_len,
-                    &mut self.xor_scratch,
-                )?;
-
-                // Reconstruct: new[i] = old[i] ^ xor[i] for overlapping region
-                {
-                    let old = self.store.get(&key).ok_or(Error::InvalidData)?;
-                    let xor = &self.xor_scratch;
-                    let result = &mut self.result_scratch;
-                    result.clear();
-                    result.reserve(new_len);
-                    let min_len = old.len().min(new_len);
-                    for i in 0..min_len {
-                        result.push(old[i] ^ xor[i]);
-                    }
-                    // If new is longer, tail of XOR is the new bytes (XOR with 0 = identity)
-                    if new_len > old.len() {
-                        result.extend_from_slice(&xor[min_len..new_len]);
-                    }
-
-                    if result.len() != new_len {
-                        return Err(Error::InvalidData);
-                    }
-                }
-                let slot = self.store.get_mut(&key).ok_or(Error::InvalidData)?;
-                core::mem::swap(slot, &mut self.result_scratch);
-                Ok(slot.as_slice())
+                self.decode_xor_ref(reader, key, new_len, compressed_len)
             }
             _ => Err(Error::InvalidData),
         }
+    }
+
+    #[inline(never)]
+    fn decode_xor_ref(
+        &mut self,
+        reader: &mut impl Read,
+        key: u64,
+        new_len: usize,
+        compressed_len: usize,
+    ) -> Result<&[u8]> {
+        let old_len = self.store.get(&key).ok_or(Error::InvalidData)?.len();
+        let xor_len = old_len.max(new_len);
+
+        // Borrow contiguous compressed input when possible; generic readers
+        // retain the reusable staging-buffer fallback.
+        if let Some(input) = reader.buf() {
+            if input.len() < compressed_len {
+                return Err(Error::ReaderOutOfData);
+            }
+            bytes::zstd_decompress_into(&input[..compressed_len], xor_len, &mut self.xor_scratch)?;
+            reader.advance(compressed_len);
+        } else {
+            read_exact_into(reader, compressed_len, &mut self.compressed_scratch)?;
+            bytes::zstd_decompress_into(&self.compressed_scratch, xor_len, &mut self.xor_scratch)?;
+        }
+
+        // Once decompression succeeds, a same-length update cannot fail.
+        // Apply it directly to the cached allocation instead of reconstructing
+        // and swapping a second full-size buffer.
+        if new_len == old_len {
+            let xor = &self.xor_scratch;
+            let slot = self
+                .store
+                .get_mut(&key)
+                .expect("old blob was checked above");
+            for (byte, delta) in slot.iter_mut().zip(xor) {
+                *byte ^= *delta;
+            }
+            return Ok(slot.as_slice());
+        }
+
+        // Length-changing diffs retain the reconstruct-and-swap path.
+        {
+            let old = self.store.get(&key).ok_or(Error::InvalidData)?;
+            let xor = &self.xor_scratch;
+            let result = &mut self.result_scratch;
+            result.clear();
+            result.reserve(new_len);
+            let min_len = old.len().min(new_len);
+            for i in 0..min_len {
+                result.push(old[i] ^ xor[i]);
+            }
+            if new_len > old.len() {
+                result.extend_from_slice(&xor[min_len..new_len]);
+            }
+
+            if result.len() != new_len {
+                return Err(Error::InvalidData);
+            }
+        }
+        let slot = self.store.get_mut(&key).ok_or(Error::InvalidData)?;
+        core::mem::swap(slot, &mut self.result_scratch);
+        Ok(slot.as_slice())
     }
 }
 
@@ -1809,5 +1836,54 @@ mod tests {
                 .is_err()
         );
         assert_eq!(decoder.store.get(&key).unwrap(), &original);
+    }
+
+    #[test]
+    fn test_decode_blob_ref_applies_same_length_xor_in_place() {
+        let key = 93u64;
+        let original: Vec<u8> = (0..4096).map(|i| (i % 251) as u8).collect();
+        let mut modified = original.clone();
+        for byte in modified.iter_mut().step_by(3) {
+            *byte = byte.wrapping_add(1);
+        }
+
+        let mut encoder = DiffEncoder::new();
+        let mut decoder = DiffDecoder::new();
+
+        let mut full = Vec::new();
+        encoder.set_key(key);
+        encoder.encode_blob(&original, &mut full).unwrap();
+        decoder.set_key(key);
+        let original_ptr = decoder
+            .decode_blob_ref(&mut Cursor::new(&full[..]))
+            .unwrap()
+            .as_ptr();
+
+        let mut diff = Vec::new();
+        encoder.set_key(key);
+        encoder.encode_blob(&modified, &mut diff).unwrap();
+        assert_eq!(diff[0], 2, "scattered same-length update must use XOR");
+
+        decoder.set_key(key);
+        let decoded = decoder
+            .decode_blob_ref(&mut Cursor::new(&diff[..]))
+            .unwrap();
+        assert_eq!(decoded, modified);
+        assert_eq!(
+            decoded.as_ptr(),
+            original_ptr,
+            "cached allocation is reused"
+        );
+
+        // A malformed compressed frame must fail before the cached bytes are
+        // touched, even though it is eligible for the in-place path.
+        let malformed = [2u8, 0x82, 0x00, 0x10, 1, 0];
+        decoder.set_key(key);
+        assert!(
+            decoder
+                .decode_blob_ref(&mut Cursor::new(&malformed[..]))
+                .is_err()
+        );
+        assert_eq!(decoder.store.get(&key).unwrap(), &modified);
     }
 }
