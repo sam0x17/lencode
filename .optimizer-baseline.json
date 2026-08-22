@@ -1,12 +1,12 @@
 {
-  "version": 47,
+  "version": 48,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T12:13:51Z",
+  "updated_at": "2026-08-22T12:31:07Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 2,
+    "version": 3,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -94,6 +94,29 @@
         "lencode_validator_throughput": 0.851,
         "codec": "LZ4 FAST(4) through the normal two-FEC input limit and FAST(1) above it"
       }
+    },
+    "blockstore_component_benchmark": {
+      "benchmark_command": "LENCODE_BLOCKSTORE_RUNS=11 cargo bench --offline -p solana-ledger --bench lencode_blockstore_components -- /tmp/agave-shred-broadcast-batches.bin",
+      "scope": "insert the 1,982 production-sized components into 100 full Blockstore slots, then time the public explicit-format component-view reader across every slot with RocksDB caches warmed",
+      "components_per_slot": 20,
+      "benchmark_source_sha256": "5c54250b1e41491a024e2b8ced146fd30fa7f35b3231f2e6dd6a2ec5453f450f",
+      "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+      "baseline_binary_sha256": "7813da8df908a744835ec3b92fa859b350f354c480c6ee4c6e889cd82952bc47",
+      "original_baseline": {
+        "wincode_validator": { "value": 70836404, "unit": "ns/100 Blockstore slots", "range": [69303019, 73856124] },
+        "lencode_validator": { "value": 72082989, "unit": "ns/100 Blockstore slots", "range": [71711407, 72122189] },
+        "lencode_validator_throughput": 0.983,
+        "trials_per_run": 11,
+        "independent_runs": 3
+      },
+      "exact_final_binary_confirmation": {
+        "wincode_validator": { "value": 73741757, "unit": "ns/100 Blockstore slots", "range": [71897449, 73881887] },
+        "lencode_validator": { "value": 71452448, "unit": "ns/100 Blockstore slots", "range": [71415558, 74740599] },
+        "lencode_validator_throughput": 1.032,
+        "trials_per_run": 11,
+        "independent_runs": 3
+      },
+      "conclusion": "end-to-end Blockstore loading is at parity within run-to-run variation; reading 47.4% fewer Turbine bytes offsets the LZ4 and parser work that made the isolated candidate decoder 14.9% slower in throughput"
     },
     "history": [
       {
@@ -549,6 +572,18 @@
       {
         "optimization": "fall back to raw canonical bytes when LZ4 expands a production-sized component",
         "reason": "all 1,982 timeout-free production-sized components compressed smaller, including the 56-byte minimum; payload bytes, shred counts, wire bytes, and measured work were unchanged, so the redundant branch was removed"
+      },
+      {
+        "optimization": "retain one compressed deshred buffer across the components loaded for a Blockstore slot",
+        "reason": "three independent 11-trial runs improved canonical-LZ4 Blockstore loading from 72.083 ms to 68.859 ms (4.47% absolute, 4.21% normalized to wincode), below the 5% keep threshold; the codec API, Blockstore plumbing, and allocation test were removed"
+      },
+      {
+        "optimization": "decompress every framed component in a slot into one Bytes-backed canonical arena",
+        "reason": "an exact 11-trial run improved canonical-LZ4 Blockstore loading from 72.083 ms to 71.916 ms (0.23% absolute, 2.62% normalized to wincode); shared-range parsing canceled the allocation savings, so the arena and payload descriptor were removed"
+      },
+      {
+        "optimization": "reconstruct and parse the components in each Blockstore slot with an ordered Rayon iterator",
+        "reason": "a three-trial run increased canonical-LZ4 loading from 72.083 ms to 98.559 ms (36.7%) and wincode loading from 70.836 ms to 123.842 ms (74.8%); scheduling roughly 20 small component tasks per slot cost more than the parallel work saved, so the parallel path was removed"
       }
     ],
     "contention_events": [
@@ -557,6 +592,12 @@
         "reason": "the unchanged wincode validator shifted by 3.5% between separately built binaries",
         "reruns": 6,
         "resolution": "used medians from three interleaved exact-binary pairs; the candidate improved validator time by 4.9% absolute and 5.7% relative to the wincode control"
+      },
+      {
+        "at_iteration": 11,
+        "reason": "the first post-revert Blockstore confirmation was roughly 9% slower on both formats than the established baseline range",
+        "reruns": 3,
+        "resolution": "discarded the contaminated run and used the median of three exact-final-binary 11-trial runs; the result confirmed that the two formats are within run-to-run variation"
       }
     ]
   },
