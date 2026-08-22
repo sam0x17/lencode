@@ -27,6 +27,9 @@
 //! `VersionedTransaction` values and owns the complete compact `LCSH` batch
 //! envelope. `SolanaEntryBatchTranscoder` validates that envelope and
 //! reconstructs the canonical entry-batch bytes expected by Agave.
+//! [`SolanaCanonicalLz4EntryBatchEncoder`] provides the lower-latency
+//! alternative: it writes the same canonical bytes directly from reference
+//! Solana types, then wraps them in the compatible flag-1 LZ4 frame.
 
 use std::{sync::Arc, vec::Vec};
 
@@ -45,7 +48,11 @@ use crate::{
     io::{VecWriter, Write},
 };
 #[cfg(feature = "solana-types")]
+use lz4::block::{self as lz4_block, CompressionMode};
+#[cfg(feature = "solana-types")]
 use solana_hash::Hash as SolanaHash;
+#[cfg(feature = "solana-types")]
+use solana_message::VersionedMessage;
 #[cfg(feature = "solana-types")]
 use solana_transaction::versioned::VersionedTransaction;
 
@@ -53,6 +60,8 @@ use solana_transaction::versioned::VersionedTransaction;
 pub const SOLANA_ENTRY_BATCH_MAGIC: [u8; 4] = *b"LCSH";
 /// Compact Solana entry-batch format version.
 pub const SOLANA_ENTRY_BATCH_VERSION: u8 = 1;
+/// Frame flag for canonical Solana entry batches compressed as an LZ4 block.
+pub const SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG: u8 = 1;
 /// Frame flag for independently recoverable lencode transactions using an address dictionary.
 pub const SOLANA_ENTRY_BATCH_DICTIONARY_FLAG: u8 = 2;
 /// Frame flag for native lencode transactions sharing address IDs across the batch.
@@ -64,6 +73,8 @@ pub const SOLANA_DICTIONARY_ID_BYTES: usize = 16;
 /// Fixed compact entry-batch header size.
 pub const SOLANA_ENTRY_BATCH_HEADER_BYTES: usize =
     SOLANA_ENTRY_BATCH_MAGIC.len() + 1 + 1 + SOLANA_DICTIONARY_ID_BYTES;
+/// Fixed header size for the canonical-LZ4 entry-batch variant.
+pub const SOLANA_CANONICAL_LZ4_HEADER_BYTES: usize = SOLANA_ENTRY_BATCH_MAGIC.len() + 1 + 1;
 
 /// Canonical version byte for a v0 message.
 pub const V0_PREFIX: u8 = 0x80;
@@ -171,6 +182,406 @@ pub struct SolanaEntryRef<'a> {
     pub hash: &'a SolanaHash,
     /// Reference Solana transactions in the entry.
     pub transactions: &'a [VersionedTransaction],
+}
+
+/// Limits and compression policy for canonical-LZ4 Solana entry batches.
+#[cfg(feature = "solana-types")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SolanaCanonicalLz4Config {
+    /// Maximum uncompressed canonical entry-batch size.
+    pub max_canonical_bytes: usize,
+    /// Largest canonical input encoded with LZ4 FAST(4).
+    ///
+    /// Larger inputs use FAST(1), which spends more leader CPU for smaller
+    /// frames. This threshold does not affect decoder compatibility.
+    pub fast_acceleration_max_input: usize,
+}
+
+#[cfg(feature = "solana-types")]
+impl SolanaCanonicalLz4Config {
+    /// Creates an explicit canonical-LZ4 policy.
+    pub const fn new(max_canonical_bytes: usize, fast_acceleration_max_input: usize) -> Self {
+        Self {
+            max_canonical_bytes,
+            fast_acceleration_max_input,
+        }
+    }
+}
+
+/// Directly encodes reference-Solana entries into a canonical LZ4 shred frame.
+///
+/// The uncompressed body is byte-for-byte compatible with Agave's canonical
+/// wincode entry-batch representation. The outer `LCSH` version-1, flag-1
+/// frame is distinct from the dictionary-backed lencode variants and remains
+/// decodable regardless of the selected LZ4 acceleration.
+#[cfg(feature = "solana-types")]
+pub struct SolanaCanonicalLz4EntryBatchEncoder {
+    config: SolanaCanonicalLz4Config,
+}
+
+#[cfg(feature = "solana-types")]
+impl SolanaCanonicalLz4EntryBatchEncoder {
+    /// Creates an encoder with explicit output and acceleration limits.
+    pub const fn new(config: SolanaCanonicalLz4Config) -> Self {
+        Self { config }
+    }
+
+    /// Encodes one non-empty entry batch, retaining `output`'s allocation.
+    pub fn encode<'a>(
+        &mut self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
+        output: &mut Vec<u8>,
+    ) -> Result<EntryBatchCounts> {
+        output.clear();
+        let result = self.encode_inner(entries, output);
+        if result.is_err() {
+            output.clear();
+        }
+        result
+    }
+
+    fn encode_inner<'a>(
+        &self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
+        output: &mut Vec<u8>,
+    ) -> Result<EntryBatchCounts> {
+        let counts =
+            encode_canonical_entry_batch(entries, output, self.config.max_canonical_bytes)?;
+        let canonical_len = output.len();
+        let compressed_capacity = lz4_block::compress_bound(canonical_len)
+            .map_err(|_| Error::IncorrectLength)?
+            .checked_add(4)
+            .ok_or(Error::IncorrectLength)?;
+        let arena_len = canonical_len
+            .checked_add(SOLANA_CANONICAL_LZ4_HEADER_BYTES)
+            .and_then(|len| len.checked_add(compressed_capacity))
+            .ok_or(Error::IncorrectLength)?;
+        let acceleration = if canonical_len <= self.config.fast_acceleration_max_input {
+            4
+        } else {
+            1
+        };
+
+        output
+            .try_reserve(arena_len - canonical_len)
+            .map_err(|_| Error::DecodeLimitExceeded)?;
+        output.resize(arena_len, 0);
+        let frame_len = {
+            let (canonical, frame) = output.split_at_mut(canonical_len);
+            frame[..4].copy_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
+            frame[4] = SOLANA_ENTRY_BATCH_VERSION;
+            frame[5] = SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG;
+            SOLANA_CANONICAL_LZ4_HEADER_BYTES
+                + lz4_block::compress_to_buffer(
+                    canonical,
+                    Some(CompressionMode::FAST(acceleration)),
+                    true,
+                    &mut frame[SOLANA_CANONICAL_LZ4_HEADER_BYTES..],
+                )
+                .map_err(|_| Error::InvalidData)?
+        };
+        output.copy_within(canonical_len..canonical_len + frame_len, 0);
+        output.truncate(frame_len);
+        Ok(counts)
+    }
+}
+
+/// Reconstructs one exact canonical-LZ4 entry-batch frame.
+///
+/// `output` is cleared on entry and on every error. The caller still validates
+/// the reconstructed canonical entry-batch structure with its normal parser.
+#[cfg(feature = "solana-types")]
+pub fn transcode_canonical_lz4_entry_batch(
+    input: &[u8],
+    output: &mut Vec<u8>,
+    max_canonical_bytes: usize,
+) -> Result<usize> {
+    output.clear();
+    let result = transcode_canonical_lz4_entry_batch_inner(input, output, max_canonical_bytes);
+    if result.is_err() {
+        output.clear();
+    }
+    result
+}
+
+#[cfg(feature = "solana-types")]
+fn transcode_canonical_lz4_entry_batch_inner(
+    input: &[u8],
+    output: &mut Vec<u8>,
+    max_canonical_bytes: usize,
+) -> Result<usize> {
+    if input.len() < SOLANA_CANONICAL_LZ4_HEADER_BYTES + 4
+        || input[..4] != SOLANA_ENTRY_BATCH_MAGIC
+        || input[4] != SOLANA_ENTRY_BATCH_VERSION
+        || input[5] != SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG
+    {
+        return Err(Error::InvalidData);
+    }
+    let compressed = &input[SOLANA_CANONICAL_LZ4_HEADER_BYTES..];
+    let original_len = usize::try_from(u32::from_le_bytes(
+        compressed[..4]
+            .try_into()
+            .expect("checked canonical LZ4 length prefix"),
+    ))
+    .map_err(|_| Error::IncorrectLength)?;
+    if original_len > max_canonical_bytes {
+        return Err(Error::DecodeLimitExceeded);
+    }
+    output
+        .try_reserve(original_len)
+        .map_err(|_| Error::DecodeLimitExceeded)?;
+    output.resize(original_len, 0);
+    let written = lz4_block::decompress_to_buffer(compressed, None, output)
+        .map_err(|_| Error::InvalidData)?;
+    if written != original_len {
+        return Err(Error::InvalidData);
+    }
+    Ok(written)
+}
+
+#[cfg(feature = "solana-types")]
+fn encode_canonical_entry_batch<'a>(
+    entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
+    output: &mut Vec<u8>,
+    max_output: usize,
+) -> Result<EntryBatchCounts> {
+    let entry_count = entries.len();
+    if entry_count == 0 {
+        return Err(Error::InvalidData);
+    }
+    append_canonical(
+        output,
+        &u64::try_from(entry_count)
+            .map_err(|_| Error::IncorrectLength)?
+            .to_le_bytes(),
+        max_output,
+    )?;
+
+    let mut transaction_total = 0usize;
+    for entry in entries {
+        append_canonical(output, &entry.num_hashes.to_le_bytes(), max_output)?;
+        append_canonical(output, entry.hash.as_bytes(), max_output)?;
+        transaction_total = transaction_total
+            .checked_add(entry.transactions.len())
+            .ok_or(Error::IncorrectLength)?;
+        append_canonical(
+            output,
+            &u64::try_from(entry.transactions.len())
+                .map_err(|_| Error::IncorrectLength)?
+                .to_le_bytes(),
+            max_output,
+        )?;
+        for transaction in entry.transactions {
+            encode_canonical_transaction(transaction, output, max_output)?;
+        }
+    }
+    Ok(EntryBatchCounts {
+        entries: entry_count,
+        transactions: transaction_total,
+    })
+}
+
+#[cfg(feature = "solana-types")]
+fn encode_canonical_transaction(
+    transaction: &VersionedTransaction,
+    output: &mut Vec<u8>,
+    max_output: usize,
+) -> Result<()> {
+    match &transaction.message {
+        VersionedMessage::Legacy(message) => {
+            append_canonical_short_u16(output, transaction.signatures.len(), max_output)?;
+            append_canonical_signatures(output, &transaction.signatures, max_output)?;
+            append_canonical_header(output, &message.header, max_output)?;
+            append_canonical_addresses(output, &message.account_keys, max_output)?;
+            append_canonical(output, message.recent_blockhash.as_bytes(), max_output)?;
+            append_canonical_instructions(output, &message.instructions, max_output)?;
+        }
+        VersionedMessage::V0(message) => {
+            append_canonical_short_u16(output, transaction.signatures.len(), max_output)?;
+            append_canonical_signatures(output, &transaction.signatures, max_output)?;
+            append_canonical(output, &[V0_PREFIX], max_output)?;
+            append_canonical_header(output, &message.header, max_output)?;
+            append_canonical_addresses(output, &message.account_keys, max_output)?;
+            append_canonical(output, message.recent_blockhash.as_bytes(), max_output)?;
+            append_canonical_instructions(output, &message.instructions, max_output)?;
+            append_canonical_short_u16(output, message.address_table_lookups.len(), max_output)?;
+            for lookup in &message.address_table_lookups {
+                append_canonical(output, lookup.account_key.as_array(), max_output)?;
+                append_canonical_short_payload(output, &lookup.writable_indexes, max_output)?;
+                append_canonical_short_payload(output, &lookup.readonly_indexes, max_output)?;
+            }
+        }
+        VersionedMessage::V1(message) => {
+            if usize::from(message.header.num_required_signatures) != transaction.signatures.len() {
+                return Err(Error::InvalidData);
+            }
+            append_canonical(output, &[V1_PREFIX], max_output)?;
+            append_canonical_header(output, &message.header, max_output)?;
+            let config_mask = solana_message::v1::TransactionConfigMask::from(&message.config).0;
+            append_canonical(output, &config_mask.to_le_bytes(), max_output)?;
+            append_canonical(output, message.lifetime_specifier.as_bytes(), max_output)?;
+
+            let instruction_count =
+                u8::try_from(message.instructions.len()).map_err(|_| Error::IncorrectLength)?;
+            let address_count =
+                u8::try_from(message.account_keys.len()).map_err(|_| Error::IncorrectLength)?;
+            append_canonical(output, &[instruction_count, address_count], max_output)?;
+            for address in &message.account_keys {
+                append_canonical(output, address.as_array(), max_output)?;
+            }
+            append_canonical_v1_config(output, &message.config, max_output)?;
+            for instruction in &message.instructions {
+                let accounts_len =
+                    u8::try_from(instruction.accounts.len()).map_err(|_| Error::IncorrectLength)?;
+                let data_len =
+                    u16::try_from(instruction.data.len()).map_err(|_| Error::IncorrectLength)?;
+                append_canonical(
+                    output,
+                    &[
+                        instruction.program_id_index,
+                        accounts_len,
+                        data_len as u8,
+                        (data_len >> 8) as u8,
+                    ],
+                    max_output,
+                )?;
+            }
+            for instruction in &message.instructions {
+                append_canonical(output, &instruction.accounts, max_output)?;
+                append_canonical(output, &instruction.data, max_output)?;
+            }
+            append_canonical_signatures(output, &transaction.signatures, max_output)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical_header(
+    output: &mut Vec<u8>,
+    header: &solana_message::MessageHeader,
+    max_output: usize,
+) -> Result<()> {
+    append_canonical(
+        output,
+        &[
+            header.num_required_signatures,
+            header.num_readonly_signed_accounts,
+            header.num_readonly_unsigned_accounts,
+        ],
+        max_output,
+    )
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical_addresses(
+    output: &mut Vec<u8>,
+    addresses: &[solana_pubkey::Pubkey],
+    max_output: usize,
+) -> Result<()> {
+    append_canonical_short_u16(output, addresses.len(), max_output)?;
+    for address in addresses {
+        append_canonical(output, address.as_array(), max_output)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical_signatures(
+    output: &mut Vec<u8>,
+    signatures: &[solana_signature::Signature],
+    max_output: usize,
+) -> Result<()> {
+    for signature in signatures {
+        append_canonical(output, signature.as_array(), max_output)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical_instructions(
+    output: &mut Vec<u8>,
+    instructions: &[solana_message::compiled_instruction::CompiledInstruction],
+    max_output: usize,
+) -> Result<()> {
+    append_canonical_short_u16(output, instructions.len(), max_output)?;
+    for instruction in instructions {
+        append_canonical(output, &[instruction.program_id_index], max_output)?;
+        append_canonical_short_payload(output, &instruction.accounts, max_output)?;
+        append_canonical_short_payload(output, &instruction.data, max_output)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical_v1_config(
+    output: &mut Vec<u8>,
+    config: &solana_message::v1::TransactionConfig,
+    max_output: usize,
+) -> Result<()> {
+    if let Some(value) = config.priority_fee {
+        append_canonical(output, &value.to_le_bytes(), max_output)?;
+    }
+    if let Some(value) = config.compute_unit_limit {
+        append_canonical(output, &value.to_le_bytes(), max_output)?;
+    }
+    if let Some(value) = config.loaded_accounts_data_size_limit {
+        append_canonical(output, &value.to_le_bytes(), max_output)?;
+    }
+    if let Some(value) = config.heap_size {
+        append_canonical(output, &value.to_le_bytes(), max_output)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical_short_payload(
+    output: &mut Vec<u8>,
+    payload: &[u8],
+    max_output: usize,
+) -> Result<()> {
+    append_canonical_short_u16(output, payload.len(), max_output)?;
+    append_canonical(output, payload, max_output)
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical_short_u16(output: &mut Vec<u8>, len: usize, max_output: usize) -> Result<()> {
+    let value = u16::try_from(len).map_err(|_| Error::IncorrectLength)?;
+    if value < 0x80 {
+        append_canonical(output, &[value as u8], max_output)
+    } else if value < 0x4000 {
+        append_canonical(
+            output,
+            &[(value as u8 & 0x7f) | 0x80, (value >> 7) as u8],
+            max_output,
+        )
+    } else {
+        append_canonical(
+            output,
+            &[
+                (value as u8 & 0x7f) | 0x80,
+                ((value >> 7) as u8 & 0x7f) | 0x80,
+                (value >> 14) as u8,
+            ],
+            max_output,
+        )
+    }
+}
+
+#[cfg(feature = "solana-types")]
+fn append_canonical(output: &mut Vec<u8>, bytes: &[u8], max_output: usize) -> Result<()> {
+    let new_len = output
+        .len()
+        .checked_add(bytes.len())
+        .ok_or(Error::DecodeLimitExceeded)?;
+    if new_len > max_output {
+        return Err(Error::DecodeLimitExceeded);
+    }
+    output
+        .try_reserve(bytes.len())
+        .map_err(|_| Error::DecodeLimitExceeded)?;
+    output.extend_from_slice(bytes);
+    Ok(())
 }
 
 /// Encodes reference Solana entries into the compact lencode shred format.
@@ -1423,6 +1834,141 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, Error::InvalidData));
         assert!(compact.is_empty());
+    }
+
+    #[cfg(feature = "solana-types")]
+    #[test]
+    fn canonical_lz4_matches_current_wincode_and_enforces_limits() {
+        let header = MessageHeader {
+            num_required_signatures: 1,
+            num_readonly_signed_accounts: 0,
+            num_readonly_unsigned_accounts: 0,
+        };
+        let account_key = canonical_address([2u8; 32]);
+        let instruction = CompiledInstruction {
+            program_id_index: 0,
+            accounts: vec![0],
+            data: vec![3, 4],
+        };
+        let transactions = [
+            VersionedTransaction {
+                signatures: vec![Signature::from([5u8; 64])],
+                message: VersionedMessage::Legacy(LegacyMessage {
+                    header,
+                    account_keys: vec![account_key],
+                    recent_blockhash: Hash::new_from_array([6u8; 32]),
+                    instructions: vec![instruction.clone()],
+                }),
+            },
+            VersionedTransaction {
+                signatures: vec![Signature::from([7u8; 64])],
+                message: VersionedMessage::V0(V0Message {
+                    header,
+                    account_keys: vec![account_key],
+                    recent_blockhash: Hash::new_from_array([8u8; 32]),
+                    instructions: vec![instruction.clone()],
+                    address_table_lookups: vec![MessageAddressTableLookup {
+                        account_key,
+                        writable_indexes: vec![1, 2],
+                        readonly_indexes: vec![3],
+                    }],
+                }),
+            },
+            VersionedTransaction {
+                signatures: vec![Signature::from([9u8; 64])],
+                message: VersionedMessage::V1(V1Message {
+                    header,
+                    config: TransactionConfig::empty()
+                        .with_priority_fee(10)
+                        .with_compute_unit_limit(11)
+                        .with_loaded_accounts_data_size_limit(12)
+                        .with_heap_size(13),
+                    lifetime_specifier: Hash::new_from_array([14u8; 32]),
+                    account_keys: vec![account_key],
+                    instructions: vec![instruction],
+                }),
+            },
+        ];
+        let entry_hash = Hash::new_from_array([15u8; 32]);
+        let entries = [SolanaEntryRef {
+            num_hashes: 16,
+            hash: &entry_hash,
+            transactions: &transactions,
+        }];
+
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&1u64.to_le_bytes());
+        expected.extend_from_slice(&16u64.to_le_bytes());
+        expected.extend_from_slice(entry_hash.as_bytes());
+        expected.extend_from_slice(&3u64.to_le_bytes());
+        for transaction in &transactions {
+            expected.extend_from_slice(&wincode::serialize(transaction).unwrap());
+        }
+
+        let config = SolanaCanonicalLz4Config::new(expected.len(), expected.len());
+        let mut encoder = SolanaCanonicalLz4EntryBatchEncoder::new(config);
+        let mut encoded = Vec::new();
+        let counts = encoder
+            .encode(entries.iter().copied(), &mut encoded)
+            .unwrap();
+        assert_eq!(
+            counts,
+            EntryBatchCounts {
+                entries: 1,
+                transactions: 3,
+            }
+        );
+
+        let compressed =
+            lz4_block::compress(&expected, Some(CompressionMode::FAST(4)), true).unwrap();
+        let mut expected_frame = SOLANA_ENTRY_BATCH_MAGIC.to_vec();
+        expected_frame.extend_from_slice(&[
+            SOLANA_ENTRY_BATCH_VERSION,
+            SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG,
+        ]);
+        expected_frame.extend_from_slice(&compressed);
+        assert_eq!(encoded, expected_frame);
+
+        let mut canonical = Vec::new();
+        let decoded_len =
+            transcode_canonical_lz4_entry_batch(&encoded, &mut canonical, expected.len()).unwrap();
+        assert_eq!(decoded_len, expected.len());
+        assert_eq!(canonical, expected);
+
+        let fast_one_config = SolanaCanonicalLz4Config::new(expected.len(), expected.len() - 1);
+        let mut fast_one_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(fast_one_config);
+        fast_one_encoder
+            .encode(entries.iter().copied(), &mut encoded)
+            .unwrap();
+        let compressed =
+            lz4_block::compress(&expected, Some(CompressionMode::FAST(1)), true).unwrap();
+        expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
+        expected_frame.extend_from_slice(&compressed);
+        assert_eq!(encoded, expected_frame);
+
+        canonical.extend_from_slice(&[1, 2, 3]);
+        assert!(matches!(
+            transcode_canonical_lz4_entry_batch(&encoded, &mut canonical, expected.len() - 1,),
+            Err(Error::DecodeLimitExceeded)
+        ));
+        assert!(canonical.is_empty());
+
+        encoded[5] ^= 0x80;
+        canonical.push(1);
+        assert!(matches!(
+            transcode_canonical_lz4_entry_batch(&encoded, &mut canonical, expected.len()),
+            Err(Error::InvalidData)
+        ));
+        assert!(canonical.is_empty());
+
+        let mut limited_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(
+            SolanaCanonicalLz4Config::new(expected.len() - 1, expected.len()),
+        );
+        assert!(matches!(
+            limited_encoder.encode(entries.iter().copied(), &mut encoded),
+            Err(Error::DecodeLimitExceeded)
+        ));
+        assert!(encoded.is_empty());
     }
 
     #[cfg(feature = "solana-types")]

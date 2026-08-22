@@ -36,6 +36,7 @@ hashbrown = "0"
 ahash = { version = "0.8", default-features = false, features = ["compile-time-rng"] }
 smallbox = { version = "0.8", default-features = false }
 zstd-safe = { version = "7", default-features = false }
+lz4 = { version = "1.28", optional = true }
 
 lencode-macros = { path = "macros", version = "1.2.0" }
 
@@ -63,6 +64,7 @@ std = ["ruint/std"]
 comparison-bench = []
 solana-types = [
     "std",
+    "dep:lz4",
     "dep:solana-message",
     "dep:solana-transaction",
     "dep:solana-hash",
