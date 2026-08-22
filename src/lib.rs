@@ -539,7 +539,7 @@ impl Encode for usize {
 impl Decode for usize {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        Lencode::decode_varint_u64(reader).map(|v| v as usize)
+        usize::try_from(Lencode::decode_varint_u64(reader)?).map_err(|_| Error::DecodeLimitExceeded)
     }
 
     #[inline(always)]
