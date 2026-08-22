@@ -1,12 +1,12 @@
 {
-  "version": 53,
+  "version": 54,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T14:11:44Z",
+  "updated_at": "2026-08-22T14:17:54Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 8,
+    "version": 9,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -359,6 +359,26 @@
             "malloc": 0.74,
             "deshred_push": 0.51
           }
+        },
+        "read_dominant_profile": {
+          "protocol": "perf record at 999 Hz on logical CPU 28 with a 2.5-second collection delay over the exact retained binary and 101 alternating warmed trials per format; the delay excludes setup and insertion",
+          "data_sha256": "84c2ca013e90a8b6033d4c9677505a99a3bc07c26fd927f261d32d943d9ef12d",
+          "samples": 5288,
+          "lost_samples": 0,
+          "wincode_validator_ns": 27609036,
+          "lencode_validator_ns": 29539584,
+          "self_cycles_pct": {
+            "rocksdb_iterator_next": 13.48,
+            "lz4_decompress_safe": 11.25,
+            "block_component_parse": 10.40,
+            "memmove": 8.46,
+            "rocksdb_find_next_user_entry": 6.03,
+            "transaction_frame_parse": 6.02,
+            "rocksdb_parse_key": 5.48,
+            "memcmp": 4.05,
+            "memset": 2.07
+          },
+          "conclusion": "RocksDB iteration accounts for 25.0% across its three leading symbols and is the largest remaining read cost; LZ4 and parsing follow"
         },
         "validation": {
           "ledger_tests": "347 passed, 3 ignored",
@@ -875,7 +895,7 @@
       },
       {
         "optimization": "compile the Agave Blockstore path with Rust 1.98.0",
-        "reason": "three paired CPU-affined 31-trial runs increased wincode time by 5.318% and canonical-LZ4 time by 3.407% versus the byte-identical Rust 1.97.1 source, beyond the 2% regression ceiling; the Agave toolchain bump was removed while lencode kept Rust 1.98.0 for development and its Rust 1.97.1 compatibility floor"
+        "reason": "three paired CPU-affined 31-trial runs increased wincode time by 5.318% and canonical-LZ4 time by 3.407% versus the byte-identical Rust 1.97.1 source, beyond the 2% regression ceiling; the isolated compiler trial was removed, then Rust 1.98.0 was adopted for both Agave and lencode at user direction"
       },
       {
         "optimization": "replace buffered LZ4 decompression with lz4 1.28.1's owned decompression helper",
@@ -884,6 +904,10 @@
       {
         "optimization": "cache each raw RocksDB iterator key comparison and remove the separate validity and second key calls",
         "reason": "three CPU-affined paired 11-trial runs improved median wincode Blockstore loading from 27.565 ms to 27.118 ms (1.62%) and canonical-LZ4 from 29.187 ms to 28.996 ms (0.65%), below the 5% keep threshold; the exact blockstore_db source hash e878ae7fe85c91c05b01744bded6801e4a4218bc613502f0a080b4c6988c0c66 was restored"
+      },
+      {
+        "optimization": "pin raw RocksDB iterator data for each sorted Blockstore range scan",
+        "reason": "three interleaved CPU-affined 31-trial pairs regressed median wincode loading from 27.448 ms to 27.656 ms (0.76%) and canonical-LZ4 from 29.107 ms to 29.454 ms (1.19%, or 0.43% normalized to wincode); candidate binary 88493f2a45a3547c6fd69d56663915115a250bae394dde9f23a24320eb2b1c3e was removed, source hash e878ae7fe85c91c05b01744bded6801e4a4218bc613502f0a080b4c6988c0c66 and binary bfa7c7d191f804e3dd9cf69c375adf41d026311fae2c3914cb14ca7776ad2120 were restored"
       }
     ],
     "full_resets": [
