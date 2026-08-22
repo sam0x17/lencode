@@ -176,6 +176,55 @@ impl SolanaTransactionTranscoder {
         Ok(output.len() - output_start)
     }
 
+    /// Clears transaction-local values while retaining the frozen address dictionary.
+    ///
+    /// Call this at the start of a contextual transaction stream before using
+    /// [`Self::transcode_append_exact_continuing`].
+    pub fn reset_context(&mut self) {
+        self.decoder.clear();
+    }
+
+    /// Transcodes one exact frame without clearing values decoded from preceding frames.
+    ///
+    /// This is for an explicitly versioned outer frame whose encoder carries the same dedupe
+    /// context across transactions. The caller must reset at the outer frame boundary and must
+    /// discard the context after any error. Input and output limits still apply independently to
+    /// every transaction.
+    pub fn transcode_append_exact_continuing(
+        &mut self,
+        input: &[u8],
+        output: &mut Vec<u8>,
+        limits: TransactionWireLimits,
+    ) -> Result<usize> {
+        let output_start = output.len();
+        if input.len() > limits.max_input_bytes {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        let output_limit = output_start
+            .checked_add(limits.max_output_bytes)
+            .ok_or(Error::DecodeLimitExceeded)?;
+        output
+            .try_reserve(limits.max_output_bytes)
+            .map_err(|_| Error::DecodeLimitExceeded)?;
+
+        let decode_limits = DecodeLimits::new(
+            limits.max_input_bytes,
+            limits.max_sequence_len,
+            limits.max_total_allocation,
+        );
+        let mut reader = LimitedReader::new(Cursor::new(input), decode_limits);
+        let result = self.transcode_inner(&mut reader, output, output_limit, output_start);
+        if let Err(error) = result {
+            output.truncate(output_start);
+            return Err(error);
+        }
+        if reader.consumed() != input.len() {
+            output.truncate(output_start);
+            return Err(Error::TrailingData);
+        }
+        Ok(output.len() - output_start)
+    }
+
     fn transcode_inner(
         &mut self,
         reader: &mut impl Read,
@@ -720,6 +769,75 @@ mod tests {
         assert_eq!(appended, expected.len());
         assert_eq!(&output[..prefix.len()], &prefix);
         assert_eq!(&output[prefix.len()..], expected);
+    }
+
+    #[test]
+    fn contextual_frames_share_addresses_until_reset() {
+        let address = [31u8; 32];
+        let mut encoder = DedupeEncoder::new();
+        let encode_frame = |encoder: &mut DedupeEncoder, hash: [u8; 32]| {
+            let mut input = VecWriter::new();
+            write_signatures(&[], &mut input);
+            write_len(0, &mut input);
+            write_header([0, 0, 1], &mut input);
+            write_addresses(&[address], encoder, &mut input);
+            hash.encode(&mut input).unwrap();
+            write_instructions(&[], &mut input);
+            input.into_inner()
+        };
+        let first_hash = [32u8; 32];
+        let second_hash = [33u8; 32];
+        let first = encode_frame(&mut encoder, first_hash);
+        let second = encode_frame(&mut encoder, second_hash);
+        assert!(second.len() < first.len());
+
+        let expected = |hash| {
+            wincode::serialize(&VersionedTransaction {
+                signatures: Vec::new(),
+                message: VersionedMessage::Legacy(LegacyMessage {
+                    header: MessageHeader {
+                        num_required_signatures: 0,
+                        num_readonly_signed_accounts: 0,
+                        num_readonly_unsigned_accounts: 1,
+                    },
+                    account_keys: vec![canonical_address(address)],
+                    recent_blockhash: Hash::new_from_array(hash),
+                    instructions: Vec::new(),
+                }),
+            })
+            .unwrap()
+        };
+        let expected_first = expected(first_hash);
+        let expected_second = expected(second_hash);
+
+        let mut transcoder = SolanaTransactionTranscoder::new();
+        transcoder.reset_context();
+        let mut output = Vec::new();
+        let first_len = transcoder
+            .transcode_append_exact_continuing(&first, &mut output, TransactionWireLimits::CURRENT)
+            .unwrap();
+        let second_len = transcoder
+            .transcode_append_exact_continuing(&second, &mut output, TransactionWireLimits::CURRENT)
+            .unwrap();
+        assert_eq!(first_len, expected_first.len());
+        assert_eq!(second_len, expected_second.len());
+        assert_eq!(&output[..first_len], expected_first);
+        assert_eq!(&output[first_len..], expected_second);
+
+        transcoder.reset_context();
+        let prefix = [1, 2, 3];
+        output.clear();
+        output.extend_from_slice(&prefix);
+        assert!(
+            transcoder
+                .transcode_append_exact_continuing(
+                    &second,
+                    &mut output,
+                    TransactionWireLimits::CURRENT,
+                )
+                .is_err()
+        );
+        assert_eq!(output, prefix);
     }
 
     #[test]

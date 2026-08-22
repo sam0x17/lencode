@@ -191,6 +191,12 @@ on leaders and validators. `transcode_exact` and `transcode_append_exact` reject
 roll back their output on failure; callers should reject unknown versions or dictionary IDs rather
 than trying another codec.
 
+An outer format may explicitly flag a contextual transaction stream to deduplicate non-frozen
+addresses across its frames. Clear the encoder once at the outer boundary; on decode, call
+`reset_context` at the same boundary and `transcode_append_exact_continuing` for each frame. This
+mode is sequential and must use a distinct outer-format flag. Reset or discard the decoder after
+any error. The existing transcoding methods continue to reset per transaction.
+
 ## Supported types
 
 - Primitives: all ints, `bool`, `f32`, `f64`
