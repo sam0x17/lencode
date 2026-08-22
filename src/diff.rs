@@ -72,6 +72,15 @@ struct Patch<'a> {
 /// Coalescing avoids 2 varint headers (gap + len) when the gap is tiny.
 const COALESCE_GAP: usize = 8;
 
+#[inline(always)]
+const fn varint_len(value: usize) -> usize {
+    if value <= 0x7f {
+        1
+    } else {
+        1 + ((usize::BITS - value.leading_zeros() + 7) >> 3) as usize
+    }
+}
+
 /// Computes patches between `old` and `new` byte slices.
 ///
 /// Adjacent patches separated by fewer than [`COALESCE_GAP`] bytes are merged.
@@ -338,7 +347,16 @@ impl DiffEncoder {
     /// are too large (would exceed half the blob size).
     pub fn encode_rle_to_buf(&self, old: &[u8], new: &[u8]) -> Option<Vec<u8>> {
         let patches = compute_patches(old, new)?;
-        let mut buf = Vec::new();
+        let mut encoded_len = 1 + varint_len(new.len()) + varint_len(patches.len());
+        let mut cursor = 0usize;
+        for patch in &patches {
+            encoded_len +=
+                varint_len(patch.offset - cursor) + varint_len(patch.data.len()) + patch.data.len();
+            cursor = patch.offset + patch.data.len();
+        }
+        // VecWriter's direct varint path requires 17 spare bytes. Keep that
+        // slack so the exact-size staging buffer never has to grow at the end.
+        let mut buf = VecWriter::with_capacity(encoded_len.checked_add(16)?);
         // Mode 1 = RLE patches
         Lencode::encode_varint_u64(1, &mut buf).ok()?;
         Lencode::encode_varint_u64(new.len() as u64, &mut buf).ok()?;
@@ -349,10 +367,10 @@ impl DiffEncoder {
             let gap = patch.offset - cursor;
             Lencode::encode_varint_u64(gap as u64, &mut buf).ok()?;
             Lencode::encode_varint_u64(patch.data.len() as u64, &mut buf).ok()?;
-            buf.extend_from_slice(patch.data.as_ref());
+            buf.write(patch.data.as_ref()).ok()?;
             cursor = patch.offset + patch.data.len();
         }
-        Some(buf)
+        Some(buf.into_inner())
     }
 
     /// Encode XOR+zstd into a temporary buffer. Returns `None` if the
