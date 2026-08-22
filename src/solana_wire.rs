@@ -883,11 +883,10 @@ fn append_short_raw_instruction(
         }
 
         ensure_output(output, accounts_len + data_len + 3, max_output)?;
-        output.push(input[0]);
-        output.push(accounts_len as u8);
-        output.extend_from_slice(&input[2..data_flag_offset]);
-        output.push(data_len as u8);
-        output.extend_from_slice(&input[data_offset..consumed]);
+        let output_start = output.len();
+        output.extend_from_slice(&input[..consumed]);
+        output[output_start + 1] = accounts_len as u8;
+        output[output_start + data_flag_offset] = data_len as u8;
         (consumed, accounts_len, data_len)
     };
 
