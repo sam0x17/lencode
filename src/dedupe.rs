@@ -910,12 +910,84 @@ impl DedupeDecoder {
         let type_id = TypeId::of::<T>();
         let total_primed = self.frozen_total_primed;
 
+        if id != 0 && id <= total_primed {
+            let frozen = self.frozen.as_ref().unwrap();
+            return lookup_frozen::<T>(frozen, type_id, id - 1);
+        }
+
+        let scratch_id_base = total_primed;
+
+        if let Some((ref cached_type, ref mut store)) = self.typed_vec
+            && *cached_type == type_id
+        {
+            // SAFETY: TypeId matches, so the erased store holds Vec<T>.
+            let vec: &mut Vec<T> =
+                unsafe { &mut *(store.as_mut() as *mut dyn TypedVecStore as *mut Vec<T>) };
+            if id == 0 {
+                let value = T::unpack(reader)?;
+                reader.claim_allocation(core::mem::size_of::<T>())?;
+                vec.push(value.clone());
+                self.scratch_count += 1;
+                return Ok(value);
+            }
+            let index = id - scratch_id_base - 1;
+            return vec.get(index).cloned().ok_or(crate::io::Error::InvalidData);
+        }
+
+        if self.scratch_count == 0 && self.boxed_values.is_empty() {
+            if id != 0 {
+                return Err(crate::io::Error::InvalidData);
+            }
+            let value = T::unpack(reader)?;
+            reader.claim_allocation(core::mem::size_of::<T>())?;
+            let mut vec = Vec::with_capacity(DEFAULT_INITIAL_CAPACITY);
+            vec.push(value.clone());
+            self.typed_vec = Some((type_id, Box::new(vec)));
+            self.scratch_count += 1;
+            return Ok(value);
+        }
+
+        self.promote_scratch_to_boxed();
+        if id == 0 {
+            let value = T::unpack(reader)?;
+            reader.claim_allocation(
+                core::mem::size_of::<T>() + core::mem::size_of::<Box<dyn Any + Send + Sync>>(),
+            )?;
+            self.boxed_values.push(Box::new(value.clone()));
+            self.scratch_count += 1;
+            Ok(value)
+        } else {
+            let index = id - scratch_id_base - 1;
+            self.boxed_values
+                .get(index)
+                .and_then(|value| value.downcast_ref::<T>())
+                .cloned()
+                .ok_or(crate::io::Error::InvalidData)
+        }
+    }
+
+    /// Decodes a deduplicated value into decoder-owned storage and borrows it.
+    ///
+    /// Frozen and repeated values are returned without copying. Novel values
+    /// are unpacked directly into scratch storage, also avoiding the clone that
+    /// the owned [`Self::decode`] API requires. The borrow remains valid until
+    /// the next mutable access to this decoder.
+    #[inline]
+    pub fn decode_ref<'a, T: Pack + Hash + Eq + Send + Sync + 'static>(
+        &'a mut self,
+        reader: &mut impl Read,
+    ) -> Result<&'a T> {
+        let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
+            .map_err(|_| crate::io::Error::DecodeLimitExceeded)?;
+        let type_id = TypeId::of::<T>();
+        let total_primed = self.frozen_total_primed;
+
         // Frozen lookup: id in 1..=total_primed refers to a primed value.
         if id != 0 && id <= total_primed {
             // SAFETY: total_primed > 0 implies frozen is Some (set together in
             // `with_frozen`). Avoids an extra option-check on the hot path.
             let frozen = self.frozen.as_ref().unwrap();
-            return lookup_frozen::<T>(frozen, type_id, id - 1);
+            return lookup_frozen_ref::<T>(frozen, type_id, id - 1);
         }
 
         // Scratch indices are 0-based starting after the frozen range.
@@ -931,13 +1003,13 @@ impl DedupeDecoder {
             if id == 0 {
                 let value = T::unpack(reader)?;
                 reader.claim_allocation(core::mem::size_of::<T>())?;
-                vec.push(value.clone());
+                vec.push(value);
                 self.scratch_count += 1;
-                return Ok(value);
+                return Ok(vec.last().expect("value was just pushed"));
             } else {
                 let index = id - scratch_id_base - 1;
                 if let Some(v) = vec.get(index) {
-                    return Ok(v.clone());
+                    return Ok(v);
                 }
                 return Err(crate::io::Error::InvalidData);
             }
@@ -949,10 +1021,15 @@ impl DedupeDecoder {
             if id == 0 {
                 let value = T::unpack(reader)?;
                 reader.claim_allocation(core::mem::size_of::<T>())?;
-                vec.push(value.clone());
+                vec.push(value);
                 self.typed_vec = Some((type_id, Box::new(vec)));
                 self.scratch_count += 1;
-                return Ok(value);
+                let (_, store) = self.typed_vec.as_ref().expect("store was just initialized");
+                let store: &dyn Any = store.as_ref();
+                return store
+                    .downcast_ref::<Vec<T>>()
+                    .and_then(|values| values.last())
+                    .ok_or(crate::io::Error::InvalidData);
             } else {
                 // Trying to reference a value before any were stored
                 return Err(crate::io::Error::InvalidData);
@@ -968,15 +1045,17 @@ impl DedupeDecoder {
             reader.claim_allocation(
                 core::mem::size_of::<T>() + core::mem::size_of::<Box<dyn Any + Send + Sync>>(),
             )?;
-            self.boxed_values.push(Box::new(value.clone()));
+            self.boxed_values.push(Box::new(value));
             self.scratch_count += 1;
-            Ok(value)
+            self.boxed_values
+                .last()
+                .and_then(|value| value.downcast_ref::<T>())
+                .ok_or(crate::io::Error::InvalidData)
         } else {
             let index = id - scratch_id_base - 1;
             if let Some(boxed_value) = self.boxed_values.get(index) {
                 return boxed_value
                     .downcast_ref::<T>()
-                    .cloned()
                     .ok_or(crate::io::Error::InvalidData);
             }
             Err(crate::io::Error::InvalidData)
@@ -1119,13 +1198,38 @@ impl DedupeDecoder {
     }
 }
 
-/// Looks up a value at index `vec_index` within the frozen state, for type `T`.
+/// Clones a value at `vec_index` from frozen state for the owned decode path.
 #[inline]
 fn lookup_frozen<T: Clone + 'static>(
     frozen: &FrozenDecoderState,
     type_id: TypeId,
     vec_index: usize,
 ) -> Result<T> {
+    if let Some((ref cached_type, ref store)) = frozen.typed_vec
+        && *cached_type == type_id
+    {
+        // SAFETY: TypeId matches, so the erased store holds Vec<T>.
+        let vec: &Vec<T> = unsafe { &*(&**store as *const dyn TypedVecStore as *const Vec<T>) };
+        return vec
+            .get(vec_index)
+            .cloned()
+            .ok_or(crate::io::Error::InvalidData);
+    }
+    frozen
+        .boxed_values
+        .get(vec_index)
+        .and_then(|value| value.downcast_ref::<T>())
+        .cloned()
+        .ok_or(crate::io::Error::InvalidData)
+}
+
+/// Borrows a value at `vec_index` from frozen state for zero-copy callers.
+#[inline]
+fn lookup_frozen_ref<T: 'static>(
+    frozen: &FrozenDecoderState,
+    type_id: TypeId,
+    vec_index: usize,
+) -> Result<&T> {
     // Fast path: typed_vec
     if let Some((ref cached_type, ref store)) = frozen.typed_vec
         && *cached_type == type_id
@@ -1133,7 +1237,7 @@ fn lookup_frozen<T: Clone + 'static>(
         // SAFETY: TypeId matches; store holds a Vec<T>.
         let vec: &Vec<T> = unsafe { &*(&**store as *const dyn TypedVecStore as *const Vec<T>) };
         if let Some(v) = vec.get(vec_index) {
-            return Ok(v.clone());
+            return Ok(v);
         }
         return Err(crate::io::Error::InvalidData);
     }
@@ -1142,7 +1246,6 @@ fn lookup_frozen<T: Clone + 'static>(
     if let Some(boxed_value) = frozen.boxed_values.get(vec_index) {
         return boxed_value
             .downcast_ref::<T>()
-            .cloned()
             .ok_or(crate::io::Error::InvalidData);
     }
     Err(crate::io::Error::InvalidData)
@@ -1196,6 +1299,19 @@ mod tests {
 
     impl DedupeDecodeable for OtherBulkValue {
         type Hasher = H;
+    }
+
+    #[derive(Debug, Eq, Hash, PartialEq)]
+    struct NonCloneValue(u32);
+
+    impl Pack for NonCloneValue {
+        fn pack(&self, writer: &mut impl Write) -> Result<usize> {
+            self.0.pack(writer)
+        }
+
+        fn unpack(reader: &mut impl Read) -> Result<Self> {
+            u32::unpack(reader).map(Self)
+        }
     }
 
     #[test]
@@ -1326,6 +1442,41 @@ mod tests {
             decoder.decode::<u64>(&mut cursor),
             Err(crate::io::Error::InvalidData)
         ));
+    }
+
+    #[test]
+    fn test_decode_ref_borrows_scratch_without_clone() {
+        let mut buffer = Vec::new();
+        Lencode::encode_varint_u64(0, &mut buffer).unwrap();
+        NonCloneValue(91).pack(&mut buffer).unwrap();
+        Lencode::encode_varint_u64(1, &mut buffer).unwrap();
+
+        let mut decoder = DedupeDecoder::new();
+        let mut cursor = Cursor::new(&buffer);
+        let first_ptr = {
+            let first = decoder.decode_ref::<NonCloneValue>(&mut cursor).unwrap();
+            assert_eq!(first, &NonCloneValue(91));
+            first as *const NonCloneValue
+        };
+        let second = decoder.decode_ref::<NonCloneValue>(&mut cursor).unwrap();
+        assert_eq!(second, &NonCloneValue(91));
+        assert_eq!(second as *const NonCloneValue, first_ptr);
+    }
+
+    #[test]
+    fn test_decode_ref_borrows_frozen_value() {
+        let mut primer = DedupeDecoder::new();
+        primer.prime(BulkValue(7));
+        let mut decoder = DedupeDecoder::with_frozen(Arc::new(primer.freeze()));
+        let mut buffer = Vec::new();
+        Lencode::encode_varint_u64(1, &mut buffer).unwrap();
+        Lencode::encode_varint_u64(1, &mut buffer).unwrap();
+
+        let mut cursor = Cursor::new(&buffer);
+        let first_ptr = decoder.decode_ref::<BulkValue>(&mut cursor).unwrap() as *const BulkValue;
+        let second = decoder.decode_ref::<BulkValue>(&mut cursor).unwrap();
+        assert_eq!(second, &BulkValue(7));
+        assert_eq!(second as *const BulkValue, first_ptr);
     }
 
     #[test]
