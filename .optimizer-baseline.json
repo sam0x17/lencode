@@ -1,7 +1,7 @@
 {
-  "version": 41,
+  "version": 42,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T11:01:20Z",
+  "updated_at": "2026-08-22T11:22:25Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -201,6 +201,42 @@
         "leader_speedup_vs_wincode": 1.506,
         "validator_throughput_vs_wincode": 0.802,
         "validation": "seven focused codec tests and strict ledger library/benchmark Clippy passed; the frozen benchmark hash, payload bytes, data/coding shred counts, and wire bytes stayed exact; all normalized timing movements stayed within 1%"
+      },
+      {
+        "iteration": 7,
+        "optimization": "plumb the versioned block-component format through Agave leader shredding and validator reconstruction",
+        "kept": true,
+        "integration": "Agave StandardBroadcastRun, Shredder, Blockstore, and replay path",
+        "results": {
+          "wincode_leader": { "value": 290540881, "unit": "ns/100 blocks" },
+          "wincode_validator": { "value": 18836532, "unit": "ns/100 blocks" },
+          "lencode_leader": { "value": 194723409, "unit": "ns/100 blocks" },
+          "lencode_validator": { "value": 23588490, "unit": "ns/100 blocks" },
+          "wincode_payload_bytes": 66587751,
+          "lencode_payload_bytes": 30292964,
+          "wincode_data_shreds": 71136,
+          "wincode_coding_shreds": 71136,
+          "lencode_data_shreds": 33152,
+          "lencode_coding_shreds": 33152,
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 80592512
+        },
+        "activation": "production defaults to legacy wincode until Anza allocates a cluster feature key; leader and replay use the same explicit selector at the slot boundary",
+        "compatibility": "inactive replay rejects framed components, active replay accepts legacy fallback, and general blockstore readers can inspect both representations",
+        "zero_copy_boundary": "legacy and unframed owned payloads retain their original Vec allocation through reconstruction; only compressed frames allocate decompressed parser storage",
+        "candidate_binary_sha256": "7ad0af48d3a6dac2d74b4a47c476176302e5d46eda0db81d6b2627d1c52a8353",
+        "frozen_benchmark_source_sha256": "b7a411364318cf25aab26add6e5a521c8b6416d0044d7cac407aca500b2b22db",
+        "candidate_benchmark_source_sha256": "55f9e6160b554333a59898198a28dbb3f45dcd58922e0f8e1308a8fb7cab69a9",
+        "production_codec_source_sha256": "4fb84ef51403fda1005da8fb1c820f449924b757ecb86b517648064075451e7a",
+        "leader_change_vs_codec_extraction_pct": 0.706,
+        "leader_change_vs_codec_extraction_normalized_pct": 0.930,
+        "validator_change_vs_codec_extraction_pct": 0.446,
+        "validator_change_vs_codec_extraction_normalized_pct": 0.416,
+        "wire_change_vs_codec_extraction_pct": 0.0,
+        "wire_reduction_vs_wincode_pct": 53.396,
+        "leader_speedup_vs_wincode": 1.492,
+        "validator_throughput_vs_wincode": 0.799,
+        "validation": "343 ledger library tests and 47 turbine library tests passed; strict ledger and turbine Clippy passed; focused integration tests proved active leader framing, exact reconstruction, legacy fallback, and inactive replay rejection; the frozen benchmark and all wire counts stayed exact, while normalized timing movements remained within 1%"
       }
     ],
     "failed_attempts": [
