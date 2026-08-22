@@ -533,17 +533,17 @@ fn ensure_output(output: &mut Vec<u8>, additional: usize, max_output: usize) -> 
 mod tests {
     use super::*;
     use crate::{Encode, dedupe::DedupeEncoder, io::VecWriter};
-    use rand::{Rng, SeedableRng, rngs::StdRng};
-    use solana_address_v2::Address;
-    use solana_hash_v4::Hash;
-    use solana_message_v4::{
+    use rand::{RngExt, SeedableRng, rngs::StdRng};
+    use solana_hash::Hash;
+    use solana_message::{
         Message as LegacyMessage, MessageHeader, VersionedMessage,
         compiled_instruction::CompiledInstruction,
         v0::{Message as V0Message, MessageAddressTableLookup},
         v1::{Message as V1Message, TransactionConfig},
     };
+    use solana_pubkey::Pubkey;
     use solana_signature::Signature;
-    use solana_transaction_v4::versioned::VersionedTransaction;
+    use solana_transaction::versioned::VersionedTransaction;
 
     struct TestInstruction {
         program_id_index: u8,
@@ -611,8 +611,8 @@ mod tests {
         (Arc::new(encoder.freeze()), Arc::new(decoder.freeze()))
     }
 
-    fn canonical_address(bytes: [u8; 32]) -> Address {
-        Address::new_from_array(bytes)
+    fn canonical_address(bytes: [u8; 32]) -> Pubkey {
+        Pubkey::new_from_array(bytes)
     }
 
     fn canonical_instruction(instruction: &TestInstruction) -> CompiledInstruction {

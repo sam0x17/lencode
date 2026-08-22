@@ -1,1 +1,2 @@
-toolchain.channel = "stable"
+[toolchain]
+channel = "1.97.1"

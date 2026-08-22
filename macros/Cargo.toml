@@ -2,6 +2,7 @@
 name = "lencode-macros"
 version.workspace = true
 edition = "2024"
+rust-version.workspace = true
 license = "MIT"
 authors = ["sam0x17"]
 description = "support macros for lencode"

@@ -1,18 +1,18 @@
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use lencode::{
     context::{DecoderContext, EncoderContext},
     dedupe::{DedupeDecoder, DedupeEncoder},
     prelude::*,
 };
-#[cfg(feature = "solana")]
-use rand::Rng;
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
+use rand::RngExt;
+#[cfg(feature = "solana-types")]
 use std::io::Cursor;
 
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use solana_pubkey::Pubkey;
 
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 fn main() {
     // Create a vector of 1000 pubkeys where 50% are duplicates
     let mut rng = rand::rng();
@@ -30,8 +30,8 @@ fn main() {
     let mut all_pubkeys = unique_pubkeys;
     all_pubkeys.extend(duplicates);
 
-    // Encode with borsh
-    let borsh_data = borsh::to_vec(&all_pubkeys).unwrap();
+    // Encode with the current Solana reference codec.
+    let wincode_data = wincode::serialize(&all_pubkeys).unwrap();
 
     // Encode with lencode + deduplication
     let mut ctx = EncoderContext {
@@ -43,11 +43,11 @@ fn main() {
     let lencode_data = cursor.into_inner();
 
     println!("Vector size: {} pubkeys", all_pubkeys.len());
-    println!("Borsh encoded size: {} bytes", borsh_data.len());
+    println!("Wincode encoded size: {} bytes", wincode_data.len());
     println!("Lencode encoded size: {} bytes", lencode_data.len());
     println!(
         "Space savings: {:.1}%",
-        100.0 * (1.0 - lencode_data.len() as f64 / borsh_data.len() as f64)
+        100.0 * (1.0 - lencode_data.len() as f64 / wincode_data.len() as f64)
     );
     println!(
         "Unique values stored: {} out of {} total",
@@ -68,8 +68,8 @@ fn main() {
     println!("✓ Decoding verification passed");
 }
 
-#[cfg(not(feature = "solana"))]
+#[cfg(not(feature = "solana-types"))]
 fn main() {
-    println!("This example requires the 'solana' feature to be enabled.");
-    println!("Run with: cargo run --example size_comparison --features=solana");
+    println!("This example requires the 'solana-types' feature to be enabled.");
+    println!("Run with: cargo run --example size_comparison --features=solana-types");
 }

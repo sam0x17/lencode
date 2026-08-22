@@ -1,11 +1,13 @@
 [workspace]
 members = ["macros", "."]
 package.version = "1.2.1"
+package.rust-version = "1.97.1"
 
 [package]
 name = "lencode"
 version.workspace = true
 edition = "2024"
+rust-version.workspace = true
 license = "MIT"
 description = "A crate for encoding and decoding variable-length data using the Lencode varint encoding scheme and deduplication"
 keywords = ["encoding", "decoding", "bincode", "varint", "serde"]
@@ -16,20 +18,18 @@ documentation = "https://docs.rs/lencode/latest/lencode/"
 [dependencies]
 endian-cast = "2"
 generic-array = "1"
-solana-sdk = { version = "3", optional = true }
-agave-geyser-plugin-interface = { version = "3", optional = true }
-solana-message = { version = "3", optional = true }
-solana-transaction = { version = "3", optional = true }
-solana-transaction-status = { version = "3", optional = true }
-solana-transaction-context = { version = "3", optional = true }
-solana-transaction-error = { version = "3", optional = true }
-solana-instruction = { version = "3", optional = true }
-solana-hash = { version = "3", optional = true }
-solana-signature = { version = "3", optional = true }
-solana-pubkey = { version = "3", optional = true, features = ["rand"] }
-solana-clock = { version = "3", optional = true }
-solana-reward-info = { version = "3", optional = true }
-solana-account-decoder-client-types = { version = "3", optional = true }
+agave-geyser-plugin-interface = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
+solana-message = { version = "4.5.0", optional = true }
+solana-transaction = { version = "4.3.0", optional = true }
+solana-transaction-status = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
+solana-transaction-context = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
+solana-transaction-error = { version = "3.4.0", optional = true }
+solana-instruction = { version = "3.5.0", optional = true }
+solana-hash = { version = "4.6.0", optional = true }
+solana-signature = { version = "3.5.2", optional = true }
+solana-pubkey = { version = "4.3.0", optional = true }
+solana-reward-info = { version = "6.3.0", optional = true }
+solana-account-decoder-client-types = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
 ruint = { version = "1", default-features = false}
 newt-hype = { version = "0", default-features = false }
 hashbrown = "0"
@@ -44,38 +44,39 @@ bincode = { version = "2", features = ["serde"], optional = true }
 
 [dev-dependencies]
 rayon = "1"
-rand = ">= 0.9"
+rand = "0.10"
 criterion = { git = "https://github.com/sam0x17/criterion.rs", features = ["html_reports"] }
 borsh = { version = ">= 1.5", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 wincode = { version = "0.6.1", features = ["derive"] }
 solana-short-vec = { version = "3.3.0", features = ["wincode"] }
-solana-address-v2 = { package = "solana-address", version = "2.7.0" }
-solana-hash-v4 = { package = "solana-hash", version = "4.6.0" }
-solana-message-v4 = { package = "solana-message", version = "4.5.0", features = ["wincode"] }
+solana-hash = { version = "4.6.0", features = ["atomic"] }
+solana-message = { version = "4.5.0", features = ["wincode"] }
+solana-pubkey = { version = "4.3.0" }
 solana-signature = { version = "3.5.2" }
-solana-transaction-v4 = { package = "solana-transaction", version = "4.3.0", features = ["wincode"] }
+solana-transaction = { version = "4.3.0", features = ["wincode"] }
 
 [features]
 default = []
 std = ["ruint/std"]
 comparison-bench = []
-solana = [
+solana-types = [
     "std",
-    "dep:solana-sdk",
-    # Agave/geyser and supporting crates
-    "dep:agave-geyser-plugin-interface",
     "dep:solana-message",
     "dep:solana-transaction",
+    "dep:solana-hash",
+    "dep:solana-signature",
+    "dep:solana-pubkey",
+]
+solana = [
+    "solana-types",
+    # Agave/geyser and supporting runtime/status types
+    "dep:agave-geyser-plugin-interface",
     "dep:solana-transaction-status",
     "dep:solana-transaction-context",
     "dep:solana-transaction-error",
     "dep:solana-instruction",
-    "dep:solana-hash",
-    "dep:solana-signature",
-    "dep:solana-pubkey",
-    "dep:solana-clock",
     "dep:solana-reward-info",
     "dep:solana-account-decoder-client-types",
 ]
@@ -109,7 +110,7 @@ harness = false
 
 [[bench]]
 name = "solana_bench"
-required-features = ["std", "solana", "comparison-bench"]
+required-features = ["solana-types", "comparison-bench"]
 harness = false
 
 [[bench]]

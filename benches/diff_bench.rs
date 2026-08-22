@@ -5,7 +5,7 @@ use lencode::context::{DecoderContext, EncoderContext};
 use lencode::diff::{DiffDecoder, DiffEncoder};
 use lencode::prelude::*;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use std::hint::black_box;
 
 type MutateScenario = (&'static str, usize, Box<dyn Fn(&mut Vec<u8>, &mut StdRng)>);

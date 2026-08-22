@@ -1,27 +1,27 @@
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use lencode::{
     context::{DecoderContext, EncoderContext},
     dedupe::{DedupeDecoder, DedupeEncoder},
     prelude::*,
 };
-#[cfg(feature = "solana")]
-use rand::Rng;
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
+use rand::RngExt;
+#[cfg(feature = "solana-types")]
 use solana_hash::Hash;
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use solana_message::{
     Message, MessageHeader, VersionedMessage, compiled_instruction::CompiledInstruction, v0,
 };
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use solana_pubkey::Pubkey;
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use solana_signature::Signature;
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use solana_transaction::versioned::VersionedTransaction;
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 use std::{io::Cursor, time::Instant};
 
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 fn gen_pubkeys(count: usize, dup_ratio: f64) -> Vec<Pubkey> {
     let mut rng = rand::rng();
     let uniq_count = ((count as f64) * (1.0 - dup_ratio)).round() as usize;
@@ -35,7 +35,7 @@ fn gen_pubkeys(count: usize, dup_ratio: f64) -> Vec<Pubkey> {
     all
 }
 
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 fn build_legacy_tx(dup_ratio: f64) -> VersionedTransaction {
     let mut rng = rand::rng();
     let account_keys = gen_pubkeys(16, dup_ratio);
@@ -67,7 +67,7 @@ fn build_legacy_tx(dup_ratio: f64) -> VersionedTransaction {
     }
 }
 
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 fn build_v0_tx(dup_ratio: f64) -> VersionedTransaction {
     let mut rng = rand::rng();
     let account_keys = gen_pubkeys(12, dup_ratio);
@@ -100,7 +100,7 @@ fn build_v0_tx(dup_ratio: f64) -> VersionedTransaction {
     }
 }
 
-#[cfg(feature = "solana")]
+#[cfg(feature = "solana-types")]
 fn main() {
     const TX_COUNT: usize = 4000;
     const DUP_RATIO: f64 = 0.80; // 80% duplicates
@@ -115,10 +115,10 @@ fn main() {
         }
     }
 
-    // bincode: serialize VersionedTransaction via serde
+    // Wincode: serialize the current reference VersionedTransaction.
     let t0 = Instant::now();
-    let bincode_bytes = bincode::serde::encode_to_vec(&vtxs, bincode::config::standard()).unwrap();
-    let t_bincode = t0.elapsed();
+    let wincode_bytes = wincode::serialize(&vtxs).unwrap();
+    let t_wincode = t0.elapsed();
 
     // lencode: enable dedupe across the entire set
     let mut lencode_buf = Vec::new();
@@ -130,9 +130,9 @@ fn main() {
     vtxs.encode_ext(&mut lencode_buf, Some(&mut enc)).unwrap();
     let t_lencode = t1.elapsed();
 
-    let bincode_len = bincode_bytes.len();
+    let wincode_len = wincode_bytes.len();
     let lencode_len = lencode_buf.len();
-    let ratio = lencode_len as f64 / bincode_len as f64;
+    let ratio = lencode_len as f64 / wincode_len as f64;
     let savings = 100.0 * (1.0 - ratio);
 
     println!(
@@ -140,15 +140,15 @@ fn main() {
         TX_COUNT,
         DUP_RATIO * 100.0
     );
-    println!("bincode size: {} bytes", bincode_len);
+    println!("wincode size: {} bytes", wincode_len);
     println!("lencode size: {} bytes (dedupe on)", lencode_len);
-    println!("compression ratio (lencode/bincode): {:.3}", ratio);
-    println!("space savings vs bincode: {:.1}%", savings);
+    println!("compression ratio (lencode/wincode): {:.3}", ratio);
+    println!("space savings vs wincode: {:.1}%", savings);
     println!(
         "unique values captured by dedupe: {}",
         enc.dedupe.as_ref().unwrap().len()
     );
-    println!("bincode encode time: {:?}", t_bincode);
+    println!("wincode encode time: {:?}", t_wincode);
     println!("lencode encode time: {:?}", t_lencode);
 
     // Verify we can decode the lencode stream
@@ -162,8 +162,8 @@ fn main() {
     println!("✓ Round-trip decode verified");
 }
 
-#[cfg(not(feature = "solana"))]
+#[cfg(not(feature = "solana-types"))]
 fn main() {
-    println!("This example requires the 'solana' feature to be enabled.");
-    println!("Run with: cargo run --example versioned_tx_compression --features=solana");
+    println!("This example requires the 'solana-types' feature to be enabled.");
+    println!("Run with: cargo run --example versioned_tx_compression --features=solana-types");
 }

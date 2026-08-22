@@ -16,7 +16,8 @@ Compact, fast binary encoding with varints, optional deduplication, and opportun
 - Bulk encoding: `Vec<T>` of fixed‑size types (e.g. `[u8; 32]`) are encoded/decoded via bulk `memcpy`, not per‑element
 - no_std + alloc: works without `std` (uses `zstd-safe`)
 - Derive macros: `#[derive(Encode, Decode)]` for your types, `#[derive(Pack)]` for dedupe/bulk types
-- Solana support: feature `solana` adds v2/v3 SDK types
+- Solana support: feature `solana-types` adds the current reference message and transaction types;
+  `solana` adds the broader Agave runtime, status, and Geyser adapters
 - Agave transaction bridge: feature `std` includes a bounded, reusable compact-to-canonical
   transcoder for current legacy, v0, and v1 transaction wire layouts
 - Big-endian ready: CI runs tests on s390x
@@ -30,7 +31,10 @@ lencode = "1.2"
 # With standard library types (e.g., Cow)
 lencode = { version = "1.2", features = ["std"] }
 
-# With Solana type support (implies std)
+# With lightweight Solana message/transaction support (implies std)
+lencode = { version = "1.2", features = ["solana-types"] }
+
+# With the broader Agave runtime/status/Geyser adapters too
 lencode = { version = "1.2", features = ["solana"] }
 ```
 
@@ -196,7 +200,10 @@ than trying another codec.
 - Collections (alloc): `Vec<T>`, `BTreeMap<K,V>`, `BTreeSet<V>`, `VecDeque<T>`, `LinkedList<T>`, `BinaryHeap<T>`
 - Tuples: `(T1,)` … up to 11 elements
 - `std` feature: adds support for `std::borrow::Cow<'_, T>`
-- `solana` feature: `Pubkey`, `Signature`, `Hash`, messages (legacy/v0), and related v2/v3 types
+- `solana-types` feature: `Pubkey`, `Signature`, `Hash`, and current legacy/v0/v1 messages
+  and transactions
+- `solana` feature: the lightweight types plus related current Agave runtime, status, and
+  Geyser types
 
 Note: `HashMap`/`HashSet` are not implemented.
 
@@ -204,7 +211,8 @@ Note: `HashMap`/`HashSet` are not implemented.
 
 - `default`: core + `no_std` (uses `alloc`)
 - `std`: enables `std` adapters, `Cow`, and the Agave transaction wire transcoder
-- `solana`: Solana SDK v2 + Agave v3 types (implies `std`)
+- `solana-types`: lightweight current Solana message and transaction types (implies `std`)
+- `solana`: broader current Solana and Agave runtime/status/Geyser types (implies `solana-types`)
 
 ## Big‑endian and portability
 
@@ -225,7 +233,7 @@ cargo bench --bench roundup --features std
 cargo bench --bench diff_bench --features std
 
 # Solana‑specific
-cargo bench --bench solana_bench --features solana
+cargo bench --bench solana_bench --features solana-types,comparison-bench
 ```
 
 ## Errors
@@ -251,7 +259,7 @@ match encode(&123u64, &mut buf) {
 - `examples/size_comparison.rs`: space savings on repeated Solana pubkeys
 - `examples/versioned_tx_compression.rs`: end‑to‑end on Solana versioned transactions
 
-Run with `--features solana`.
+Run with `--features solana-types`.
 
 ## License
 

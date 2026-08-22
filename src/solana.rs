@@ -1,39 +1,46 @@
+#[cfg(feature = "solana")]
 use agave_geyser_plugin_interface::geyser_plugin_interface as ifc;
+#[cfg(feature = "solana")]
 use solana_account_decoder_client_types as acct_dec_client;
-use solana_hash as hash3;
+use solana_hash as sol_hash;
+#[cfg(feature = "solana")]
 use solana_instruction::error as ixerr;
-use solana_message as msg3;
-use solana_pubkey as pubkey3;
+use solana_message as sol_message;
+use solana_pubkey as sol_pubkey;
+#[cfg(feature = "solana")]
 use solana_reward_info as reward_info;
-use solana_signature as sig3;
-use solana_transaction as tx3;
-use solana_transaction_context as txctx3;
-use solana_transaction_error as txerr3;
-use solana_transaction_status as txstatus3;
+use solana_signature as sol_signature;
+use solana_transaction as sol_transaction;
+#[cfg(feature = "solana")]
+use solana_transaction_context as sol_transaction_context;
+#[cfg(feature = "solana")]
+use solana_transaction_error as sol_transaction_error;
+#[cfg(feature = "solana")]
+use solana_transaction_status as sol_transaction_status;
 
 use crate::prelude::*;
 
 #[cfg(test)]
-use hash3::Hash;
+use sol_hash::Hash;
 #[cfg(test)]
-use msg3::{
+use sol_message::{
     LegacyMessage, Message, MessageHeader, SanitizedMessage,
     compiled_instruction::CompiledInstruction,
     v0::{self, MessageAddressTableLookup},
 };
 #[cfg(test)]
-use pubkey3::Pubkey;
+use sol_pubkey::Pubkey;
 #[cfg(test)]
-use sig3::Signature;
+use sol_signature::Signature;
 #[cfg(test)]
-use tx3::versioned::VersionedTransaction;
+use sol_transaction::versioned::VersionedTransaction;
 
-// Implementations for Agave (v3) Geyser interface and its dependencies (inline)
+// Implementations for the current reference Solana and Agave types.
 
 // No serde/bincode usage in this module; all types implement Encode/Decode directly.
 
-// Pubkey/Hash/Signature for v3 crates
-impl Pack for pubkey3::Pubkey {
+// Pubkey/Hash/Signature
+impl Pack for sol_pubkey::Pubkey {
     #[inline(always)]
     fn pack(&self, writer: &mut impl Write) -> Result<usize> {
         self.to_bytes().pack(writer)
@@ -47,14 +54,14 @@ impl Pack for pubkey3::Pubkey {
         Ok(Self::new_from_array(buf))
     }
 }
-impl DedupeEncodeable for pubkey3::Pubkey {
-    type Hasher = pubkey3::PubkeyHasherBuilder;
+impl DedupeEncodeable for sol_pubkey::Pubkey {
+    type Hasher = DefaultDedupeHasher;
 }
-impl DedupeDecodeable for pubkey3::Pubkey {
-    type Hasher = pubkey3::PubkeyHasherBuilder;
+impl DedupeDecodeable for sol_pubkey::Pubkey {
+    type Hasher = DefaultDedupeHasher;
 }
 
-impl Encode for hash3::Hash {
+impl Encode for sol_hash::Hash {
     #[inline(always)]
     fn encode_ext(
         &self,
@@ -64,14 +71,14 @@ impl Encode for hash3::Hash {
         self.as_bytes().encode_ext(writer, ctx)
     }
 }
-impl Decode for hash3::Hash {
+impl Decode for sol_hash::Hash {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        let bytes = <[u8; hash3::HASH_BYTES]>::decode_ext(reader, ctx)?;
+        let bytes = <[u8; sol_hash::HASH_BYTES]>::decode_ext(reader, ctx)?;
         Ok(Self::new_from_array(bytes))
     }
 }
-impl Encode for sig3::Signature {
+impl Encode for sol_signature::Signature {
     #[inline(always)]
     fn encode_ext(
         &self,
@@ -81,16 +88,16 @@ impl Encode for sig3::Signature {
         self.as_array().encode_ext(writer, ctx)
     }
 }
-impl Decode for sig3::Signature {
+impl Decode for sol_signature::Signature {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        let sig: [u8; sig3::SIGNATURE_BYTES] = decode(reader)?;
+        let sig: [u8; sol_signature::SIGNATURE_BYTES] = decode(reader)?;
         Ok(Self::from(sig))
     }
 }
 
-// Message components (v3)
-impl Encode for msg3::MessageHeader {
+// Message components
+impl Encode for sol_message::MessageHeader {
     #[inline(always)]
     fn encode_ext(
         &self,
@@ -106,7 +113,7 @@ impl Encode for msg3::MessageHeader {
         combined.encode_ext(writer, ctx)
     }
 }
-impl Decode for msg3::MessageHeader {
+impl Decode for sol_message::MessageHeader {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let combined: u32 = decode(reader)?;
@@ -119,7 +126,7 @@ impl Decode for msg3::MessageHeader {
     }
 }
 
-impl Encode for msg3::compiled_instruction::CompiledInstruction {
+impl Encode for sol_message::compiled_instruction::CompiledInstruction {
     #[inline(always)]
     fn encode_ext(
         &self,
@@ -135,7 +142,7 @@ impl Encode for msg3::compiled_instruction::CompiledInstruction {
         Ok(n)
     }
 }
-impl Decode for msg3::compiled_instruction::CompiledInstruction {
+impl Decode for sol_message::compiled_instruction::CompiledInstruction {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let program_id_index: u8 = Decode::decode_ext(reader, ctx.as_deref_mut())?;
@@ -149,7 +156,7 @@ impl Decode for msg3::compiled_instruction::CompiledInstruction {
     }
 }
 
-impl Encode for msg3::legacy::Message {
+impl Encode for sol_message::legacy::Message {
     #[inline]
     fn encode_ext(
         &self,
@@ -166,7 +173,7 @@ impl Encode for msg3::legacy::Message {
         Ok(n)
     }
 }
-impl Decode for msg3::legacy::Message {
+impl Decode for sol_message::legacy::Message {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let header = Decode::decode_ext(reader, ctx.as_deref_mut())?;
@@ -181,7 +188,7 @@ impl Decode for msg3::legacy::Message {
         })
     }
 }
-impl Encode for msg3::v0::MessageAddressTableLookup {
+impl Encode for sol_message::v0::MessageAddressTableLookup {
     #[inline]
     fn encode_ext(
         &self,
@@ -197,7 +204,7 @@ impl Encode for msg3::v0::MessageAddressTableLookup {
         Ok(n)
     }
 }
-impl Decode for msg3::v0::MessageAddressTableLookup {
+impl Decode for sol_message::v0::MessageAddressTableLookup {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let account_key = Decode::decode_ext(reader, ctx.as_deref_mut())?;
@@ -210,7 +217,7 @@ impl Decode for msg3::v0::MessageAddressTableLookup {
         })
     }
 }
-impl Encode for msg3::v0::Message {
+impl Encode for sol_message::v0::Message {
     #[inline]
     fn encode_ext(
         &self,
@@ -228,7 +235,7 @@ impl Encode for msg3::v0::Message {
         Ok(n)
     }
 }
-impl Decode for msg3::v0::Message {
+impl Decode for sol_message::v0::Message {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let header = Decode::decode_ext(reader, ctx.as_deref_mut())?;
@@ -246,8 +253,93 @@ impl Decode for msg3::v0::Message {
     }
 }
 
-// Encode/Decode for sanitized LegacyMessage wrapper (v3)
-impl Encode for msg3::LegacyMessage<'_> {
+impl Encode for sol_message::v1::TransactionConfig {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut ctx: Option<&mut EncoderContext>,
+    ) -> Result<usize> {
+        let mask = sol_message::v1::TransactionConfigMask::from(self).0;
+        let mut n = mask.encode_ext(writer, ctx.as_deref_mut())?;
+        if let Some(value) = self.priority_fee {
+            n += value.encode_ext(writer, ctx.as_deref_mut())?;
+        }
+        if let Some(value) = self.compute_unit_limit {
+            n += value.encode_ext(writer, ctx.as_deref_mut())?;
+        }
+        if let Some(value) = self.loaded_accounts_data_size_limit {
+            n += value.encode_ext(writer, ctx.as_deref_mut())?;
+        }
+        if let Some(value) = self.heap_size {
+            n += value.encode_ext(writer, ctx)?;
+        }
+        Ok(n)
+    }
+}
+
+impl Decode for sol_message::v1::TransactionConfig {
+    #[inline]
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        let mask = u32::decode_ext(reader, ctx.as_deref_mut())?;
+        let mask = sol_message::v1::TransactionConfigMask::new(mask);
+        if mask.has_unknown_bits() || mask.has_invalid_priority_fee_bits() {
+            return Err(Error::InvalidData);
+        }
+        Ok(Self {
+            priority_fee: mask
+                .has_priority_fee()
+                .then(|| u64::decode_ext(reader, ctx.as_deref_mut()))
+                .transpose()?,
+            compute_unit_limit: mask
+                .has_compute_unit_limit()
+                .then(|| u32::decode_ext(reader, ctx.as_deref_mut()))
+                .transpose()?,
+            loaded_accounts_data_size_limit: mask
+                .has_loaded_accounts_data_size()
+                .then(|| u32::decode_ext(reader, ctx.as_deref_mut()))
+                .transpose()?,
+            heap_size: mask
+                .has_heap_size()
+                .then(|| u32::decode_ext(reader, ctx))
+                .transpose()?,
+        })
+    }
+}
+
+impl Encode for sol_message::v1::Message {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut ctx: Option<&mut EncoderContext>,
+    ) -> Result<usize> {
+        let mut n = self.header.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.config.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self
+            .lifetime_specifier
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.account_keys.encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.instructions.encode_ext(writer, ctx)?;
+        Ok(n)
+    }
+}
+
+impl Decode for sol_message::v1::Message {
+    #[inline]
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        Ok(Self {
+            header: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            config: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            lifetime_specifier: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            account_keys: Decode::decode_ext(reader, ctx.as_deref_mut())?,
+            instructions: Decode::decode_ext(reader, ctx)?,
+        })
+    }
+}
+
+// Encode/Decode for sanitized message wrappers
+impl Encode for sol_message::LegacyMessage<'_> {
     #[inline]
     fn encode_ext(
         &self,
@@ -263,10 +355,10 @@ impl Encode for msg3::LegacyMessage<'_> {
         Ok(n)
     }
 }
-impl Decode for msg3::LegacyMessage<'_> {
+impl Decode for sol_message::LegacyMessage<'_> {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        let message = msg3::legacy::Message::decode_ext(reader, ctx.as_deref_mut())?;
+        let message = sol_message::legacy::Message::decode_ext(reader, ctx.as_deref_mut())?;
         let is_writable_account_cache = Vec::<bool>::decode_ext(reader, ctx)?;
         Ok(Self {
             message: std::borrow::Cow::Owned(message),
@@ -275,29 +367,35 @@ impl Decode for msg3::LegacyMessage<'_> {
     }
 }
 
-impl Encode for msg3::SanitizedMessage {
+impl Encode for sol_message::SanitizedMessage {
     fn encode_ext(
         &self,
         writer: &mut impl Write,
         ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
         match self {
-            msg3::SanitizedMessage::Legacy(m) => {
+            sol_message::SanitizedMessage::Legacy(m) => {
                 let mut n = 0;
                 n += <usize as Encode>::encode_discriminant(0, writer)?;
                 n += m.encode_ext(writer, ctx)?;
                 Ok(n)
             }
-            msg3::SanitizedMessage::V0(m) => {
+            sol_message::SanitizedMessage::V0(m) => {
                 let mut n = 0;
                 n += <usize as Encode>::encode_discriminant(1, writer)?;
+                n += m.encode_ext(writer, ctx)?;
+                Ok(n)
+            }
+            sol_message::SanitizedMessage::V1(m) => {
+                let mut n = 0;
+                n += <usize as Encode>::encode_discriminant(2, writer)?;
                 n += m.encode_ext(writer, ctx)?;
                 Ok(n)
             }
         }
     }
 }
-impl Decode for msg3::SanitizedMessage {
+impl Decode for sol_message::SanitizedMessage {
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         match <usize as Decode>::decode_discriminant(reader)? {
             0 => Ok(Self::Legacy(Decode::decode_ext(
@@ -305,12 +403,13 @@ impl Decode for msg3::SanitizedMessage {
                 ctx.as_deref_mut(),
             )?)),
             1 => Ok(Self::V0(Decode::decode_ext(reader, ctx)?)),
+            2 => Ok(Self::V1(Decode::decode_ext(reader, ctx)?)),
             _ => Err(Error::InvalidData),
         }
     }
 }
 
-impl Encode for msg3::v0::LoadedAddresses {
+impl Encode for sol_message::v0::LoadedAddresses {
     #[inline(always)]
     fn encode_ext(
         &self,
@@ -323,15 +422,15 @@ impl Encode for msg3::v0::LoadedAddresses {
         Ok(n)
     }
 }
-impl Decode for msg3::v0::LoadedAddresses {
+impl Decode for sol_message::v0::LoadedAddresses {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        let writable = Vec::<pubkey3::Pubkey>::decode_ext(reader, ctx.as_deref_mut())?;
-        let readonly = Vec::<pubkey3::Pubkey>::decode_ext(reader, ctx)?;
+        let writable = Vec::<sol_pubkey::Pubkey>::decode_ext(reader, ctx.as_deref_mut())?;
+        let readonly = Vec::<sol_pubkey::Pubkey>::decode_ext(reader, ctx)?;
         Ok(Self { writable, readonly })
     }
 }
-impl<'a> Encode for msg3::v0::LoadedMessage<'a> {
+impl<'a> Encode for sol_message::v0::LoadedMessage<'a> {
     #[inline]
     fn encode_ext(
         &self,
@@ -351,11 +450,11 @@ impl<'a> Encode for msg3::v0::LoadedMessage<'a> {
         Ok(n)
     }
 }
-impl<'a> Decode for msg3::v0::LoadedMessage<'a> {
+impl<'a> Decode for sol_message::v0::LoadedMessage<'a> {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        let msg = msg3::v0::Message::decode_ext(reader, ctx.as_deref_mut())?;
-        let addrs = msg3::v0::LoadedAddresses::decode_ext(reader, ctx.as_deref_mut())?;
+        let msg = sol_message::v0::Message::decode_ext(reader, ctx.as_deref_mut())?;
+        let addrs = sol_message::v0::LoadedAddresses::decode_ext(reader, ctx.as_deref_mut())?;
         let cache = Vec::<bool>::decode_ext(reader, ctx)?;
         Ok(Self {
             message: std::borrow::Cow::Owned(msg),
@@ -365,8 +464,34 @@ impl<'a> Decode for msg3::v0::LoadedMessage<'a> {
     }
 }
 
-// VersionedMessage and transactions (v3)
-impl Encode for msg3::VersionedMessage {
+impl Encode for sol_message::v1::CachedMessage<'_> {
+    #[inline]
+    fn encode_ext(
+        &self,
+        writer: &mut impl Write,
+        mut ctx: Option<&mut EncoderContext>,
+    ) -> Result<usize> {
+        let mut n = self
+            .message
+            .as_ref()
+            .encode_ext(writer, ctx.as_deref_mut())?;
+        n += self.is_writable_account_cache.encode_ext(writer, ctx)?;
+        Ok(n)
+    }
+}
+
+impl Decode for sol_message::v1::CachedMessage<'_> {
+    #[inline]
+    fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
+        Ok(Self {
+            message: std::borrow::Cow::Owned(Decode::decode_ext(reader, ctx.as_deref_mut())?),
+            is_writable_account_cache: Decode::decode_ext(reader, ctx)?,
+        })
+    }
+}
+
+// VersionedMessage and transactions
+impl Encode for sol_message::VersionedMessage {
     #[inline]
     fn encode_ext(
         &self,
@@ -375,19 +500,23 @@ impl Encode for msg3::VersionedMessage {
     ) -> Result<usize> {
         let mut n = 0;
         match self {
-            msg3::VersionedMessage::Legacy(m) => {
+            sol_message::VersionedMessage::Legacy(m) => {
                 n += <usize as Encode>::encode_discriminant(0, writer)?;
                 n += m.encode_ext(writer, ctx.as_deref_mut())?;
             }
-            msg3::VersionedMessage::V0(m) => {
+            sol_message::VersionedMessage::V0(m) => {
                 n += <usize as Encode>::encode_discriminant(1, writer)?;
+                n += m.encode_ext(writer, ctx)?;
+            }
+            sol_message::VersionedMessage::V1(m) => {
+                n += <usize as Encode>::encode_discriminant(2, writer)?;
                 n += m.encode_ext(writer, ctx)?;
             }
         }
         Ok(n)
     }
 }
-impl Decode for msg3::VersionedMessage {
+impl Decode for sol_message::VersionedMessage {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         match <usize as Decode>::decode_discriminant(reader)? {
@@ -396,11 +525,12 @@ impl Decode for msg3::VersionedMessage {
                 ctx.as_deref_mut(),
             )?)),
             1 => Ok(Self::V0(Decode::decode_ext(reader, ctx)?)),
+            2 => Ok(Self::V1(Decode::decode_ext(reader, ctx)?)),
             _ => Err(Error::InvalidData),
         }
     }
 }
-impl Encode for tx3::versioned::VersionedTransaction {
+impl Encode for sol_transaction::versioned::VersionedTransaction {
     #[inline]
     fn encode_ext(
         &self,
@@ -413,18 +543,18 @@ impl Encode for tx3::versioned::VersionedTransaction {
         Ok(n)
     }
 }
-impl Decode for tx3::versioned::VersionedTransaction {
+impl Decode for sol_transaction::versioned::VersionedTransaction {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        let signatures = Vec::<sig3::Signature>::decode_ext(reader, ctx.as_deref_mut())?;
-        let message = msg3::VersionedMessage::decode_ext(reader, ctx)?;
+        let signatures = Vec::<sol_signature::Signature>::decode_ext(reader, ctx.as_deref_mut())?;
+        let message = sol_message::VersionedMessage::decode_ext(reader, ctx)?;
         Ok(Self {
             signatures,
             message,
         })
     }
 }
-impl Encode for tx3::sanitized::SanitizedTransaction {
+impl Encode for sol_transaction::sanitized::SanitizedTransaction {
     #[inline]
     fn encode_ext(
         &self,
@@ -437,19 +567,19 @@ impl Encode for tx3::sanitized::SanitizedTransaction {
         n += self
             .is_simple_vote_transaction()
             .encode_ext(writer, ctx.as_deref_mut())?;
-        let sigs: Vec<sig3::Signature> = self.signatures().to_vec();
+        let sigs: Vec<sol_signature::Signature> = self.signatures().to_vec();
         n += sigs.encode_ext(writer, ctx)?;
         Ok(n)
     }
 }
-impl Decode for tx3::sanitized::SanitizedTransaction {
+impl Decode for sol_transaction::sanitized::SanitizedTransaction {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        let message = msg3::SanitizedMessage::decode_ext(reader, ctx.as_deref_mut())?;
-        let message_hash = hash3::Hash::decode_ext(reader, ctx.as_deref_mut())?;
+        let message = sol_message::SanitizedMessage::decode_ext(reader, ctx.as_deref_mut())?;
+        let message_hash = sol_hash::Hash::decode_ext(reader, ctx.as_deref_mut())?;
         let is_simple_vote_tx = bool::decode_ext(reader, ctx.as_deref_mut())?;
-        let signatures = Vec::<sig3::Signature>::decode_ext(reader, ctx)?;
-        tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+        let signatures = Vec::<sol_signature::Signature>::decode_ext(reader, ctx)?;
+        sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
             message,
             message_hash,
             is_simple_vote_tx,
@@ -459,8 +589,9 @@ impl Decode for tx3::sanitized::SanitizedTransaction {
     }
 }
 
-// TransactionStatusMeta and friends
-impl Encode for txstatus3::InnerInstruction {
+// TransactionStatusMeta, Geyser, and supporting runtime/status types.
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_status::InnerInstruction {
     #[inline]
     fn encode_ext(
         &self,
@@ -473,7 +604,8 @@ impl Encode for txstatus3::InnerInstruction {
         Ok(n)
     }
 }
-impl Decode for txstatus3::InnerInstruction {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_status::InnerInstruction {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let instruction = Decode::decode_ext(reader, ctx.as_deref_mut())?;
@@ -484,7 +616,8 @@ impl Decode for txstatus3::InnerInstruction {
         })
     }
 }
-impl Encode for txstatus3::InnerInstructions {
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_status::InnerInstructions {
     #[inline]
     fn encode_ext(
         &self,
@@ -497,7 +630,8 @@ impl Encode for txstatus3::InnerInstructions {
         Ok(n)
     }
 }
-impl Decode for txstatus3::InnerInstructions {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_status::InnerInstructions {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let index = Decode::decode_ext(reader, ctx.as_deref_mut())?;
@@ -508,6 +642,7 @@ impl Decode for txstatus3::InnerInstructions {
         })
     }
 }
+#[cfg(feature = "solana")]
 impl Encode for acct_dec_client::token::UiTokenAmount {
     #[inline]
     fn encode_ext(
@@ -523,6 +658,7 @@ impl Encode for acct_dec_client::token::UiTokenAmount {
         Ok(n)
     }
 }
+#[cfg(feature = "solana")]
 impl Decode for acct_dec_client::token::UiTokenAmount {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
@@ -535,7 +671,8 @@ impl Decode for acct_dec_client::token::UiTokenAmount {
     }
 }
 
-impl Encode for txstatus3::TransactionTokenBalance {
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_status::TransactionTokenBalance {
     #[inline]
     fn encode_ext(
         &self,
@@ -553,7 +690,8 @@ impl Encode for txstatus3::TransactionTokenBalance {
         Ok(n)
     }
 }
-impl Decode for txstatus3::TransactionTokenBalance {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_status::TransactionTokenBalance {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
@@ -566,6 +704,7 @@ impl Decode for txstatus3::TransactionTokenBalance {
     }
 }
 
+#[cfg(feature = "solana")]
 impl Encode for reward_info::RewardType {
     #[inline]
     fn encode_ext(
@@ -578,10 +717,12 @@ impl Encode for reward_info::RewardType {
             reward_info::RewardType::Rent => 1,
             reward_info::RewardType::Staking => 2,
             reward_info::RewardType::Voting => 3,
+            reward_info::RewardType::DeactivatedStake => 4,
         };
         <usize as Encode>::encode_discriminant(disc, writer)
     }
 }
+#[cfg(feature = "solana")]
 impl Decode for reward_info::RewardType {
     #[inline]
     fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
@@ -590,17 +731,24 @@ impl Decode for reward_info::RewardType {
             1 => reward_info::RewardType::Rent,
             2 => reward_info::RewardType::Staking,
             3 => reward_info::RewardType::Voting,
+            4 => reward_info::RewardType::DeactivatedStake,
             _ => return Err(Error::InvalidData),
         })
     }
 }
-impl Encode for txstatus3::Reward {
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_status::Reward {
     #[inline]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
         mut ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
+        // `commission_bps` was added after the original lencode layout. Keep
+        // the established wire exact until this type gets an explicit version.
+        if self.commission_bps.is_some() {
+            return Err(Error::InvalidData);
+        }
         let mut n = 0;
         n += self.pubkey.encode_ext(writer, ctx.as_deref_mut())?;
         n += self.lamports.encode_ext(writer, ctx.as_deref_mut())?;
@@ -610,7 +758,8 @@ impl Encode for txstatus3::Reward {
         Ok(n)
     }
 }
-impl Decode for txstatus3::Reward {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_status::Reward {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
@@ -619,10 +768,12 @@ impl Decode for txstatus3::Reward {
             post_balance: Decode::decode_ext(reader, ctx.as_deref_mut())?,
             reward_type: Decode::decode_ext(reader, ctx.as_deref_mut())?,
             commission: Decode::decode_ext(reader, ctx)?,
+            commission_bps: None,
         })
     }
 }
-impl Encode for txstatus3::RewardsAndNumPartitions {
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_status::RewardsAndNumPartitions {
     #[inline]
     fn encode_ext(
         &self,
@@ -635,7 +786,8 @@ impl Encode for txstatus3::RewardsAndNumPartitions {
         Ok(n)
     }
 }
-impl Decode for txstatus3::RewardsAndNumPartitions {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_status::RewardsAndNumPartitions {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
@@ -644,7 +796,8 @@ impl Decode for txstatus3::RewardsAndNumPartitions {
         })
     }
 }
-impl Encode for txctx3::TransactionReturnData {
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_context::transaction::TransactionReturnData {
     #[inline]
     fn encode_ext(
         &self,
@@ -657,7 +810,8 @@ impl Encode for txctx3::TransactionReturnData {
         Ok(n)
     }
 }
-impl Decode for txctx3::TransactionReturnData {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_context::transaction::TransactionReturnData {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
@@ -667,6 +821,7 @@ impl Decode for txctx3::TransactionReturnData {
     }
 }
 // InstructionError encoding (direct, no serde)
+#[cfg(feature = "solana")]
 impl Encode for ixerr::InstructionError {
     #[inline]
     fn encode_ext(
@@ -740,6 +895,7 @@ impl Encode for ixerr::InstructionError {
     }
 }
 
+#[cfg(feature = "solana")]
 impl Decode for ixerr::InstructionError {
     #[inline]
     fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
@@ -806,14 +962,15 @@ impl Decode for ixerr::InstructionError {
 }
 
 // TransactionError encoding (direct, no serde)
-impl Encode for txerr3::TransactionError {
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_error::TransactionError {
     #[inline]
     fn encode_ext(
         &self,
         writer: &mut impl Write,
         _ctx: Option<&mut EncoderContext>,
     ) -> Result<usize> {
-        use txerr3::TransactionError as E;
+        use sol_transaction_error::TransactionError as E;
         let disc: usize = match self {
             E::AccountInUse => 0,
             E::AccountLoadedTwice => 1,
@@ -876,10 +1033,11 @@ impl Encode for txerr3::TransactionError {
     }
 }
 
-impl Decode for txerr3::TransactionError {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_error::TransactionError {
     #[inline]
     fn decode_ext(reader: &mut impl Read, _ctx: Option<&mut DecoderContext>) -> Result<Self> {
-        use txerr3::TransactionError as E;
+        use sol_transaction_error::TransactionError as E;
         Ok(match <usize as Decode>::decode_discriminant(reader)? {
             0 => E::AccountInUse,
             1 => E::AccountLoadedTwice,
@@ -931,7 +1089,8 @@ impl Decode for txerr3::TransactionError {
         })
     }
 }
-impl Encode for txstatus3::TransactionStatusMeta {
+#[cfg(feature = "solana")]
+impl Encode for sol_transaction_status::TransactionStatusMeta {
     #[inline]
     fn encode_ext(
         &self,
@@ -965,7 +1124,8 @@ impl Encode for txstatus3::TransactionStatusMeta {
         Ok(n)
     }
 }
-impl Decode for txstatus3::TransactionStatusMeta {
+#[cfg(feature = "solana")]
+impl Decode for sol_transaction_status::TransactionStatusMeta {
     #[inline]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         Ok(Self {
@@ -993,6 +1153,7 @@ impl Decode for txstatus3::TransactionStatusMeta {
 // underlying owned types when needed.
 
 // SlotStatus and GeyserPluginError
+#[cfg(feature = "solana")]
 impl Encode for ifc::SlotStatus {
     #[inline]
     fn encode_ext(
@@ -1017,6 +1178,7 @@ impl Encode for ifc::SlotStatus {
         }
     }
 }
+#[cfg(feature = "solana")]
 impl Decode for ifc::SlotStatus {
     #[inline]
     fn decode_ext(reader: &mut impl Read, _dedupe: Option<&mut DecoderContext>) -> Result<Self> {
@@ -1033,15 +1195,19 @@ impl Decode for ifc::SlotStatus {
     }
 }
 
+#[cfg(feature = "solana")]
 #[derive(Debug)]
 struct SimpleError(String);
+#[cfg(feature = "solana")]
 impl core::fmt::Display for SimpleError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
+#[cfg(feature = "solana")]
 impl std::error::Error for SimpleError {}
 
+#[cfg(feature = "solana")]
 impl Encode for ifc::GeyserPluginError {
     #[inline]
     fn encode_ext(
@@ -1083,6 +1249,7 @@ impl Encode for ifc::GeyserPluginError {
         }
     }
 }
+#[cfg(feature = "solana")]
 impl Decode for ifc::GeyserPluginError {
     #[inline]
     fn decode_ext(reader: &mut impl Read, _dedupe: Option<&mut DecoderContext>) -> Result<Self> {
@@ -1110,6 +1277,7 @@ impl Decode for ifc::GeyserPluginError {
     }
 }
 
+#[cfg(feature = "solana")]
 #[test]
 fn test_agave_slot_status_roundtrip() {
     use crate::prelude::*;
@@ -1133,6 +1301,7 @@ fn test_agave_slot_status_roundtrip() {
     }
 }
 
+#[cfg(feature = "solana")]
 #[test]
 fn test_agave_geyser_plugin_error_roundtrip() {
     use crate::prelude::*;
@@ -1171,7 +1340,7 @@ fn test_agave_geyser_plugin_error_roundtrip() {
         }
     }
 }
-// ===== Tests for Solana (v2) and Agave (v3) types =====
+// ===== Tests for current reference Solana and Agave types =====
 
 #[test]
 fn test_versioned_message_encode_decode_legacy() {
@@ -1193,11 +1362,11 @@ fn test_versioned_message_encode_decode_legacy() {
         recent_blockhash,
         instructions,
     };
-    let vm = msg3::VersionedMessage::Legacy(legacy);
+    let vm = sol_message::VersionedMessage::Legacy(legacy);
 
     let mut buf = Vec::new();
     vm.encode(&mut buf).unwrap();
-    let decoded = msg3::VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
+    let decoded = sol_message::VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
     assert_eq!(vm, decoded);
 }
 
@@ -1223,12 +1392,69 @@ fn test_versioned_message_encode_decode_v0() {
         instructions,
         address_table_lookups,
     };
-    let vm = msg3::VersionedMessage::V0(v0msg);
+    let vm = sol_message::VersionedMessage::V0(v0msg);
 
     let mut buf = Vec::new();
     vm.encode(&mut buf).unwrap();
-    let decoded = msg3::VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
+    let decoded = sol_message::VersionedMessage::decode(&mut std::io::Cursor::new(&buf)).unwrap();
     assert_eq!(vm, decoded);
+}
+
+#[test]
+fn test_versioned_message_encode_decode_v1_and_transcode() {
+    let key = Pubkey::new_unique();
+    let message = sol_message::v1::Message {
+        header: MessageHeader {
+            num_required_signatures: 1,
+            num_readonly_signed_accounts: 0,
+            num_readonly_unsigned_accounts: 1,
+        },
+        config: sol_message::v1::TransactionConfig::empty()
+            .with_priority_fee(42)
+            .with_compute_unit_limit(200_000)
+            .with_loaded_accounts_data_size_limit(1_048_576)
+            .with_heap_size(64 * 1024),
+        lifetime_specifier: Hash::new_unique(),
+        account_keys: vec![key, Pubkey::new_unique(), key],
+        instructions: vec![CompiledInstruction {
+            program_id_index: 1,
+            accounts: vec![0, 2],
+            data: vec![7, 8, 9],
+        }],
+    };
+    let tx = VersionedTransaction {
+        signatures: vec![Signature::default()],
+        message: sol_message::VersionedMessage::V1(message),
+    };
+
+    let mut encode_context = EncoderContext::with_dedupe();
+    let mut compact = Vec::new();
+    tx.encode_ext(&mut compact, Some(&mut encode_context))
+        .unwrap();
+    let mut decode_context = DecoderContext::with_dedupe();
+    let decoded =
+        VersionedTransaction::decode_ext(&mut Cursor::new(&compact), Some(&mut decode_context))
+            .unwrap();
+    assert_eq!(tx, decoded);
+
+    let mut canonical = Vec::new();
+    crate::solana_wire::SolanaTransactionTranscoder::new()
+        .transcode_exact(
+            &compact,
+            &mut canonical,
+            crate::solana_wire::TransactionWireLimits::CURRENT,
+        )
+        .unwrap();
+    assert_eq!(canonical, wincode::serialize(&tx).unwrap());
+}
+
+#[test]
+fn test_v1_config_rejects_invalid_masks() {
+    for mask in [0b01u32, 0b10, 0b10_0000] {
+        let mut bytes = Vec::new();
+        mask.encode(&mut bytes).unwrap();
+        assert!(sol_message::v1::TransactionConfig::decode(&mut Cursor::new(&bytes)).is_err());
+    }
 }
 
 #[test]
@@ -1247,7 +1473,7 @@ fn test_versioned_transaction_roundtrip_and_dedupe() {
         accounts: vec![0, 1],
         data: vec![0xAA],
     }];
-    let message = msg3::VersionedMessage::Legacy(Message {
+    let message = sol_message::VersionedMessage::Legacy(Message {
         header,
         account_keys,
         recent_blockhash,
@@ -1270,7 +1496,7 @@ fn test_versioned_transaction_roundtrip_and_dedupe() {
 
     // Round-trip with decoder
     let mut ctx_dec = DecoderContext::with_dedupe();
-    let tx_dec = tx3::versioned::VersionedTransaction::decode_ext(
+    let tx_dec = sol_transaction::versioned::VersionedTransaction::decode_ext(
         &mut std::io::Cursor::new(&buf_dedupe),
         Some(&mut ctx_dec),
     )
@@ -1278,53 +1504,56 @@ fn test_versioned_transaction_roundtrip_and_dedupe() {
     assert_eq!(tx, tx_dec);
 }
 
-// ---- Agave (v3) message primitives ----
+// ---- Solana message primitives ----
 
 #[test]
-fn test_msg3_message_header_roundtrip() {
+fn test_message_header_roundtrip() {
     use crate::prelude::*;
-    let header = msg3::MessageHeader {
+    let header = sol_message::MessageHeader {
         num_required_signatures: 2,
         num_readonly_signed_accounts: 1,
         num_readonly_unsigned_accounts: 3,
     };
     let mut buf = Vec::new();
     header.encode(&mut buf).unwrap();
-    let decoded: msg3::MessageHeader = decode(&mut Cursor::new(&buf)).unwrap();
+    let decoded: sol_message::MessageHeader = decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(header, decoded);
 }
 
 #[test]
-fn test_msg3_compiled_instruction_roundtrip() {
+fn test_compiled_instruction_roundtrip() {
     use crate::prelude::*;
-    let ci = msg3::compiled_instruction::CompiledInstruction {
+    let ci = sol_message::compiled_instruction::CompiledInstruction {
         program_id_index: 7,
         accounts: vec![0, 2, 4],
         data: vec![1, 2, 3, 5, 8],
     };
     let mut buf = Vec::new();
     ci.encode(&mut buf).unwrap();
-    let decoded: msg3::compiled_instruction::CompiledInstruction =
+    let decoded: sol_message::compiled_instruction::CompiledInstruction =
         decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(ci, decoded);
 }
 
 #[test]
-fn test_msg3_legacy_message_roundtrip() {
+fn test_legacy_message_roundtrip() {
     use crate::prelude::*;
-    let header = msg3::MessageHeader {
+    let header = sol_message::MessageHeader {
         num_required_signatures: 1,
         num_readonly_signed_accounts: 0,
         num_readonly_unsigned_accounts: 1,
     };
-    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
-    let recent_blockhash = hash3::Hash::new_unique();
-    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+    let account_keys = vec![
+        sol_pubkey::Pubkey::new_unique(),
+        sol_pubkey::Pubkey::new_unique(),
+    ];
+    let recent_blockhash = sol_hash::Hash::new_unique();
+    let instructions = vec![sol_message::compiled_instruction::CompiledInstruction {
         program_id_index: 1,
         accounts: vec![0],
         data: vec![9, 9, 9],
     }];
-    let msg = msg3::legacy::Message {
+    let msg = sol_message::legacy::Message {
         header,
         account_keys,
         recent_blockhash,
@@ -1332,31 +1561,34 @@ fn test_msg3_legacy_message_roundtrip() {
     };
     let mut buf = Vec::new();
     msg.encode(&mut buf).unwrap();
-    let decoded: msg3::legacy::Message = decode(&mut Cursor::new(&buf)).unwrap();
+    let decoded: sol_message::legacy::Message = decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(msg, decoded);
 }
 
 #[test]
-fn test_msg3_v0_lookup_and_message_roundtrip() {
+fn test_v0_lookup_and_message_roundtrip() {
     use crate::prelude::*;
-    let header = msg3::MessageHeader {
+    let header = sol_message::MessageHeader {
         num_required_signatures: 1,
         num_readonly_signed_accounts: 0,
         num_readonly_unsigned_accounts: 1,
     };
-    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
-    let recent_blockhash = hash3::Hash::new_unique();
-    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+    let account_keys = vec![
+        sol_pubkey::Pubkey::new_unique(),
+        sol_pubkey::Pubkey::new_unique(),
+    ];
+    let recent_blockhash = sol_hash::Hash::new_unique();
+    let instructions = vec![sol_message::compiled_instruction::CompiledInstruction {
         program_id_index: 1,
         accounts: vec![0],
         data: vec![1, 2, 3],
     }];
-    let lookup = msg3::v0::MessageAddressTableLookup {
-        account_key: pubkey3::Pubkey::new_unique(),
+    let lookup = sol_message::v0::MessageAddressTableLookup {
+        account_key: sol_pubkey::Pubkey::new_unique(),
         writable_indexes: vec![0, 2],
         readonly_indexes: vec![1],
     };
-    let v0msg = msg3::v0::Message {
+    let v0msg = sol_message::v0::Message {
         header,
         account_keys,
         recent_blockhash,
@@ -1367,176 +1599,237 @@ fn test_msg3_v0_lookup_and_message_roundtrip() {
     // Lookup alone
     let mut buf = Vec::new();
     v0msg.address_table_lookups[0].encode(&mut buf).unwrap();
-    let dec_lookup: msg3::v0::MessageAddressTableLookup = decode(&mut Cursor::new(&buf)).unwrap();
+    let dec_lookup: sol_message::v0::MessageAddressTableLookup =
+        decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(v0msg.address_table_lookups[0], dec_lookup);
 
     // Entire v0 message
     buf.clear();
     v0msg.encode(&mut buf).unwrap();
-    let decoded: msg3::v0::Message = decode(&mut Cursor::new(&buf)).unwrap();
+    let decoded: sol_message::v0::Message = decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(v0msg, decoded);
 }
 
 #[test]
-fn test_msg3_sanitized_message_roundtrip_both_variants() {
+fn test_sanitized_message_roundtrip_all_variants() {
     use crate::prelude::*;
     // Legacy variant
-    let header = msg3::MessageHeader {
+    let header = sol_message::MessageHeader {
         num_required_signatures: 1,
         num_readonly_signed_accounts: 0,
         num_readonly_unsigned_accounts: 1,
     };
-    let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
-    let recent_blockhash = hash3::Hash::new_unique();
-    let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+    let account_keys = vec![
+        sol_pubkey::Pubkey::new_unique(),
+        sol_pubkey::Pubkey::new_unique(),
+    ];
+    let recent_blockhash = sol_hash::Hash::new_unique();
+    let instructions = vec![sol_message::compiled_instruction::CompiledInstruction {
         program_id_index: 1,
         accounts: vec![0],
         data: vec![1],
     }];
-    let legacy = msg3::legacy::Message {
+    let legacy = sol_message::legacy::Message {
         header,
         account_keys,
         recent_blockhash,
         instructions,
     };
     let reserved = std::collections::HashSet::default();
-    let legacy_msg = msg3::LegacyMessage::new(legacy, &reserved);
-    let s_legacy = msg3::SanitizedMessage::Legacy(legacy_msg);
+    let legacy_msg = sol_message::LegacyMessage::new(legacy, &reserved);
+    let s_legacy = sol_message::SanitizedMessage::Legacy(legacy_msg);
 
     let mut buf = Vec::new();
     s_legacy.encode(&mut buf).unwrap();
-    let dec_legacy: msg3::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
+    let dec_legacy: sol_message::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
     match dec_legacy {
-        msg3::SanitizedMessage::Legacy(_) => {}
+        sol_message::SanitizedMessage::Legacy(_) => {}
         _ => panic!("wrong variant"),
     }
 
     // V0 variant with loaded addresses
-    let v0msg = msg3::v0::Message {
+    let v0msg = sol_message::v0::Message {
         header,
-        account_keys: vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()],
-        recent_blockhash: hash3::Hash::new_unique(),
+        account_keys: vec![
+            sol_pubkey::Pubkey::new_unique(),
+            sol_pubkey::Pubkey::new_unique(),
+        ],
+        recent_blockhash: sol_hash::Hash::new_unique(),
         instructions: vec![],
         address_table_lookups: vec![],
     };
-    let addrs = msg3::v0::LoadedAddresses {
-        writable: vec![pubkey3::Pubkey::new_unique()],
-        readonly: vec![pubkey3::Pubkey::new_unique()],
+    let addrs = sol_message::v0::LoadedAddresses {
+        writable: vec![sol_pubkey::Pubkey::new_unique()],
+        readonly: vec![sol_pubkey::Pubkey::new_unique()],
     };
-    let loaded = msg3::v0::LoadedMessage::new(v0msg, addrs, &reserved);
-    let s_v0 = msg3::SanitizedMessage::V0(loaded);
+    let loaded = sol_message::v0::LoadedMessage::new(v0msg, addrs, &reserved);
+    let s_v0 = sol_message::SanitizedMessage::V0(loaded);
     buf.clear();
     s_v0.encode(&mut buf).unwrap();
-    let dec_v0: msg3::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
+    let dec_v0: sol_message::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
     match dec_v0 {
-        msg3::SanitizedMessage::V0(_) => {}
+        sol_message::SanitizedMessage::V0(_) => {}
         _ => panic!("wrong variant"),
     }
+
+    // V1 variant with cached writability.
+    let v1msg = sol_message::v1::Message {
+        header,
+        config: sol_message::v1::TransactionConfig::empty().with_priority_fee(9),
+        lifetime_specifier: sol_hash::Hash::new_unique(),
+        account_keys: vec![
+            sol_pubkey::Pubkey::new_unique(),
+            sol_pubkey::Pubkey::new_unique(),
+        ],
+        instructions: vec![],
+    };
+    let cached = sol_message::v1::CachedMessage::new(v1msg, &reserved);
+    let s_v1 = sol_message::SanitizedMessage::V1(cached);
+    buf.clear();
+    s_v1.encode(&mut buf).unwrap();
+    let dec_v1: sol_message::SanitizedMessage = decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(s_v1, dec_v1);
 }
 
 #[test]
-fn test_msg3_loaded_addresses_and_message_roundtrip() {
+fn test_loaded_addresses_and_message_roundtrip() {
     use crate::prelude::*;
-    let addrs = msg3::v0::LoadedAddresses {
-        writable: vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()],
-        readonly: vec![pubkey3::Pubkey::new_unique()],
+    let addrs = sol_message::v0::LoadedAddresses {
+        writable: vec![
+            sol_pubkey::Pubkey::new_unique(),
+            sol_pubkey::Pubkey::new_unique(),
+        ],
+        readonly: vec![sol_pubkey::Pubkey::new_unique()],
     };
     let mut buf = Vec::new();
     addrs.encode(&mut buf).unwrap();
-    let dec_addrs: msg3::v0::LoadedAddresses = decode(&mut Cursor::new(&buf)).unwrap();
+    let dec_addrs: sol_message::v0::LoadedAddresses = decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(addrs, dec_addrs);
 }
 
 #[test]
-fn test_tx3_sanitized_transaction_roundtrips() {
+fn test_sanitized_transaction_roundtrips() {
     use crate::prelude::*;
     // Legacy
-    let header = msg3::MessageHeader {
+    let header = sol_message::MessageHeader {
         num_required_signatures: 1,
         num_readonly_signed_accounts: 0,
         num_readonly_unsigned_accounts: 1,
     };
     let legacy_msg = {
-        let account_keys = vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()];
-        let recent_blockhash = hash3::Hash::new_unique();
-        let instructions = vec![msg3::compiled_instruction::CompiledInstruction {
+        let account_keys = vec![
+            sol_pubkey::Pubkey::new_unique(),
+            sol_pubkey::Pubkey::new_unique(),
+        ];
+        let recent_blockhash = sol_hash::Hash::new_unique();
+        let instructions = vec![sol_message::compiled_instruction::CompiledInstruction {
             program_id_index: 1,
             accounts: vec![0],
             data: vec![1, 2],
         }];
-        let legacy = msg3::legacy::Message {
+        let legacy = sol_message::legacy::Message {
             header,
             account_keys,
             recent_blockhash,
             instructions,
         };
         let reserved = std::collections::HashSet::default();
-        msg3::LegacyMessage::new(legacy, &reserved)
+        sol_message::LegacyMessage::new(legacy, &reserved)
     };
-    let s_legacy = msg3::SanitizedMessage::Legacy(legacy_msg);
-    let tx_legacy = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+    let s_legacy = sol_message::SanitizedMessage::Legacy(legacy_msg);
+    let tx_legacy = sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
         s_legacy,
-        hash3::Hash::new_unique(),
+        sol_hash::Hash::new_unique(),
         false,
-        vec![sig3::Signature::default()],
+        vec![sol_signature::Signature::default()],
     )
     .unwrap();
     let mut buf = Vec::new();
     tx_legacy.encode(&mut buf).unwrap();
-    let dec_legacy = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    let dec_legacy =
+        sol_transaction::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(tx_legacy, dec_legacy);
 
     // V0
-    let v0msg = msg3::v0::Message {
+    let v0msg = sol_message::v0::Message {
         header,
-        account_keys: vec![pubkey3::Pubkey::new_unique(), pubkey3::Pubkey::new_unique()],
-        recent_blockhash: hash3::Hash::new_unique(),
+        account_keys: vec![
+            sol_pubkey::Pubkey::new_unique(),
+            sol_pubkey::Pubkey::new_unique(),
+        ],
+        recent_blockhash: sol_hash::Hash::new_unique(),
         instructions: vec![],
         address_table_lookups: vec![],
     };
-    let loaded = msg3::v0::LoadedMessage::new(
+    let loaded = sol_message::v0::LoadedMessage::new(
         v0msg,
-        msg3::v0::LoadedAddresses {
+        sol_message::v0::LoadedAddresses {
             writable: vec![],
             readonly: vec![],
         },
         &std::collections::HashSet::default(),
     );
-    let s_v0 = msg3::SanitizedMessage::V0(loaded);
-    let tx_v0 = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+    let s_v0 = sol_message::SanitizedMessage::V0(loaded);
+    let tx_v0 = sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
         s_v0,
-        hash3::Hash::new_unique(),
+        sol_hash::Hash::new_unique(),
         false,
-        vec![sig3::Signature::default()],
+        vec![sol_signature::Signature::default()],
     )
     .unwrap();
     buf.clear();
     tx_v0.encode(&mut buf).unwrap();
-    let dec_v0 = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    let dec_v0 =
+        sol_transaction::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(tx_v0, dec_v0);
+
+    // V1
+    let v1msg = sol_message::v1::Message {
+        header,
+        config: sol_message::v1::TransactionConfig::empty().with_compute_unit_limit(200_000),
+        lifetime_specifier: sol_hash::Hash::new_unique(),
+        account_keys: vec![
+            sol_pubkey::Pubkey::new_unique(),
+            sol_pubkey::Pubkey::new_unique(),
+        ],
+        instructions: vec![],
+    };
+    let cached = sol_message::v1::CachedMessage::new(v1msg, &std::collections::HashSet::default());
+    let tx_v1 = sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
+        sol_message::SanitizedMessage::V1(cached),
+        sol_hash::Hash::new_unique(),
+        false,
+        vec![sol_signature::Signature::default()],
+    )
+    .unwrap();
+    buf.clear();
+    tx_v1.encode(&mut buf).unwrap();
+    let dec_v1 =
+        sol_transaction::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    assert_eq!(tx_v1, dec_v1);
 }
 
 #[test]
-fn test_tx3_versioned_transaction_roundtrip_and_dedupe() {
+fn test_reference_versioned_transaction_roundtrip_and_dedupe() {
     use crate::prelude::*;
-    let header = msg3::MessageHeader {
+    let header = sol_message::MessageHeader {
         num_required_signatures: 1,
         num_readonly_signed_accounts: 0,
         num_readonly_unsigned_accounts: 2,
     };
-    let k = pubkey3::Pubkey::new_unique();
-    let message = msg3::VersionedMessage::Legacy(msg3::legacy::Message {
+    let k = sol_pubkey::Pubkey::new_unique();
+    let message = sol_message::VersionedMessage::Legacy(sol_message::legacy::Message {
         header,
         account_keys: vec![k, k, k], // duplicates to benefit dedupe
-        recent_blockhash: hash3::Hash::new_unique(),
-        instructions: vec![msg3::compiled_instruction::CompiledInstruction {
+        recent_blockhash: sol_hash::Hash::new_unique(),
+        instructions: vec![sol_message::compiled_instruction::CompiledInstruction {
             program_id_index: 2,
             accounts: vec![0, 1],
             data: vec![0xEE],
         }],
     });
-    let tx = tx3::versioned::VersionedTransaction {
-        signatures: vec![sig3::Signature::default()],
+    let tx = sol_transaction::versioned::VersionedTransaction {
+        signatures: vec![sol_signature::Signature::default()],
         message,
     };
 
@@ -1547,7 +1840,7 @@ fn test_tx3_versioned_transaction_roundtrip_and_dedupe() {
     tx.encode_ext(&mut buf_dedupe, Some(&mut ctx)).unwrap();
     assert!(buf_dedupe.len() < buf_plain.len());
     let mut ctx_dec = DecoderContext::with_dedupe();
-    let rt = tx3::versioned::VersionedTransaction::decode_ext(
+    let rt = sol_transaction::versioned::VersionedTransaction::decode_ext(
         &mut Cursor::new(&buf_dedupe),
         Some(&mut ctx_dec),
     )
@@ -1557,6 +1850,7 @@ fn test_tx3_versioned_transaction_roundtrip_and_dedupe() {
 
 // ---- Selected client/status types ----
 
+#[cfg(feature = "solana")]
 #[test]
 fn test_ui_token_amount_roundtrip() {
     use crate::prelude::*;
@@ -1572,63 +1866,81 @@ fn test_ui_token_amount_roundtrip() {
     assert_eq!(v, d);
 }
 
+#[cfg(feature = "solana")]
 #[test]
 fn test_rewards_and_partitions_roundtrip() {
     use crate::prelude::*;
-    let r = txstatus3::Reward {
+    let r = sol_transaction_status::Reward {
         pubkey: "pk".into(),
         lamports: 1,
         post_balance: 2,
         reward_type: Some(reward_info::RewardType::Fee),
         commission: Some(3),
+        commission_bps: None,
     };
-    let rap = txstatus3::RewardsAndNumPartitions {
+    let rap = sol_transaction_status::RewardsAndNumPartitions {
         rewards: vec![r],
         num_partitions: Some(2),
     };
     let mut buf = Vec::new();
     rap.encode(&mut buf).unwrap();
-    let d: txstatus3::RewardsAndNumPartitions = decode(&mut Cursor::new(&buf)).unwrap();
+    let d: sol_transaction_status::RewardsAndNumPartitions =
+        decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(rap, d);
+
+    let unsupported = sol_transaction_status::Reward {
+        commission_bps: Some(300),
+        ..rap.rewards[0].clone()
+    };
+    assert!(unsupported.encode(&mut Vec::new()).is_err());
 }
 
+#[cfg(feature = "solana")]
 #[test]
 fn test_txctx_return_data_roundtrip() {
     use crate::prelude::*;
-    let v = txctx3::TransactionReturnData {
-        program_id: pubkey3::Pubkey::new_unique(),
+    let v = sol_transaction_context::transaction::TransactionReturnData {
+        program_id: sol_pubkey::Pubkey::new_unique(),
         data: vec![1, 2, 3],
     };
     let mut buf = Vec::new();
     v.encode(&mut buf).unwrap();
-    let d: txctx3::TransactionReturnData = decode(&mut Cursor::new(&buf)).unwrap();
+    let d: sol_transaction_context::transaction::TransactionReturnData =
+        decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(v, d);
 }
 
+#[cfg(feature = "solana")]
 #[test]
 fn test_txstatus_meta_default_roundtrip() {
     use crate::prelude::*;
-    let meta = txstatus3::TransactionStatusMeta::default();
+    let meta = sol_transaction_status::TransactionStatusMeta::default();
     let mut buf = Vec::new();
     meta.encode(&mut buf).unwrap();
-    let d: txstatus3::TransactionStatusMeta = decode(&mut Cursor::new(&buf)).unwrap();
+    let d: sol_transaction_status::TransactionStatusMeta = decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(meta, d);
 }
 
+#[cfg(feature = "solana")]
 #[test]
 fn test_transaction_error_roundtrip() {
     use crate::prelude::*;
     let cases = vec![
-        txerr3::TransactionError::AccountInUse,
-        txerr3::TransactionError::InstructionError(5, ixerr::InstructionError::Custom(42)),
-        txerr3::TransactionError::DuplicateInstruction(9),
-        txerr3::TransactionError::InsufficientFundsForRent { account_index: 7 },
-        txerr3::TransactionError::ProgramExecutionTemporarilyRestricted { account_index: 3 },
+        sol_transaction_error::TransactionError::AccountInUse,
+        sol_transaction_error::TransactionError::InstructionError(
+            5,
+            ixerr::InstructionError::Custom(42),
+        ),
+        sol_transaction_error::TransactionError::DuplicateInstruction(9),
+        sol_transaction_error::TransactionError::InsufficientFundsForRent { account_index: 7 },
+        sol_transaction_error::TransactionError::ProgramExecutionTemporarilyRestricted {
+            account_index: 3,
+        },
     ];
     for e in cases {
         let mut buf = Vec::new();
         e.encode(&mut buf).unwrap();
-        let d: txerr3::TransactionError = decode(&mut Cursor::new(&buf)).unwrap();
+        let d: sol_transaction_error::TransactionError = decode(&mut Cursor::new(&buf)).unwrap();
         assert_eq!(e, d);
     }
 }
@@ -1671,17 +1983,20 @@ fn test_encode_decode_sanitized_message() {
         message: std::borrow::Cow::Owned(message),
         is_writable_account_cache: vec![true, false, true, false],
     };
-    let original = msg3::SanitizedMessage::Legacy(legacy_message);
+    let original = sol_message::SanitizedMessage::Legacy(legacy_message);
 
     let mut buffer = Vec::new();
     let bytes_written = original.encode(&mut buffer).unwrap();
     assert!(bytes_written > 0);
 
     let mut cursor = Cursor::new(&buffer);
-    let decoded: SanitizedMessage = msg3::SanitizedMessage::decode(&mut cursor).unwrap();
+    let decoded: SanitizedMessage = sol_message::SanitizedMessage::decode(&mut cursor).unwrap();
 
     match (&original, &decoded) {
-        (msg3::SanitizedMessage::Legacy(orig), msg3::SanitizedMessage::Legacy(decoded)) => {
+        (
+            sol_message::SanitizedMessage::Legacy(orig),
+            sol_message::SanitizedMessage::Legacy(decoded),
+        ) => {
             assert_eq!(orig.message, decoded.message);
             assert_eq!(
                 orig.is_writable_account_cache,
@@ -1724,9 +2039,9 @@ fn test_encode_decode_sanitized_transaction_legacy() {
         is_writable_account_cache,
     };
 
-    let sanitized = msg3::SanitizedMessage::Legacy(legacy_message);
+    let sanitized = sol_message::SanitizedMessage::Legacy(legacy_message);
     let signatures = vec![Signature::default(), Signature::default()];
-    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+    let tx = sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
         sanitized,
         Hash::new_unique(),
         false,
@@ -1737,7 +2052,8 @@ fn test_encode_decode_sanitized_transaction_legacy() {
     // Round-trip encode/decode
     let mut buf = Vec::new();
     tx.encode(&mut buf).unwrap();
-    let decoded = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    let decoded =
+        sol_transaction::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(tx, decoded);
 }
 
@@ -1770,10 +2086,10 @@ fn test_encode_decode_sanitized_transaction_v0() {
     };
     let sanitized_v0 =
         v0::LoadedMessage::new(msg, loaded_addresses, &std::collections::HashSet::default());
-    let sanitized = msg3::SanitizedMessage::V0(sanitized_v0);
+    let sanitized = sol_message::SanitizedMessage::V0(sanitized_v0);
 
     let signatures = vec![Signature::default()];
-    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+    let tx = sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
         sanitized,
         Hash::new_unique(),
         false,
@@ -1784,7 +2100,8 @@ fn test_encode_decode_sanitized_transaction_v0() {
     // Round-trip encode/decode
     let mut buf = Vec::new();
     tx.encode(&mut buf).unwrap();
-    let decoded = tx3::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
+    let decoded =
+        sol_transaction::sanitized::SanitizedTransaction::decode(&mut Cursor::new(&buf)).unwrap();
     assert_eq!(tx, decoded);
 }
 
@@ -1818,8 +2135,8 @@ fn test_sanitized_transaction_legacy_with_dedup() {
         message: std::borrow::Cow::Owned(message),
         is_writable_account_cache,
     };
-    let sanitized = msg3::SanitizedMessage::Legacy(legacy_message);
-    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+    let sanitized = sol_message::SanitizedMessage::Legacy(legacy_message);
+    let tx = sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
         sanitized,
         Hash::new_unique(),
         false,
@@ -1838,12 +2155,12 @@ fn test_sanitized_transaction_legacy_with_dedup() {
 
     // Round-trip decode both using a shared decoder to respect IDs
     let mut ctx_dec = DecoderContext::with_dedupe();
-    let tx1 = tx3::sanitized::SanitizedTransaction::decode_ext(
+    let tx1 = sol_transaction::sanitized::SanitizedTransaction::decode_ext(
         &mut Cursor::new(&buf1),
         Some(&mut ctx_dec),
     )
     .unwrap();
-    let tx2 = tx3::sanitized::SanitizedTransaction::decode_ext(
+    let tx2 = sol_transaction::sanitized::SanitizedTransaction::decode_ext(
         &mut Cursor::new(&buf2),
         Some(&mut ctx_dec),
     )
@@ -1884,8 +2201,8 @@ fn test_sanitized_transaction_v0_with_dedup() {
     };
     let loaded =
         v0::LoadedMessage::new(msg, loaded_addresses, &std::collections::HashSet::default());
-    let sanitized = msg3::SanitizedMessage::V0(loaded);
-    let tx = tx3::sanitized::SanitizedTransaction::try_new_from_fields(
+    let sanitized = sol_message::SanitizedMessage::V0(loaded);
+    let tx = sol_transaction::sanitized::SanitizedTransaction::try_new_from_fields(
         sanitized,
         Hash::new_unique(),
         false,
@@ -1901,12 +2218,12 @@ fn test_sanitized_transaction_v0_with_dedup() {
     assert!(buf2.len() < buf1.len());
 
     let mut ctx_dec = DecoderContext::with_dedupe();
-    let tx1 = tx3::sanitized::SanitizedTransaction::decode_ext(
+    let tx1 = sol_transaction::sanitized::SanitizedTransaction::decode_ext(
         &mut Cursor::new(&buf1),
         Some(&mut ctx_dec),
     )
     .unwrap();
-    let tx2 = tx3::sanitized::SanitizedTransaction::decode_ext(
+    let tx2 = sol_transaction::sanitized::SanitizedTransaction::decode_ext(
         &mut Cursor::new(&buf2),
         Some(&mut ctx_dec),
     )
@@ -2174,8 +2491,8 @@ fn test_pubkey_deduplication() {
     // Create some test pubkeys, with duplicates
     let pubkey1 = Pubkey::new_unique();
     let pubkey2 = Pubkey::new_unique();
-    let pubkey3 = pubkey1; // Duplicate of pubkey1
-    let pubkeys = vec![pubkey1, pubkey2, pubkey3, pubkey1, pubkey2]; // More duplicates
+    let sol_pubkey = pubkey1; // Duplicate of pubkey1
+    let pubkeys = vec![pubkey1, pubkey2, sol_pubkey, pubkey1, pubkey2]; // More duplicates
 
     // Encode with deduplication
     let mut buf = Vec::new();
