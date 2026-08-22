@@ -48,11 +48,7 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 #[cfg(not(feature = "std"))]
-use alloc::borrow::Cow;
-#[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-#[cfg(feature = "std")]
-use std::borrow::Cow;
 
 use hashbrown::HashMap;
 
@@ -65,7 +61,7 @@ struct Patch<'a> {
     /// Byte offset in the new blob where this patch starts.
     offset: usize,
     /// Changed bytes borrowed from the new blob.
-    data: Cow<'a, [u8]>,
+    data: &'a [u8],
 }
 
 /// An RLE diff whose wire size is known, but whose frame has not been staged.
@@ -108,7 +104,7 @@ fn compute_patches<'a>(old: &[u8], new: &'a [u8]) -> Option<Vec<Patch<'a>>> {
             }
             patches.push(Patch {
                 offset: start,
-                data: Cow::Borrowed(&new[start..i]),
+                data: &new[start..i],
             });
         } else {
             i += 1;
@@ -119,7 +115,7 @@ fn compute_patches<'a>(old: &[u8], new: &'a [u8]) -> Option<Vec<Patch<'a>>> {
     if new.len() > old.len() {
         patches.push(Patch {
             offset: old.len(),
-            data: Cow::Borrowed(&new[old.len()..]),
+            data: &new[old.len()..],
         });
     }
 
@@ -134,7 +130,7 @@ fn compute_patches<'a>(old: &[u8], new: &'a [u8]) -> Option<Vec<Patch<'a>>> {
             if gap < COALESCE_GAP {
                 // Merge by widening the borrowed range to cover the gap.
                 let p_end = p.offset + p.data.len();
-                last.data = Cow::Borrowed(&new[last.offset..p_end]);
+                last.data = &new[last.offset..p_end];
             } else {
                 coalesced.push(p);
             }
@@ -186,7 +182,7 @@ fn encode_rle_candidate(candidate: &RleCandidate<'_>, new_len: usize) -> Option<
         let gap = patch.offset - cursor;
         Lencode::encode_varint_u64(gap as u64, &mut buf).ok()?;
         Lencode::encode_varint_u64(patch.data.len() as u64, &mut buf).ok()?;
-        buf.write(patch.data.as_ref()).ok()?;
+        buf.write(patch.data).ok()?;
         cursor = patch.offset + patch.data.len();
     }
     Some(buf.into_inner())
