@@ -90,6 +90,7 @@ const DEFAULT_NUM_TYPES: usize = 4;
 trait TypedVecStore: Any + Send + Sync {
     fn clear(&mut self);
     fn into_boxed_values(self: Box<Self>) -> Vec<Box<dyn Any + Send + Sync>>;
+    fn into_shared(self: Box<Self>) -> Arc<dyn Any + Send + Sync>;
 }
 
 impl<T: Send + Sync + 'static> TypedVecStore for Vec<T> {
@@ -105,9 +106,15 @@ impl<T: Send + Sync + 'static> TypedVecStore for Vec<T> {
             .map(|value| Box::new(value) as Box<dyn Any + Send + Sync>)
             .collect()
     }
+
+    #[inline]
+    fn into_shared(self: Box<Self>) -> Arc<dyn Any + Send + Sync> {
+        Arc::new(*self)
+    }
 }
 
 type TypedVec = (TypeId, Box<dyn TypedVecStore>);
+type FrozenTypedVec = (TypeId, Arc<dyn Any + Send + Sync>);
 
 type ClearTypeStore = fn(&mut (dyn Any + Send + Sync));
 
@@ -145,7 +152,7 @@ pub struct FrozenEncoderState {
 /// Companion to [`FrozenEncoderState`]; see [`DedupeDecoder::freeze`] and
 /// [`DedupeDecoder::with_frozen`].
 pub struct FrozenDecoderState {
-    typed_vec: Option<TypedVec>,
+    typed_vec: Option<FrozenTypedVec>,
     boxed_values: Vec<Box<dyn Any + Send + Sync>>,
     total_primed: usize,
 }
@@ -855,7 +862,9 @@ impl DedupeDecoder {
             "cannot freeze a decoder that already has a frozen state"
         );
         FrozenDecoderState {
-            typed_vec: self.typed_vec,
+            typed_vec: self
+                .typed_vec
+                .map(|(type_id, store)| (type_id, store.into_shared())),
             boxed_values: self.boxed_values,
             total_primed: self.scratch_count,
         }
@@ -885,14 +894,13 @@ impl DedupeDecoder {
 
     #[cfg(feature = "std")]
     #[inline]
-    pub(crate) fn frozen_values<T: 'static>(&self) -> Option<&[T]> {
+    pub(crate) fn shared_frozen_values<T: Send + Sync + 'static>(&self) -> Option<Arc<Vec<T>>> {
         let frozen = self.frozen.as_ref()?;
         let (type_id, store) = frozen.typed_vec.as_ref()?;
         if *type_id != TypeId::of::<T>() {
             return None;
         }
-        let store: &dyn Any = store.as_ref();
-        store.downcast_ref::<Vec<T>>().map(Vec::as_slice)
+        Arc::clone(store).downcast::<Vec<T>>().ok()
     }
 
     /// Returns `true` if the cache is empty.
@@ -1226,8 +1234,9 @@ fn lookup_frozen<T: Clone + 'static>(
     if let Some((ref cached_type, ref store)) = frozen.typed_vec
         && *cached_type == type_id
     {
-        // SAFETY: TypeId matches, so the erased store holds Vec<T>.
-        let vec: &Vec<T> = unsafe { &*(&**store as *const dyn TypedVecStore as *const Vec<T>) };
+        let vec = store
+            .downcast_ref::<Vec<T>>()
+            .expect("typed frozen vector must match its TypeId");
         return vec
             .get(vec_index)
             .cloned()
@@ -1252,8 +1261,9 @@ fn lookup_frozen_ref<T: 'static>(
     if let Some((ref cached_type, ref store)) = frozen.typed_vec
         && *cached_type == type_id
     {
-        // SAFETY: TypeId matches; store holds a Vec<T>.
-        let vec: &Vec<T> = unsafe { &*(&**store as *const dyn TypedVecStore as *const Vec<T>) };
+        let vec = store
+            .downcast_ref::<Vec<T>>()
+            .expect("typed frozen vector must match its TypeId");
         if let Some(v) = vec.get(vec_index) {
             return Ok(v);
         }

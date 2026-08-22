@@ -428,6 +428,7 @@ impl SolanaEntryBatchTranscoder {
 /// point retains it until [`Self::reset_context`] is called.
 pub struct SolanaTransactionTranscoder {
     decoder: DedupeDecoder,
+    frozen_addresses: Option<Arc<Vec<[u8; 32]>>>,
     decompressed: Vec<u8>,
     address_offsets: Vec<usize>,
     direct_addresses: bool,
@@ -444,6 +445,7 @@ impl SolanaTransactionTranscoder {
     pub fn new() -> Self {
         Self {
             decoder: DedupeDecoder::new(),
+            frozen_addresses: None,
             decompressed: Vec::new(),
             address_offsets: Vec::new(),
             direct_addresses: false,
@@ -452,8 +454,11 @@ impl SolanaTransactionTranscoder {
 
     /// Creates a transcoder backed by a frozen address dictionary.
     pub fn with_frozen(frozen: Arc<FrozenDecoderState>) -> Self {
+        let decoder = DedupeDecoder::with_frozen(frozen);
+        let frozen_addresses = decoder.shared_frozen_values::<[u8; 32]>();
         Self {
-            decoder: DedupeDecoder::with_frozen(frozen),
+            decoder,
+            frozen_addresses,
             decompressed: Vec::new(),
             address_offsets: Vec::new(),
             direct_addresses: false,
@@ -722,24 +727,23 @@ impl SolanaTransactionTranscoder {
         count: usize,
     ) -> Result<()> {
         if self.direct_addresses {
-            let frozen_len = self.decoder.frozen_len();
-            if frozen_len == 0 {
-                return Self::transcode_address_values_direct(
-                    reader,
-                    output,
-                    max_output,
-                    count,
-                    &[],
-                    &mut self.address_offsets,
-                );
-            }
-            if let Some(frozen) = self.decoder.frozen_values::<[u8; 32]>() {
+            if let Some(frozen) = self.frozen_addresses.as_deref() {
                 return Self::transcode_address_values_direct(
                     reader,
                     output,
                     max_output,
                     count,
                     frozen,
+                    &mut self.address_offsets,
+                );
+            }
+            if self.decoder.frozen_len() == 0 {
+                return Self::transcode_address_values_direct(
+                    reader,
+                    output,
+                    max_output,
+                    count,
+                    &[],
                     &mut self.address_offsets,
                 );
             }
