@@ -1,7 +1,7 @@
 {
-  "version": 40,
+  "version": 41,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T10:47:17Z",
+  "updated_at": "2026-08-22T11:01:20Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -166,6 +166,41 @@
         "wire_reduction_vs_wincode_pct": 53.396,
         "leader_speedup_vs_wincode": 1.502,
         "validator_throughput_vs_wincode": 0.808
+      },
+      {
+        "iteration": 6,
+        "optimization": "extract the canonical-LZ4 frame into an Agave production codec with explicit feature-gated formats",
+        "kept": true,
+        "integration": "Agave shred block-component codec",
+        "results": {
+          "wincode_leader": { "value": 291185932, "unit": "ns/100 blocks" },
+          "wincode_validator": { "value": 18830916, "unit": "ns/100 blocks" },
+          "lencode_leader": { "value": 193357838, "unit": "ns/100 blocks" },
+          "lencode_validator": { "value": 23483793, "unit": "ns/100 blocks" },
+          "wincode_payload_bytes": 66587751,
+          "lencode_payload_bytes": 30292964,
+          "wincode_data_shreds": 71136,
+          "wincode_coding_shreds": 71136,
+          "lencode_data_shreds": 33152,
+          "lencode_coding_shreds": 33152,
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 80592512
+        },
+        "codec": "version 1 canonical wincode entry batch compressed as one LZ4 block with FAST(1) and a four-byte original-size prefix",
+        "feature_boundary": "legacy is the default; active decoding accepts legacy fallback; inactive decoding never interprets the frame magic; block markers remain legacy",
+        "zero_copy_boundary": "the owned reconstruction API returns legacy and unframed Vec inputs without copying or changing their allocation",
+        "candidate_binary_sha256": "521b6e892279913d5bb5b92ae48301b4df137cbe436d0d383be29f80d36773f6",
+        "candidate_benchmark_source_sha256": "55f9e6160b554333a59898198a28dbb3f45dcd58922e0f8e1308a8fb7cab69a9",
+        "production_codec_source_sha256": "4fb84ef51403fda1005da8fb1c820f449924b757ecb86b517648064075451e7a",
+        "leader_change_vs_retained_pct": 0.478,
+        "leader_change_vs_retained_normalized_pct": -0.267,
+        "validator_change_vs_retained_pct": 0.800,
+        "validator_change_vs_retained_normalized_pct": 0.748,
+        "wire_change_vs_retained_pct": 0.0,
+        "wire_reduction_vs_wincode_pct": 53.396,
+        "leader_speedup_vs_wincode": 1.506,
+        "validator_throughput_vs_wincode": 0.802,
+        "validation": "seven focused codec tests and strict ledger library/benchmark Clippy passed; the frozen benchmark hash, payload bytes, data/coding shred counts, and wire bytes stayed exact; all normalized timing movements stayed within 1%"
       }
     ],
     "failed_attempts": [
