@@ -132,10 +132,27 @@ impl SolanaTransactionTranscoder {
         limits: TransactionWireLimits,
     ) -> Result<usize> {
         output.clear();
+        self.transcode_append_exact(input, output, limits)
+    }
+
+    /// Transcodes one exact frame and appends canonical bytes to `output`.
+    ///
+    /// Existing bytes and capacity are retained. If decoding fails, the
+    /// output is rolled back to its original length.
+    pub fn transcode_append_exact(
+        &mut self,
+        input: &[u8],
+        output: &mut Vec<u8>,
+        limits: TransactionWireLimits,
+    ) -> Result<usize> {
+        let output_start = output.len();
         self.decoder.clear();
         if input.len() > limits.max_input_bytes {
             return Err(Error::DecodeLimitExceeded);
         }
+        let output_limit = output_start
+            .checked_add(limits.max_output_bytes)
+            .ok_or(Error::DecodeLimitExceeded)?;
 
         let decode_limits = DecodeLimits::new(
             limits.max_input_bytes,
@@ -143,16 +160,16 @@ impl SolanaTransactionTranscoder {
             limits.max_total_allocation,
         );
         let mut reader = LimitedReader::new(Cursor::new(input), decode_limits);
-        let result = self.transcode_inner(&mut reader, output, limits.max_output_bytes);
+        let result = self.transcode_inner(&mut reader, output, output_limit, output_start);
         if let Err(error) = result {
-            output.clear();
+            output.truncate(output_start);
             return Err(error);
         }
         if reader.consumed() != input.len() {
-            output.clear();
+            output.truncate(output_start);
             return Err(Error::TrailingData);
         }
-        Ok(output.len())
+        Ok(output.len() - output_start)
     }
 
     fn transcode_inner(
@@ -160,6 +177,7 @@ impl SolanaTransactionTranscoder {
         reader: &mut impl Read,
         output: &mut Vec<u8>,
         max_output: usize,
+        output_start: usize,
     ) -> Result<()> {
         let signature_count = read_len(reader)?;
         reader.claim_sequence(signature_count, 64)?;
@@ -178,10 +196,10 @@ impl SolanaTransactionTranscoder {
                 // V1 canonical wire order is message followed by fixed-count
                 // signatures. Remove the legacy/v0 signature length prefix,
                 // append the message, then rotate in place.
-                output.copy_within(signature_prefix_len.., 0);
-                output.truncate(signature_bytes);
+                output.copy_within(output_start + signature_prefix_len.., output_start);
+                output.truncate(output_start + signature_bytes);
                 self.transcode_v1(reader, output, max_output, signature_count)?;
-                output.rotate_left(signature_bytes);
+                output[output_start..].rotate_left(signature_bytes);
                 Ok(())
             }
             _ => Err(Error::InvalidData),
@@ -670,6 +688,16 @@ mod tests {
             .unwrap();
         assert_eq!(output, expected);
         assert_eq!(output.capacity(), first_capacity);
+
+        let prefix = [21, 22, 23];
+        output.clear();
+        output.extend_from_slice(&prefix);
+        let appended = transcoder
+            .transcode_append_exact(&input, &mut output, TransactionWireLimits::CURRENT)
+            .unwrap();
+        assert_eq!(appended, expected.len());
+        assert_eq!(&output[..prefix.len()], &prefix);
+        assert_eq!(&output[prefix.len()..], expected);
     }
 
     #[test]
