@@ -1,12 +1,12 @@
 {
-  "version": 64,
+  "version": 65,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T17:16:08Z",
+  "updated_at": "2026-08-22T17:53:51Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 19,
+    "version": 20,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -46,11 +46,12 @@
     },
     "native_reference_path": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
-      "benchmark_source_sha256": "b7a411364318cf25aab26add6e5a521c8b6416d0044d7cac407aca500b2b22db",
+      "benchmark_source_sha256": "d750a7d878261739c7ea3d836effef036821df0e3ce31913ffc400c3222644d0",
       "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
       "rust_version": "1.98.0",
       "baseline_binary_sha256": "b02ce959b3a6d572cab3c0de2ea6e4fe9d8197ae187d9d3211b7ee96644a172a",
-      "current_binary_sha256": "4d37c81d97b5e0cf3f322e681e25507a7c6295fef1408b7723a89f0d025360be",
+      "current_binary_sha256": "233a01013624d98efe80472e065908b5fba7deea82e00b316c806cc6be5c3633",
+      "lencode_solana_wire_sha256": "972e8d47b163a4574f34adb4d5b8523b281b0f5207d4b7fcbf4c60eb37eacda1",
       "baseline": {
         "wincode_leader": { "value": 278394918, "unit": "ns/100 blocks" },
         "wincode_validator": { "value": 21970679, "unit": "ns/100 blocks" },
@@ -58,14 +59,17 @@
         "lencode_validator": { "value": 41877890, "unit": "ns/100 blocks" }
       },
       "current": {
-        "wincode_leader": { "value": 277941576, "unit": "ns/100 blocks" },
-        "wincode_validator": { "value": 21869289, "unit": "ns/100 blocks" },
-        "lencode_leader": { "value": 221132012, "unit": "ns/100 blocks" },
-        "lencode_validator": { "value": 40853717, "unit": "ns/100 blocks" }
+        "wincode_leader": { "value": 278617470, "unit": "ns/100 blocks" },
+        "wincode_validator": { "value": 21792478, "unit": "ns/100 blocks" },
+        "lencode_leader": { "value": 222317169, "unit": "ns/100 blocks" },
+        "lencode_validator": { "value": 40744886, "unit": "ns/100 blocks" }
       },
+      "lencode_payload_bytes": 47784650,
       "wincode_wire_bytes": 172931616,
       "lencode_wire_bytes": 125011744,
-      "wire_reduction_vs_wincode_pct": 27.71
+      "wire_reduction_vs_wincode_pct": 27.71,
+      "frame": "LCSH version 1, native lencode dictionary flag 2",
+      "scope_status": "qualifying lencode-owned codec with an Agave replacement-call-site adapter"
     },
     "production_batch_benchmark": {
       "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench --offline -p solana-ledger --bench lencode_shreds_canonical_lz4 -- /tmp/agave-shred-broadcast-batches.bin",
@@ -1267,9 +1271,53 @@
         "wire_bytes_changed": false,
         "unsafe_code_added": false,
         "validation": "three alternating CPU-affined 31-trial exact-binary pairs; 216 lencode tests and 5 doctests passed, one doctest remained ignored, formatting and all-target checks passed, and strict all-target Clippy passed"
+      },
+      {
+        "iteration": 20,
+        "optimization": "own reference-Solana entry-batch framing and bounded canonical reconstruction in lencode",
+        "kept": true,
+        "retention_basis": "moves the native codec into lencode while leaving Agave with dependency wiring and replacement-call-site adapters only",
+        "integration": "lencode SolanaEntryBatchEncoder and SolanaEntryBatchTranscoder with borrowed reference-Solana transactions",
+        "baseline_binary_sha256": "4d37c81d97b5e0cf3f322e681e25507a7c6295fef1408b7723a89f0d025360be",
+        "candidate_binary_sha256": "233a01013624d98efe80472e065908b5fba7deea82e00b316c806cc6be5c3633",
+        "lencode_validator_regression_pct": 0.076,
+        "lencode_validator_control_normalized_improvement_pct": 0.001,
+        "lencode_leader_regression_pct": 0.548,
+        "lencode_leader_control_normalized_regression_pct": 0.629,
+        "current_leader_speedup_vs_wincode": 1.253,
+        "current_validator_throughput_vs_wincode": 0.535,
+        "payload_reduction_vs_wincode_pct": 28.238,
+        "wire_reduction_vs_wincode_pct": 27.710,
+        "wire_compatibility": "canonical bytes and total Turbine wire bytes are unchanged; the native dictionary frame uses flag 2 so it cannot be confused with the existing canonical-LZ4 flag 1",
+        "unsafe_code_added": false,
+        "validation": "three alternating CPU-affined 31-trial exact-binary pairs; exact canonical reconstruction for 100 blocks, 68,392 entries, and 124,218 transactions; 217 lencode tests and 5 doctests passed, one doctest remained ignored; no-default, std-only, and all-feature all-target checks, formatting, and strict Clippy passed"
       }
     ],
     "failed_attempts": [
+      {
+        "optimization": "stack a typed frozen-address slice on the retained borrowed-decode inlining",
+        "reason": "three alternating CPU-affined 31-trial pairs improved validator time only 0.65% after normalization to wincode, below the 1% gate; the additional decoder API was removed"
+      },
+      {
+        "optimization": "outline scratch dedupe decoding while retaining the inlined frozen path",
+        "reason": "the decisive exact-binary pair regressed lencode validator time by 1.4% absolute and more than 2% after normalization to wincode, so the split was removed"
+      },
+      {
+        "optimization": "reserve the compact entry-batch output once from an estimated encoded size",
+        "reason": "an exact CPU-affined 31-trial pair changed validator time from 40.791 ms to 40.915 ms with a flat control, so the extra capacity policy was removed"
+      },
+      {
+        "optimization": "reserve 48 compact bytes once per entry",
+        "reason": "an exact CPU-affined 31-trial pair changed validator time from 40.832 ms to 40.972 ms, so the per-entry reservation was removed"
+      },
+      {
+        "optimization": "skip transaction output try_reserve when retained capacity is already sufficient",
+        "reason": "an exact CPU-affined 31-trial pair improved lencode validator time by about 0.04%, with a similar control movement; the branch was removed below the 1% gate"
+      },
+      {
+        "optimization": "force-inline the lencode-owned reference-entry encoder",
+        "reason": "an exact CPU-affined 31-trial pair improved leader time by 0.12% absolute and about 0.21% after normalization to wincode while validator time was flat; the annotation was removed below the 1% gate"
+      },
       {
         "optimization": "reuse a typed frozen-address slice across each reconstructed address collection",
         "reason": "three 11-trial runs reduced median lencode validator time from 43.614 ms to 42.278 ms (3.1% absolute, 3.9% normalized to wincode), below the 5% keep threshold; leader time and wire bytes were unchanged, so the extra decoder API and Arc were removed"
@@ -1693,6 +1741,11 @@
     "diff_decode_256kb_10pct_scatter": { "value": 223.23, "unit": "us/iter" }
   },
   "final_summary": {
+    "qualifying_scope": "lencode-owned changes and Agave replacement-call-site adapters only; general Agave optimizations are historical and excluded",
+    "native_entry_batch_leader_speedup_vs_wincode": 1.253,
+    "native_entry_batch_validator_throughput_vs_wincode": 0.535,
+    "native_entry_batch_payload_reduction_vs_wincode_pct": 28.238,
+    "native_entry_batch_turbine_wire_reduction_vs_wincode_pct": 27.710,
     "agave_production_batch_leader_speedup_vs_wincode": 2.086,
     "agave_production_batch_validator_throughput_vs_wincode": 0.932,
     "agave_turbine_wire_reduction_vs_wincode_pct": 59.211,
@@ -1728,10 +1781,11 @@
     "diff_in_place_xor_decode_4kb_25pct_time_improvement_pct": 48.588,
     "diff_in_place_xor_decode_64kb_10pct_time_improvement_pct": 59.050,
     "diff_in_place_xor_decode_256kb_10pct_time_improvement_pct": 58.318,
-    "all_feature_tests": { "unit": 189, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
+    "all_feature_tests": { "unit": 209, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
-    "no_default_features_check": "passed"
+    "no_default_features_check": "passed",
+    "std_only_check": "passed"
   },
   "compression_invariants": {
     "real_wincode_bytes": 77214583,

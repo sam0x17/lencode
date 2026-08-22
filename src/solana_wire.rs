@@ -20,6 +20,11 @@
 //! `0` for legacy, `1` for v0, and `2` for v1. A caller that stores a stream of
 //! transactions should length-frame each compact transaction so this module
 //! can enforce exact consumption and per-transaction recovery.
+//!
+//! With `solana-types`, `SolanaEntryBatchEncoder` accepts current reference
+//! `VersionedTransaction` values and owns the complete compact `LCSH` batch
+//! envelope. `SolanaEntryBatchTranscoder` validates that envelope and
+//! reconstructs the canonical entry-batch bytes expected by Agave.
 
 use std::{sync::Arc, vec::Vec};
 
@@ -29,6 +34,29 @@ use crate::{
     dedupe::{DedupeDecoder, FrozenDecoderState},
     io::{Cursor, DecodeLimits, Error, LimitedReader, Read},
 };
+
+#[cfg(feature = "solana-types")]
+use crate::{
+    Encode,
+    context::EncoderContext,
+    dedupe::{DedupeEncoder, FrozenEncoderState},
+};
+#[cfg(feature = "solana-types")]
+use solana_hash::Hash as SolanaHash;
+#[cfg(feature = "solana-types")]
+use solana_transaction::versioned::VersionedTransaction;
+
+/// Magic prefix for a compact Solana entry batch.
+pub const SOLANA_ENTRY_BATCH_MAGIC: [u8; 4] = *b"LCSH";
+/// Compact Solana entry-batch format version.
+pub const SOLANA_ENTRY_BATCH_VERSION: u8 = 1;
+/// Frame flag for native lencode transactions using an address dictionary.
+pub const SOLANA_ENTRY_BATCH_DICTIONARY_FLAG: u8 = 2;
+/// Bytes used to identify the frozen address dictionary.
+pub const SOLANA_DICTIONARY_ID_BYTES: usize = 16;
+/// Fixed compact entry-batch header size.
+pub const SOLANA_ENTRY_BATCH_HEADER_BYTES: usize =
+    SOLANA_ENTRY_BATCH_MAGIC.len() + 1 + 1 + SOLANA_DICTIONARY_ID_BYTES;
 
 /// Canonical version byte for a v0 message.
 pub const V0_PREFIX: u8 = 0x80;
@@ -80,6 +108,259 @@ impl TransactionWireLimits {
 impl Default for TransactionWireLimits {
     fn default() -> Self {
         Self::CURRENT
+    }
+}
+
+/// Resource limits for one compact Solana entry batch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EntryBatchWireLimits {
+    /// Maximum compact frame size accepted from the network.
+    pub max_input_bytes: usize,
+    /// Maximum canonical entry-batch bytes reconstructed into the output.
+    pub max_output_bytes: usize,
+    /// Maximum entry or transaction count accepted in one collection.
+    pub max_sequence_len: usize,
+    /// Maximum cumulative allocation claims made by the outer decoder.
+    pub max_total_allocation: usize,
+    /// Limits applied independently to each compact transaction frame.
+    pub transaction: TransactionWireLimits,
+}
+
+impl EntryBatchWireLimits {
+    /// Creates explicit entry-batch wire limits.
+    pub const fn new(
+        max_input_bytes: usize,
+        max_output_bytes: usize,
+        max_sequence_len: usize,
+        max_total_allocation: usize,
+        transaction: TransactionWireLimits,
+    ) -> Self {
+        Self {
+            max_input_bytes,
+            max_output_bytes,
+            max_sequence_len,
+            max_total_allocation,
+            transaction,
+        }
+    }
+}
+
+/// Counts recovered while reconstructing one compact entry batch.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EntryBatchCounts {
+    /// Number of entries in the batch.
+    pub entries: usize,
+    /// Total transactions across all entries.
+    pub transactions: usize,
+}
+
+/// Borrowed reference-Solana entry passed to [`SolanaEntryBatchEncoder`].
+#[cfg(feature = "solana-types")]
+#[derive(Clone, Copy, Debug)]
+pub struct SolanaEntryRef<'a> {
+    /// PoH hashes represented by this entry.
+    pub num_hashes: u64,
+    /// Reference Solana entry hash.
+    pub hash: &'a SolanaHash,
+    /// Reference Solana transactions in the entry.
+    pub transactions: &'a [VersionedTransaction],
+}
+
+/// Encodes reference Solana entries into the compact lencode shred format.
+#[cfg(feature = "solana-types")]
+pub struct SolanaEntryBatchEncoder {
+    dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+    context: EncoderContext,
+}
+
+#[cfg(feature = "solana-types")]
+impl SolanaEntryBatchEncoder {
+    /// Creates an encoder backed by a frozen address dictionary.
+    pub fn with_frozen(
+        dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+        frozen: Arc<FrozenEncoderState>,
+    ) -> Self {
+        Self {
+            dictionary_id,
+            context: EncoderContext {
+                dedupe: Some(DedupeEncoder::with_frozen(frozen)),
+                diff: None,
+            },
+        }
+    }
+
+    /// Encodes one exact entry batch into `output`, retaining its allocation.
+    pub fn encode<'a>(
+        &mut self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
+        output: &mut Vec<u8>,
+    ) -> Result<usize> {
+        output.clear();
+        let result = self.encode_inner(entries, output);
+        if result.is_err() {
+            output.clear();
+        }
+        result
+    }
+
+    fn encode_inner<'a>(
+        &mut self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
+        output: &mut Vec<u8>,
+    ) -> Result<usize> {
+        let entry_count = entries.len();
+        if entry_count == 0 {
+            return Err(Error::InvalidData);
+        }
+        output.extend_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
+        output.push(SOLANA_ENTRY_BATCH_VERSION);
+        output.push(SOLANA_ENTRY_BATCH_DICTIONARY_FLAG);
+        output.extend_from_slice(&self.dictionary_id);
+        write_len(entry_count, output)?;
+
+        for entry in entries {
+            entry.num_hashes.encode(output)?;
+            output.extend_from_slice(entry.hash.as_bytes());
+            write_len(entry.transactions.len(), output)?;
+            for transaction in entry.transactions {
+                self.context
+                    .dedupe
+                    .as_mut()
+                    .expect("compact entry-batch encoder requires dedupe")
+                    .clear();
+                let frame_len_offset = output.len();
+                output.extend_from_slice(&[0, 0]);
+                let frame_start = output.len();
+                transaction.encode_ext(output, Some(&mut self.context))?;
+                let frame_len = output.len() - frame_start;
+                if frame_len > MAX_LENCODE_TRANSACTION_BYTES {
+                    output.clear();
+                    return Err(Error::IncorrectLength);
+                }
+                let frame_len = u16::try_from(frame_len).map_err(|_| Error::IncorrectLength)?;
+                output[frame_len_offset..frame_len_offset + 2]
+                    .copy_from_slice(&frame_len.to_le_bytes());
+            }
+        }
+        Ok(output.len())
+    }
+}
+
+/// Reconstructs canonical Solana entry-batch bytes from compact lencode frames.
+pub struct SolanaEntryBatchTranscoder {
+    dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+    transaction: SolanaTransactionTranscoder,
+}
+
+impl SolanaEntryBatchTranscoder {
+    /// Creates a transcoder backed by the matching frozen address dictionary.
+    pub fn with_frozen(
+        dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+        frozen: Arc<FrozenDecoderState>,
+    ) -> Self {
+        Self {
+            dictionary_id,
+            transaction: SolanaTransactionTranscoder::with_frozen(frozen),
+        }
+    }
+
+    /// Reconstructs one exact compact batch and clears partial output on error.
+    pub fn transcode_exact(
+        &mut self,
+        input: &[u8],
+        output: &mut Vec<u8>,
+        limits: EntryBatchWireLimits,
+    ) -> Result<EntryBatchCounts> {
+        output.clear();
+        let result = self.transcode_inner(input, output, limits);
+        if result.is_err() {
+            output.clear();
+        }
+        result
+    }
+
+    fn transcode_inner(
+        &mut self,
+        input: &[u8],
+        output: &mut Vec<u8>,
+        limits: EntryBatchWireLimits,
+    ) -> Result<EntryBatchCounts> {
+        if input.len() > limits.max_input_bytes
+            || input.len() < SOLANA_ENTRY_BATCH_HEADER_BYTES
+            || input[..4] != SOLANA_ENTRY_BATCH_MAGIC
+            || input[4] != SOLANA_ENTRY_BATCH_VERSION
+            || input[5] != SOLANA_ENTRY_BATCH_DICTIONARY_FLAG
+            || input[6..SOLANA_ENTRY_BATCH_HEADER_BYTES] != self.dictionary_id
+        {
+            return Err(Error::InvalidData);
+        }
+
+        let body = &input[SOLANA_ENTRY_BATCH_HEADER_BYTES..];
+        let decode_limits = DecodeLimits::new(
+            body.len(),
+            limits.max_sequence_len,
+            limits.max_total_allocation,
+        );
+        let mut reader = LimitedReader::new(Cursor::new(body), decode_limits);
+        let entry_count = read_len(&mut reader)?;
+        if entry_count == 0 {
+            return Err(Error::InvalidData);
+        }
+        reader.claim_sequence(entry_count, 1)?;
+        append_u64(output, entry_count, limits.max_output_bytes)?;
+
+        let mut transaction_total = 0usize;
+        for _ in 0..entry_count {
+            let num_hashes = u64::decode(&mut reader)?;
+            append_growing_bytes(output, &num_hashes.to_le_bytes(), limits.max_output_bytes)?;
+            append_growing_input(&mut reader, output, 32, limits.max_output_bytes)?;
+
+            let transaction_count = read_len(&mut reader)?;
+            reader.claim_sequence(transaction_count, 1)?;
+            transaction_total = transaction_total
+                .checked_add(transaction_count)
+                .ok_or(Error::DecodeLimitExceeded)?;
+            if transaction_total > limits.max_sequence_len {
+                return Err(Error::DecodeLimitExceeded);
+            }
+            append_u64(output, transaction_count, limits.max_output_bytes)?;
+
+            for _ in 0..transaction_count {
+                let available = reader.buf().ok_or(Error::InvalidData)?;
+                if available.len() < 2 {
+                    return Err(Error::ReaderOutOfData);
+                }
+                let frame_len = usize::from(u16::from_le_bytes([available[0], available[1]]));
+                reader.advance(2);
+                if frame_len > MAX_LENCODE_TRANSACTION_BYTES {
+                    return Err(Error::IncorrectLength);
+                }
+                let frame = reader.buf().ok_or(Error::InvalidData)?;
+                if frame.len() < frame_len {
+                    return Err(Error::ReaderOutOfData);
+                }
+                let remaining_output = limits
+                    .max_output_bytes
+                    .checked_sub(output.len())
+                    .ok_or(Error::DecodeLimitExceeded)?;
+                let mut transaction_limits = limits.transaction;
+                transaction_limits.max_output_bytes =
+                    transaction_limits.max_output_bytes.min(remaining_output);
+                self.transaction.transcode_append_exact(
+                    &frame[..frame_len],
+                    output,
+                    transaction_limits,
+                )?;
+                reader.advance(frame_len);
+            }
+        }
+        if reader.consumed() != body.len() {
+            return Err(Error::TrailingData);
+        }
+        Ok(EntryBatchCounts {
+            entries: entry_count,
+            transactions: transaction_total,
+        })
     }
 }
 
@@ -518,6 +799,47 @@ fn read_len(reader: &mut impl Read) -> Result<usize> {
     usize::try_from(Lencode::decode_varint_u64(reader)?).map_err(|_| Error::DecodeLimitExceeded)
 }
 
+#[cfg(feature = "solana-types")]
+fn write_len(len: usize, output: &mut Vec<u8>) -> Result<usize> {
+    let len = u64::try_from(len).map_err(|_| Error::IncorrectLength)?;
+    Lencode::encode_varint_u64(len, output)
+}
+
+fn append_u64(output: &mut Vec<u8>, value: usize, max_output: usize) -> Result<()> {
+    let value = u64::try_from(value).map_err(|_| Error::IncorrectLength)?;
+    append_growing_bytes(output, &value.to_le_bytes(), max_output)
+}
+
+fn append_growing_input(
+    reader: &mut impl Read,
+    output: &mut Vec<u8>,
+    len: usize,
+    max_output: usize,
+) -> Result<()> {
+    let available = reader.buf().ok_or(Error::InvalidData)?;
+    if available.len() < len {
+        return Err(Error::ReaderOutOfData);
+    }
+    append_growing_bytes(output, &available[..len], max_output)?;
+    reader.advance(len);
+    Ok(())
+}
+
+fn append_growing_bytes(output: &mut Vec<u8>, bytes: &[u8], max_output: usize) -> Result<()> {
+    let new_len = output
+        .len()
+        .checked_add(bytes.len())
+        .ok_or(Error::DecodeLimitExceeded)?;
+    if new_len > max_output {
+        return Err(Error::DecodeLimitExceeded);
+    }
+    output
+        .try_reserve(bytes.len())
+        .map_err(|_| Error::DecodeLimitExceeded)?;
+    output.extend_from_slice(bytes);
+    Ok(())
+}
+
 fn append_input(
     reader: &mut impl Read,
     output: &mut Vec<u8>,
@@ -661,6 +983,113 @@ mod tests {
             decoder.prime(*address);
         }
         (Arc::new(encoder.freeze()), Arc::new(decoder.freeze()))
+    }
+
+    #[cfg(feature = "solana-types")]
+    #[test]
+    fn entry_batch_roundtrips_reference_transactions() {
+        let address = [2u8; 32];
+        let (frozen_encoder, frozen_decoder) = frozen_dictionary(&[address]);
+        let transaction = VersionedTransaction {
+            signatures: vec![Signature::from([1u8; 64])],
+            message: VersionedMessage::Legacy(LegacyMessage {
+                header: MessageHeader {
+                    num_required_signatures: 1,
+                    num_readonly_signed_accounts: 0,
+                    num_readonly_unsigned_accounts: 0,
+                },
+                account_keys: vec![canonical_address(address)],
+                recent_blockhash: Hash::new_from_array([3u8; 32]),
+                instructions: Vec::new(),
+            }),
+        };
+        let entry_hash = Hash::new_from_array([4u8; 32]);
+        let dictionary_id = [5u8; SOLANA_DICTIONARY_ID_BYTES];
+        let entries = [SolanaEntryRef {
+            num_hashes: 7,
+            hash: &entry_hash,
+            transactions: core::slice::from_ref(&transaction),
+        }];
+
+        let mut encoder = SolanaEntryBatchEncoder::with_frozen(dictionary_id, frozen_encoder);
+        let mut compact = Vec::new();
+        let compact_len = encoder.encode(entries.into_iter(), &mut compact).unwrap();
+        assert_eq!(compact_len, compact.len());
+        assert_eq!(compact[..4], SOLANA_ENTRY_BATCH_MAGIC);
+        assert_eq!(compact[4], SOLANA_ENTRY_BATCH_VERSION);
+        assert_eq!(compact[5], SOLANA_ENTRY_BATCH_DICTIONARY_FLAG);
+        assert_eq!(compact[6..SOLANA_ENTRY_BATCH_HEADER_BYTES], dictionary_id);
+
+        let canonical_transaction = wincode::serialize(&transaction).unwrap();
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&1u64.to_le_bytes());
+        expected.extend_from_slice(&7u64.to_le_bytes());
+        expected.extend_from_slice(entry_hash.as_bytes());
+        expected.extend_from_slice(&1u64.to_le_bytes());
+        expected.extend_from_slice(&canonical_transaction);
+
+        let limits = EntryBatchWireLimits::new(
+            compact.len(),
+            expected.len(),
+            u16::MAX as usize,
+            expected.len(),
+            TransactionWireLimits::CURRENT,
+        );
+        let mut transcoder =
+            SolanaEntryBatchTranscoder::with_frozen(dictionary_id, frozen_decoder.clone());
+        let mut canonical = Vec::new();
+        let counts = transcoder
+            .transcode_exact(&compact, &mut canonical, limits)
+            .unwrap();
+        assert_eq!(canonical, expected);
+        assert_eq!(
+            counts,
+            EntryBatchCounts {
+                entries: 1,
+                transactions: 1,
+            }
+        );
+
+        canonical.extend_from_slice(&[9, 9, 9]);
+        let mut wrong_dictionary = dictionary_id;
+        wrong_dictionary[0] ^= 1;
+        let error = SolanaEntryBatchTranscoder::with_frozen(wrong_dictionary, frozen_decoder)
+            .transcode_exact(&compact, &mut canonical, limits)
+            .unwrap_err();
+        assert!(matches!(error, Error::InvalidData));
+        assert!(canonical.is_empty());
+
+        let mut trailing = compact.clone();
+        trailing.push(0);
+        let trailing_limits = EntryBatchWireLimits {
+            max_input_bytes: trailing.len(),
+            ..limits
+        };
+        let error = transcoder
+            .transcode_exact(&trailing, &mut canonical, trailing_limits)
+            .unwrap_err();
+        assert!(matches!(error, Error::TrailingData));
+        assert!(canonical.is_empty());
+
+        let output_limited = EntryBatchWireLimits {
+            max_output_bytes: expected.len() - 1,
+            ..limits
+        };
+        let error = transcoder
+            .transcode_exact(
+                &trailing[..trailing.len() - 1],
+                &mut canonical,
+                output_limited,
+            )
+            .unwrap_err();
+        assert!(matches!(error, Error::DecodeLimitExceeded));
+        assert!(canonical.is_empty());
+
+        let error = encoder
+            .encode(core::iter::empty(), &mut compact)
+            .unwrap_err();
+        assert!(matches!(error, Error::InvalidData));
+        assert!(compact.is_empty());
     }
 
     fn canonical_address(bytes: [u8; 32]) -> Pubkey {
