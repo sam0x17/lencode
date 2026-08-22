@@ -1,7 +1,7 @@
 {
   "version": 23,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T06:31:49Z",
+  "updated_at": "2026-08-22T07:08:22Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -44,7 +44,7 @@
       {
         "iteration": 1,
         "optimization": "reserve the bounded canonical transaction capacity once before reconstruction",
-        "commit": null,
+        "commit": "2225866746cc23d6f6612861b5b8afa9e9304274",
         "kept": true,
         "results": {
           "wincode_leader": { "value": 278801794, "unit": "ns/100 blocks" },
@@ -65,6 +65,18 @@
       {
         "optimization": "reuse a typed frozen-address slice across each reconstructed address collection",
         "reason": "three 11-trial runs reduced median lencode validator time from 43.614 ms to 42.278 ms (3.1% absolute, 3.9% normalized to wincode), below the 5% keep threshold; leader time and wire bytes were unchanged, so the extra decoder API and Arc were removed"
+      },
+      {
+        "optimization": "specialize raw instruction payload reconstruction and isolate the compressed path",
+        "reason": "three interleaved exact-binary 11-trial runs increased median lencode validator time from 41.601 ms to 41.867 ms (0.6% absolute, 0.5% normalized to wincode); wire bytes were unchanged, so the candidate was removed"
+      },
+      {
+        "optimization": "force-inline generic borrowed dedupe decoding",
+        "reason": "three interleaved exact-binary 11-trial runs reduced median lencode validator time from 41.561 ms to 40.763 ms (1.9% absolute, 1.1% normalized to wincode), below the 5% keep threshold; wire bytes were unchanged, so the annotation was removed"
+      },
+      {
+        "optimization": "batch canonical address writes into one pre-sized output region",
+        "reason": "three interleaved exact-binary 11-trial runs increased median lencode validator time from 41.594 ms to 41.893 ms (0.7% absolute, 0.7% normalized to wincode); wire bytes were unchanged, so the candidate was removed"
       }
     ],
     "contention_events": [
