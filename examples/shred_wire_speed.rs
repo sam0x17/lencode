@@ -14,9 +14,11 @@ mod real {
     };
     use lencode::prelude::*;
     use serde::{Deserialize, Serialize};
+    use solana_short_vec::ShortU16;
     use std::hint::black_box;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+    use wincode::containers::Vec as WincodeVec;
     use wincode::io::Cursor as WincodeCursor;
     use wincode::{SchemaRead, SchemaWrite};
 
@@ -50,21 +52,21 @@ mod real {
     struct BenchCompiledInstruction {
         program_id_index: u8,
         #[serde(with = "solana_short_vec")]
-        #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+        #[wincode(with = "WincodeVec<_, ShortU16>")]
         accounts: Vec<u8>,
         #[serde(with = "solana_short_vec")]
-        #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+        #[wincode(with = "WincodeVec<_, ShortU16>")]
         data: Vec<u8>,
     }
 
     #[derive(Clone, PartialEq, Serialize, Deserialize, SchemaWrite, SchemaRead, Encode, Decode)]
     struct BenchMessage {
         #[serde(with = "solana_short_vec")]
-        #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+        #[wincode(with = "WincodeVec<_, ShortU16>")]
         account_keys: Vec<BenchPubkey>,
         recent_blockhash: [u8; 32],
         #[serde(with = "solana_short_vec")]
-        #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+        #[wincode(with = "WincodeVec<_, ShortU16>")]
         instructions: Vec<BenchCompiledInstruction>,
     }
 

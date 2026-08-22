@@ -9,9 +9,13 @@ use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use solana_message::compiled_instruction::CompiledInstruction;
 use solana_pubkey::Pubkey;
+use solana_short_vec::ShortU16;
 use std::hint::black_box;
 use std::io::Cursor;
-use wincode::{SchemaRead, SchemaReadOwned, SchemaWrite, io::Cursor as WincodeCursor};
+use wincode::{
+    SchemaRead, SchemaReadOwned, SchemaWrite, config::DefaultConfig, containers::Vec as WincodeVec,
+    io::Cursor as WincodeCursor,
+};
 
 #[derive(
     Clone,
@@ -59,10 +63,10 @@ impl DedupeDecodeable for BenchPubkey {
 struct BenchCompiledInstruction {
     program_id_index: u8,
     #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+    #[wincode(with = "WincodeVec<_, ShortU16>")]
     accounts: Vec<u8>,
     #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+    #[wincode(with = "WincodeVec<_, ShortU16>")]
     data: Vec<u8>,
 }
 
@@ -91,11 +95,11 @@ impl From<&CompiledInstruction> for BenchCompiledInstruction {
 )]
 struct BenchMessage {
     #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+    #[wincode(with = "WincodeVec<_, ShortU16>")]
     account_keys: Vec<BenchPubkey>,
     recent_blockhash: [u8; 32],
     #[serde(with = "solana_short_vec")]
-    #[wincode(with = "wincode::containers::Vec<_, wincode::len::ShortU16Len>")]
+    #[wincode(with = "WincodeVec<_, ShortU16>")]
     instructions: Vec<BenchCompiledInstruction>,
 }
 
@@ -176,19 +180,22 @@ fn decode_borsh<T: BorshDeserialize>(bytes: &[u8]) -> T {
 }
 
 #[inline(always)]
-fn encode_wincode_into<T: SchemaWrite<Src = T>>(value: &T, writer: &mut impl wincode::io::Writer) {
+fn encode_wincode_into<T: SchemaWrite<DefaultConfig, Src = T>>(
+    value: &T,
+    writer: &mut impl wincode::io::Writer,
+) {
     wincode::serialize_into(writer, value).unwrap();
 }
 
 #[inline(always)]
-fn encode_wincode<T: SchemaWrite<Src = T>>(value: &T) -> Vec<u8> {
+fn encode_wincode<T: SchemaWrite<DefaultConfig, Src = T>>(value: &T) -> Vec<u8> {
     wincode::serialize(value).unwrap()
 }
 
 #[inline(always)]
 fn decode_wincode<T>(bytes: &[u8]) -> T
 where
-    T: SchemaReadOwned<Dst = T>,
+    T: SchemaReadOwned<DefaultConfig, Dst = T>,
 {
     wincode::deserialize(bytes).unwrap()
 }
@@ -201,9 +208,9 @@ where
         + serde::de::DeserializeOwned
         + BorshSerialize
         + BorshDeserialize
-        + SchemaWrite<Src = T>
-        + SchemaReadOwned<Dst = T>
-        + for<'de> SchemaRead<'de, Dst = T>,
+        + SchemaWrite<DefaultConfig, Src = T>
+        + SchemaReadOwned<DefaultConfig, Dst = T>
+        + for<'de> SchemaRead<'de, DefaultConfig, Dst = T>,
 {
     let mut group = c.comparison_benchmark_group(format!("{name}_encode"));
     group.bench_function("lencode", |b| {

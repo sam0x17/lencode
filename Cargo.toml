@@ -49,8 +49,8 @@ criterion = { git = "https://github.com/sam0x17/criterion.rs", features = ["html
 borsh = { version = ">= 1.5", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
-wincode = { version = "0.2.5", features = ["derive", "solana-short-vec"] }
-solana-short-vec = "3"
+wincode = { version = "0.6.1", features = ["derive"] }
+solana-short-vec = { version = "3.3.0", features = ["wincode"] }
 
 [features]
 default = []

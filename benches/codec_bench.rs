@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::hint::black_box;
 use std::io::Cursor;
 use wincode::SchemaReadOwned;
+use wincode::config::DefaultConfig;
 use wincode::io::Cursor as WincodeCursor;
 use wincode::{SchemaRead, SchemaWrite};
 
@@ -176,19 +177,22 @@ fn decode_borsh<T: BorshDeserialize>(bytes: &[u8]) -> T {
 }
 
 #[inline(always)]
-fn encode_wincode_into<T: SchemaWrite<Src = T>>(value: &T, writer: &mut impl wincode::io::Writer) {
+fn encode_wincode_into<T: SchemaWrite<DefaultConfig, Src = T>>(
+    value: &T,
+    writer: &mut impl wincode::io::Writer,
+) {
     wincode::serialize_into(writer, value).unwrap();
 }
 
 #[inline(always)]
-fn encode_wincode<T: SchemaWrite<Src = T>>(value: &T) -> Vec<u8> {
+fn encode_wincode<T: SchemaWrite<DefaultConfig, Src = T>>(value: &T) -> Vec<u8> {
     wincode::serialize(value).unwrap()
 }
 
 #[inline(always)]
 fn decode_wincode<T>(bytes: &[u8]) -> T
 where
-    T: SchemaReadOwned<Dst = T>,
+    T: SchemaReadOwned<DefaultConfig, Dst = T>,
 {
     wincode::deserialize(bytes).unwrap()
 }
@@ -201,9 +205,9 @@ where
         + serde::de::DeserializeOwned
         + BorshSerialize
         + BorshDeserialize
-        + SchemaWrite<Src = T>
-        + SchemaReadOwned<Dst = T>
-        + for<'de> SchemaRead<'de, Dst = T>,
+        + SchemaWrite<DefaultConfig, Src = T>
+        + SchemaReadOwned<DefaultConfig, Dst = T>
+        + for<'de> SchemaRead<'de, DefaultConfig, Dst = T>,
 {
     let mut group = c.comparison_benchmark_group(format!("{name}_encode"));
     group.bench_function("bincode", |b| {
