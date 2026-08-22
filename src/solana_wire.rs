@@ -40,6 +40,7 @@ use crate::{
     Encode,
     context::EncoderContext,
     dedupe::{DedupeEncoder, FrozenEncoderState},
+    io::{VecWriter, Write},
 };
 #[cfg(feature = "solana-types")]
 use solana_hash::Hash as SolanaHash;
@@ -196,7 +197,9 @@ impl SolanaEntryBatchEncoder {
         output: &mut Vec<u8>,
     ) -> Result<usize> {
         output.clear();
-        let result = self.encode_inner(entries, output);
+        let mut writer = VecWriter(core::mem::take(output));
+        let result = self.encode_inner(entries, &mut writer);
+        *output = writer.into_inner();
         if result.is_err() {
             output.clear();
         }
@@ -206,21 +209,21 @@ impl SolanaEntryBatchEncoder {
     fn encode_inner<'a>(
         &mut self,
         entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
-        output: &mut Vec<u8>,
+        output: &mut VecWriter,
     ) -> Result<usize> {
         let entry_count = entries.len();
         if entry_count == 0 {
             return Err(Error::InvalidData);
         }
-        output.extend_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
-        output.push(SOLANA_ENTRY_BATCH_VERSION);
-        output.push(SOLANA_ENTRY_BATCH_DICTIONARY_FLAG);
-        output.extend_from_slice(&self.dictionary_id);
+        output.0.extend_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
+        output.0.push(SOLANA_ENTRY_BATCH_VERSION);
+        output.0.push(SOLANA_ENTRY_BATCH_DICTIONARY_FLAG);
+        output.0.extend_from_slice(&self.dictionary_id);
         write_len(entry_count, output)?;
 
         for entry in entries {
             entry.num_hashes.encode(output)?;
-            output.extend_from_slice(entry.hash.as_bytes());
+            output.0.extend_from_slice(entry.hash.as_bytes());
             write_len(entry.transactions.len(), output)?;
             for transaction in entry.transactions {
                 self.context
@@ -228,21 +231,20 @@ impl SolanaEntryBatchEncoder {
                     .as_mut()
                     .expect("compact entry-batch encoder requires dedupe")
                     .clear();
-                let frame_len_offset = output.len();
-                output.extend_from_slice(&[0, 0]);
-                let frame_start = output.len();
+                let frame_len_offset = output.0.len();
+                output.0.extend_from_slice(&[0, 0]);
+                let frame_start = output.0.len();
                 transaction.encode_ext(output, Some(&mut self.context))?;
-                let frame_len = output.len() - frame_start;
+                let frame_len = output.0.len() - frame_start;
                 if frame_len > MAX_LENCODE_TRANSACTION_BYTES {
-                    output.clear();
                     return Err(Error::IncorrectLength);
                 }
                 let frame_len = u16::try_from(frame_len).map_err(|_| Error::IncorrectLength)?;
-                output[frame_len_offset..frame_len_offset + 2]
+                output.0[frame_len_offset..frame_len_offset + 2]
                     .copy_from_slice(&frame_len.to_le_bytes());
             }
         }
-        Ok(output.len())
+        Ok(output.0.len())
     }
 }
 
@@ -800,7 +802,7 @@ fn read_len(reader: &mut impl Read) -> Result<usize> {
 }
 
 #[cfg(feature = "solana-types")]
-fn write_len(len: usize, output: &mut Vec<u8>) -> Result<usize> {
+fn write_len(len: usize, output: &mut impl Write) -> Result<usize> {
     let len = u64::try_from(len).map_err(|_| Error::IncorrectLength)?;
     Lencode::encode_varint_u64(len, output)
 }
