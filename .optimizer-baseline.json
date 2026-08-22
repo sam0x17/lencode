@@ -1,7 +1,7 @@
 {
-  "version": 43,
+  "version": 44,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T11:25:17Z",
+  "updated_at": "2026-08-22T11:41:13Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -33,13 +33,13 @@
       "lencode_validator_throughput": 0.504601927
     },
     "current_baseline": {
-      "wincode_leader": { "value": 289026758, "unit": "ns/100 blocks" },
-      "wincode_validator": { "value": 18821318, "unit": "ns/100 blocks" },
-      "lencode_leader": { "value": 192438840, "unit": "ns/100 blocks" },
-      "lencode_validator": { "value": 23297474, "unit": "ns/100 blocks" },
+      "wincode_leader": { "value": 276055157, "unit": "ns/100 blocks" },
+      "wincode_validator": { "value": 18879689, "unit": "ns/100 blocks" },
+      "lencode_leader": { "value": 182832037, "unit": "ns/100 blocks" },
+      "lencode_validator": { "value": 23489865, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
       "lencode_wire_bytes": 80592512,
-      "mode": "canonical wincode entry batch inside LZ4 outer frame"
+      "mode": "canonical wincode entry batch compressed into a single caller-owned LZ4 frame arena"
     },
     "history": [
       {
@@ -237,6 +237,51 @@
         "leader_speedup_vs_wincode": 1.492,
         "validator_throughput_vs_wincode": 0.799,
         "validation": "343 ledger library tests and 47 turbine library tests passed; strict ledger and turbine Clippy passed; focused integration tests proved active leader framing, exact reconstruction, legacy fallback, and inactive replay rejection; the frozen benchmark and all wire counts stayed exact, while normalized timing movements remained within 1%"
+      },
+      {
+        "iteration": 8,
+        "optimization": "serialize canonical bytes and compress the LZ4 frame in one caller-owned arena",
+        "kept": true,
+        "integration": "Agave shred block-component codec",
+        "paired_baseline": {
+          "wincode_leader": { "value": 290568571, "unit": "ns/100 blocks" },
+          "wincode_validator": { "value": 18932819, "unit": "ns/100 blocks" },
+          "lencode_leader": { "value": 193465805, "unit": "ns/100 blocks" },
+          "lencode_validator": { "value": 23675606, "unit": "ns/100 blocks" }
+        },
+        "results": {
+          "wincode_leader": { "value": 276055157, "unit": "ns/100 blocks" },
+          "wincode_validator": { "value": 18879689, "unit": "ns/100 blocks" },
+          "lencode_leader": { "value": 182832037, "unit": "ns/100 blocks" },
+          "lencode_validator": { "value": 23489865, "unit": "ns/100 blocks" },
+          "wincode_payload_bytes": 66587751,
+          "lencode_payload_bytes": 30292964,
+          "wincode_data_shreds": 71136,
+          "wincode_coding_shreds": 71136,
+          "lencode_data_shreds": 33152,
+          "lencode_coding_shreds": 33152,
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 80592512
+        },
+        "allocation_effect": "canonical input and compressed output occupy disjoint regions of one Vec before the frame is compacted in place; this removes the canonical and compressed temporary allocations without unsafe code",
+        "memory_effect": "median maximum RSS increased 0.57%, from 303788 KiB to 305518 KiB, in paired three-trial process runs",
+        "wire_compatibility": "the codec test compares every framed byte with the previous liblz4 FAST(1) construction; payload bytes, shred counts, and Turbine wire bytes remained exact",
+        "baseline_binary_sha256": "21ea4f5fd8a2d5213eedd29d3eb567d22690c7aa0939448e661e72e859c960e3",
+        "candidate_binary_sha256": "0c066e53bc0a3e2c838e67753d26d6ee26e7772e4074b38f56ff09b479a5d2fd",
+        "frozen_benchmark_source_sha256": "b7a411364318cf25aab26add6e5a521c8b6416d0044d7cac407aca500b2b22db",
+        "candidate_benchmark_source_sha256": "55f9e6160b554333a59898198a28dbb3f45dcd58922e0f8e1308a8fb7cab69a9",
+        "production_codec_source_sha256": "9a4cd8f2a65a8218e93874c34c0073a8b074cbbaa9b7ccb5c9db48b40660b03a",
+        "leader_improvement_vs_paired_baseline_pct": 5.496,
+        "leader_improvement_vs_paired_baseline_normalized_pct": 0.528,
+        "validator_improvement_vs_paired_baseline_pct": 0.785,
+        "validator_improvement_vs_paired_baseline_normalized_pct": 0.505,
+        "leader_improvement_vs_original_structured_pct": 17.429,
+        "validator_improvement_vs_original_structured_pct": 46.141,
+        "wire_reduction_vs_original_structured_pct": 35.532,
+        "wire_reduction_vs_wincode_pct": 53.396,
+        "leader_speedup_vs_wincode": 1.510,
+        "validator_throughput_vs_wincode": 0.804,
+        "validation": "three interleaved exact-binary 11-trial pairs retained the 5.5% absolute leader improvement with no regression over 2%; 343 ledger tests and 47 turbine tests passed, strict ledger library and benchmark Clippy passed, and the exact-wire codec assertion passed"
       }
     ],
     "failed_attempts": [
