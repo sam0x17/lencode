@@ -1,12 +1,12 @@
 {
-  "version": 56,
+  "version": 57,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T15:10:51Z",
+  "updated_at": "2026-08-22T15:19:53Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 11,
+    "version": 12,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1004,6 +1004,10 @@
       {
         "optimization": "use LZ4 FAST(8) only for coalesced components between one and two typical FEC inputs",
         "reason": "an exact 11-trial candidate run left validator time unchanged at 24.439 ms, regressed leader time 3.12%, increased compressed payload 4.84%, and increased Turbine wire bytes 5.76%; FAST(4) was restored, followed by the rejected coalescing policy"
+      },
+      {
+        "optimization": "check RocksDB iterator positioning once per contiguous component range and compare decoded indices",
+        "reason": "three interleaved CPU-affined 31-trial pairs improved median wincode Blockstore loading from 27.463 ms to 27.262 ms (0.73%) and changed canonical-LZ4 from 29.106 ms to 29.136 ms (0.10% slower, 0.84% slower after normalization); candidate binary 3bd18d4d4054cd402ab5ec510b01f8f97edf07e7b48b66fed09825ab0ab1c66b was removed below threshold, then source e878ae7fe85c91c05b01744bded6801e4a4218bc613502f0a080b4c6988c0c66 and binary bfa7c7d191f804e3dd9cf69c375adf41d026311fae2c3914cb14ca7776ad2120 were restored"
       }
     ],
     "full_resets": [
