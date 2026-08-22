@@ -1,12 +1,12 @@
 {
-  "version": 57,
+  "version": 58,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T15:19:53Z",
+  "updated_at": "2026-08-22T15:20:43Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 12,
+    "version": 13,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1018,6 +1018,22 @@
         "restored_lockfile_sha256": "1d1d66199b3473407879348e795c00177acb47623f4605196b58982940cf40eb",
         "restored_binary_sha256": "7813da8df908a744835ec3b92fa859b350f354c480c6ee4c6e889cd82952bc47",
         "result": "exact protected sources and binary restored; three 11-trial runs re-established end-to-end Blockstore parity"
+      },
+      {
+        "after": "direct-output parsing, canonical two-FEC coalescing, targeted FAST(8), and contiguous range-loop reverts",
+        "restored_blockstore_sha256": "ae2f69dafadcb6891736577a4eb9c9fa627a403b80c84bb2aee06cb376529fc5",
+        "restored_blockstore_db_sha256": "e878ae7fe85c91c05b01744bded6801e4a4218bc613502f0a080b4c6988c0c66",
+        "restored_codec_sha256": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b",
+        "restored_broadcast_utils_sha256": "c68f5d644a21632c9ef687c51d4e9da061e2e138faf9539b4f206ec89f801fa1",
+        "restored_production_binary_sha256": "953fac34562551a152a1e9422fab9805d9ede5f972dd094a8b103bce6fc583b2",
+        "restored_blockstore_binary_sha256": "bfa7c7d191f804e3dd9cf69c375adf41d026311fae2c3914cb14ca7776ad2120",
+        "fresh_blockstore_confirmation": {
+          "protocol": "median of three CPU-28 processes with 31 alternating warmed trials per format",
+          "wincode_validator_ns": 27463145,
+          "lencode_validator_ns": 29105901,
+          "lencode_validator_throughput": 0.944
+        },
+        "result": "exact protected sources and binaries restored; the retained Rust 1.98.0 Blockstore baseline was re-established"
       }
     ],
     "contention_events": [
