@@ -1,7 +1,7 @@
 {
-  "version": 28,
+  "version": 29,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T09:10:19Z",
+  "updated_at": "2026-08-22T09:19:46Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -33,12 +33,12 @@
       "lencode_validator_throughput": 0.504601927
     },
     "current_baseline": {
-      "wincode_leader": { "value": 278801794, "unit": "ns/100 blocks" },
-      "wincode_validator": { "value": 22442044, "unit": "ns/100 blocks" },
-      "lencode_leader": { "value": 221182761, "unit": "ns/100 blocks" },
-      "lencode_validator": { "value": 41557344, "unit": "ns/100 blocks" },
+      "wincode_leader": { "value": 278548547, "unit": "ns/100 blocks" },
+      "wincode_validator": { "value": 23457805, "unit": "ns/100 blocks" },
+      "lencode_leader": { "value": 202728564, "unit": "ns/100 blocks" },
+      "lencode_validator": { "value": 40570946, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
-      "lencode_wire_bytes": 125011744
+      "lencode_wire_bytes": 111398144
     },
     "history": [
       {
@@ -59,6 +59,31 @@
         "vs_paired_baseline_validator_pct": -4.879,
         "vs_paired_baseline_validator_normalized_pct": -5.741,
         "leader_change_vs_paired_baseline_pct": 0.035
+      },
+      {
+        "iteration": 2,
+        "optimization": "carry address dedupe context across one explicitly flagged entry batch",
+        "commit": "909d931561490a837cfce636a1ab99ab23e844bd",
+        "kept": true,
+        "results": {
+          "wincode_leader": { "value": 278548547, "unit": "ns/100 blocks" },
+          "wincode_validator": { "value": 23457805, "unit": "ns/100 blocks" },
+          "lencode_leader": { "value": 202728564, "unit": "ns/100 blocks" },
+          "lencode_validator": { "value": 40570946, "unit": "ns/100 blocks" },
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 111398144
+        },
+        "context_scope": "entry batch",
+        "outer_flag": 2,
+        "candidate_binary_sha256": "9353f10a48790dafb495a2d2ad193a59bfb582dbe27a32677524b3c3c32aafad",
+        "vs_original_validator_pct": -6.976,
+        "vs_original_validator_normalized_pct": -14.584,
+        "vs_paired_baseline_validator_pct": -4.193,
+        "vs_paired_baseline_validator_normalized_pct": -8.544,
+        "leader_change_vs_paired_baseline_pct": -8.426,
+        "leader_change_vs_paired_baseline_normalized_pct": -9.276,
+        "wire_change_vs_paired_baseline_pct": -10.890,
+        "wire_reduction_vs_wincode_pct": 35.583
       }
     ],
     "failed_attempts": [
