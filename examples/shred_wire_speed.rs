@@ -247,11 +247,12 @@ mod real {
             .collect();
 
         let prime_raw = std::fs::read(format!("{path}.prime")).expect("read prime table");
-        assert_eq!(prime_raw.len() % 32, 0);
+        let (prime_pubkeys, remainder) = prime_raw.as_chunks::<32>();
+        assert!(remainder.is_empty());
         let mut encoder_primer = DedupeEncoder::new();
         let mut decoder_primer = DedupeDecoder::new();
-        for bytes in prime_raw.chunks_exact(32) {
-            let pubkey = BenchPubkey(<[u8; 32]>::try_from(bytes).unwrap());
+        for bytes in prime_pubkeys {
+            let pubkey = BenchPubkey(*bytes);
             encoder_primer.prime::<BenchPubkey, <BenchPubkey as DedupeEncodeable>::Hasher>(&pubkey);
             decoder_primer.prime::<BenchPubkey>(pubkey);
         }
