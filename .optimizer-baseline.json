@@ -1,12 +1,12 @@
 {
-  "version": 48,
+  "version": 49,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T12:31:07Z",
+  "updated_at": "2026-08-22T13:01:21Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 3,
+    "version": 4,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -115,6 +115,36 @@
         "lencode_validator_throughput": 1.032,
         "trials_per_run": 11,
         "independent_runs": 3
+      },
+      "cpu_affined_baseline": {
+        "protocol": "run the frozen exact binary on logical CPU 28 with taskset; take the median of three independent processes, each containing 11 alternating warmed trials per format",
+        "wincode_validator": { "value": 70376675, "unit": "ns/100 Blockstore slots", "range": [70038794, 70660396] },
+        "lencode_validator": { "value": 72002811, "unit": "ns/100 Blockstore slots", "range": [71705300, 73220924] },
+        "lencode_validator_throughput": 0.977,
+        "binary_sha256": "7813da8df908a744835ec3b92fa859b350f354c480c6ee4c6e889cd82952bc47"
+      },
+      "profile": {
+        "protocol": "perf record at 999 Hz on CPU 28 over the exact baseline binary with 101 benchmark trials; percentages cover process setup and both alternating formats, with the repeated Blockstore reads dominating samples",
+        "samples": 16000,
+        "self_cycles_pct": {
+          "rocksdb_memtable_key_compare": 10.67,
+          "malloc_internal": 7.41,
+          "rocksdb_memtable_multiget": 6.90,
+          "transaction_frame_parse": 3.97,
+          "lz4_decompress_safe": 3.64,
+          "memmove": 3.51,
+          "block_component_parse": 1.77,
+          "shredder_deshred": 0.95
+        },
+        "conclusion": "RocksDB lookup and allocation traffic dominate the production-shaped read; LZ4 decompression is too small a share for another safe decoder-only change to reach 5%"
+      },
+      "reset_confirmation": {
+        "wincode_validator": { "value": 72081186, "unit": "ns/100 Blockstore slots", "range": [70041737, 72778308] },
+        "lencode_validator": { "value": 71462533, "unit": "ns/100 Blockstore slots", "range": [69777787, 71899125] },
+        "lencode_validator_throughput": 1.009,
+        "trials_per_run": 11,
+        "independent_runs": 3,
+        "binary_sha256": "7813da8df908a744835ec3b92fa859b350f354c480c6ee4c6e889cd82952bc47"
       },
       "conclusion": "end-to-end Blockstore loading is at parity within run-to-run variation; reading 47.4% fewer Turbine bytes offsets the LZ4 and parser work that made the isolated candidate decoder 14.9% slower in throughput"
     },
@@ -584,6 +614,32 @@
       {
         "optimization": "reconstruct and parse the components in each Blockstore slot with an ordered Rayon iterator",
         "reason": "a three-trial run increased canonical-LZ4 loading from 72.083 ms to 98.559 ms (36.7%) and wincode loading from 70.836 ms to 123.842 ms (74.8%); scheduling roughly 20 small component tasks per slot cost more than the parallel work saved, so the parallel path was removed"
+      },
+      {
+        "optimization": "pre-size a retained per-slot compressed deshred buffer from the largest completed range",
+        "reason": "three interleaved exact-binary 11-trial pairs improved canonical-LZ4 Blockstore loading from 70.978 ms to 69.733 ms (1.76% absolute, 1.01% normalized to wincode), below the 5% keep threshold; one large allocation per slot offset the removed growth copies, so the codec API and Blockstore changes were removed"
+      },
+      {
+        "optimization": "raise normal-component LZ4 acceleration from FAST(4) to FAST(8)",
+        "reason": "three CPU-affined 11-trial runs changed median candidate leader time from 266.069 ms to 267.001 ms (0.35% slower, 0.31% normalized) while increasing Turbine wire bytes by 1.99%; prior FAST(1) frames remained decodable, but the policy had no speed gain and FAST(4) was restored"
+      },
+      {
+        "optimization": "encode compatible LZ4 blocks with lz4_flex 0.14's safe Rust compressor",
+        "reason": "the first decisive 11-trial run reduced Turbine wire bytes by 0.78% but increased candidate leader time from 266.069 ms to 282.663 ms (6.24% absolute, 6.63% normalized), beyond the 2% ceiling; the encoder, dependency, and lockfile change were removed"
+      },
+      {
+        "optimization": "recycle bounded compressed deshred allocations across Blockstore slot calls in thread-local storage",
+        "reason": "after discarding noisy 11-trial pairs, three independent CPU-affined 31-trial pairs improved canonical-LZ4 loading from 72.071 ms to 71.147 ms (1.28% absolute, 0.93% normalized to wincode), below the 5% keep threshold; the thread-local state and codec plumbing were removed"
+      }
+    ],
+    "full_resets": [
+      {
+        "after": "four consecutive Blockstore allocation/parallel decode reverts and three subsequent compressor/recycling reverts",
+        "restored_codec_sha256": "915184c31dafd6b3c512b4f527e8656ab2ceb6beb7ff974cae1d9a3df69087ba",
+        "restored_blockstore_sha256": "bc1a6b1f209303b9113948eded7451ed8e44cdf1b4cebf31281f3e29c1193766",
+        "restored_lockfile_sha256": "1d1d66199b3473407879348e795c00177acb47623f4605196b58982940cf40eb",
+        "restored_binary_sha256": "7813da8df908a744835ec3b92fa859b350f354c480c6ee4c6e889cd82952bc47",
+        "result": "exact protected sources and binary restored; three 11-trial runs re-established end-to-end Blockstore parity"
       }
     ],
     "contention_events": [
@@ -598,6 +654,12 @@
         "reason": "the first post-revert Blockstore confirmation was roughly 9% slower on both formats than the established baseline range",
         "reruns": 3,
         "resolution": "discarded the contaminated run and used the median of three exact-final-binary 11-trial runs; the result confirmed that the two formats are within run-to-run variation"
+      },
+      {
+        "at_iteration": 12,
+        "reason": "the first thread-local recycling pairs spanned 9.1% on the candidate and shifted the two binaries in opposite directions",
+        "reruns": 6,
+        "resolution": "discarded the 11-trial set and used three interleaved pairs with 31 trials per format; the longer runs reduced the candidate to a sub-threshold 0.93% normalized improvement"
       }
     ]
   },
