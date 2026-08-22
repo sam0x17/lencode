@@ -1,7 +1,7 @@
 {
-  "version": 44,
+  "version": 45,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T11:41:13Z",
+  "updated_at": "2026-08-22T11:52:05Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -400,6 +400,14 @@
       {
         "optimization": "compress canonical LZ4 directly into the outer frame allocation",
         "reason": "an exact 11-trial run removed the temporary compressed Vec and its copy but improved leader time only from 194.723 ms to 191.435 ms (1.7% absolute, 1.5% normalized to wincode), below the 5% keep threshold; validator time and all wire counts were flat, so the direct-output branch was removed"
+      },
+      {
+        "optimization": "leave weakly compressible canonical batches raw to reduce validator decompression",
+        "reason": "all 100 retained-corpus batches shrank by at least 47.5%; selecting the ten least compressible batches would skip only 10.5% of decompressed bytes while increasing payload by 11.3%, so no raw selector can reach the 5% validator target inside the 2% wire ceiling"
+      },
+      {
+        "optimization": "raise canonical LZ4 acceleration from FAST(1) to FAST(4)",
+        "reason": "an exact 11-trial run improved leader time from 182.832 ms to 174.491 ms (4.6% absolute, 4.8% normalized) and validator time by 3.0% normalized, both below the 5% keep threshold, while Turbine wire bytes increased 2.4%; FAST(1) was restored"
       }
     ],
     "contention_events": [
