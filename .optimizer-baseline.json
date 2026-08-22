@@ -1,7 +1,7 @@
 {
-  "version": 32,
+  "version": 33,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T09:46:27Z",
+  "updated_at": "2026-08-22T09:58:05Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -33,12 +33,13 @@
       "lencode_validator_throughput": 0.504601927
     },
     "current_baseline": {
-      "wincode_leader": { "value": 278440365, "unit": "ns/100 blocks" },
-      "wincode_validator": { "value": 23401093, "unit": "ns/100 blocks" },
-      "lencode_leader": { "value": 195644208, "unit": "ns/100 blocks" },
-      "lencode_validator": { "value": 41107705, "unit": "ns/100 blocks" },
+      "wincode_leader": { "value": 278110209, "unit": "ns/100 blocks" },
+      "wincode_validator": { "value": 22992643, "unit": "ns/100 blocks" },
+      "lencode_leader": { "value": 192508962, "unit": "ns/100 blocks" },
+      "lencode_validator": { "value": 24755819, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
-      "lencode_wire_bytes": 97084416
+      "lencode_wire_bytes": 80592512,
+      "mode": "canonical wincode entry batch inside LZ4 outer frame"
     },
     "history": [
       {
@@ -114,6 +115,33 @@
         "wire_reduction_vs_wincode_pct": 43.860,
         "lencode_leader_speedup": 1.423,
         "lencode_validator_throughput": 0.569
+      },
+      {
+        "iteration": 4,
+        "optimization": "carry canonical Agave entry-batch bytes inside an LZ4 outer frame and decompress directly into parser-owned storage",
+        "kept": true,
+        "integration": "Agave outer framing prototype",
+        "results": {
+          "wincode_leader": { "value": 278110209, "unit": "ns/100 blocks", "range": [277892679, 279061873] },
+          "wincode_validator": { "value": 22992643, "unit": "ns/100 blocks", "range": [22983313, 23169823] },
+          "lencode_leader": { "value": 192508962, "unit": "ns/100 blocks", "range": [192427752, 193245615] },
+          "lencode_validator": { "value": 24755819, "unit": "ns/100 blocks", "range": [24754969, 24899789] },
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 80592512
+        },
+        "codec": "canonical wincode entry batch compressed as one LZ4 block with FAST(1) and a four-byte original-size prefix",
+        "outer_flag": 8,
+        "combined_outer_flags": 9,
+        "candidate_binary_sha256": "6b6814101fe51474e489a5d88070fdeb5013602205d00595fefcb2da5b43078a",
+        "candidate_source_sha256": "656e6114aebd392fd5a12821f83905cdf321d33b33ebd9fc3c4dc9993ba99d3e",
+        "leader_change_vs_contextual_lz4_pct": -1.689,
+        "leader_change_vs_contextual_lz4_normalized_pct": -1.331,
+        "validator_change_vs_contextual_lz4_pct": -39.459,
+        "validator_change_vs_contextual_lz4_normalized_pct": -38.405,
+        "wire_change_vs_contextual_lz4_pct": -16.987,
+        "wire_reduction_vs_wincode_pct": 53.396,
+        "leader_speedup_vs_wincode": 1.445,
+        "validator_throughput_vs_wincode": 0.929
       }
     ],
     "failed_attempts": [
@@ -180,6 +208,14 @@
       {
         "optimization": "disable per-field zstd when selective outer LZ4 is available",
         "reason": "an exact 11-trial run improved the retained LZ4 path by 2.7% on the leader and 2.5% on the validator (3.4% and 2.3% normalized to wincode), below the 5% keep threshold, while increasing Turbine wire bytes by 0.6%; the global compression cutoff experiment and Agave benchmark prototype were removed"
+      },
+      {
+        "optimization": "reuse canonical serialization and LZ4 destination buffers",
+        "reason": "an exact paired 11-trial run improved canonical-LZ4 leader time by 4.8% (5.0% normalized) but regressed validator time by 2.5% (5.3% normalized), beyond the 2% ceiling; the reuse patch was removed"
+      },
+      {
+        "optimization": "fall back to raw canonical bytes when LZ4 expands a batch",
+        "reason": "all 100 retained-corpus batches compressed smaller with LZ4, so payload size, shred count, and measured performance were unchanged; the extra wire branch was removed"
       }
     ],
     "contention_events": [
