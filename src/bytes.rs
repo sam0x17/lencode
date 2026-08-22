@@ -19,7 +19,7 @@ const ZSTD_LEVEL: i32 = -1;
 
 /// Minimum payload size to attempt compression. Below this threshold,
 /// raw bytes are always used because compression overhead outweighs savings.
-pub(crate) const MIN_COMPRESS_LEN: usize = 96;
+pub(crate) const MIN_COMPRESS_LEN: usize = 512;
 
 /// Quick entropy check: returns `true` if a sample of the data appears incompressible.
 ///

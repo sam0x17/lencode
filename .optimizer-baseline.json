@@ -1,12 +1,12 @@
 {
-  "version": 70,
+  "version": 71,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T19:32:35Z",
+  "updated_at": "2026-08-22T19:55:27Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 25,
+    "version": 26,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -50,7 +50,7 @@
       "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
       "rust_version": "1.98.0",
       "baseline_binary_sha256": "b02ce959b3a6d572cab3c0de2ea6e4fe9d8197ae187d9d3211b7ee96644a172a",
-      "current_binary_sha256": "5a70b00e95d457b8af5fff8ecec08dd85713c8a4ee826fba6a1f49b55c185b08",
+      "current_binary_sha256": "1c62af5c9ce456e65262f09806c6f24d7b02c59bd402962f2663165a392417ef",
       "lencode_dedupe_sha256": "c9c1e43c33e6a52475855331d0bd7f56bf986cc0d94acaa756382b1bbadd756b",
       "lencode_solana_wire_sha256": "e4d7c6d3c940c402e8b2868434e08af1a2b0d3318936a694903012048751f059",
       "baseline": {
@@ -60,15 +60,15 @@
         "lencode_validator": { "value": 41877890, "unit": "ns/100 blocks" }
       },
       "current": {
-        "wincode_leader": { "value": 278401864, "unit": "ns/100 blocks" },
-        "wincode_validator": { "value": 21794621, "unit": "ns/100 blocks" },
-        "lencode_leader": { "value": 219029435, "unit": "ns/100 blocks" },
-        "lencode_validator": { "value": 36441484, "unit": "ns/100 blocks" }
+        "wincode_leader": { "value": 278645182, "unit": "ns/100 blocks" },
+        "wincode_validator": { "value": 21846421, "unit": "ns/100 blocks" },
+        "lencode_leader": { "value": 216607893, "unit": "ns/100 blocks" },
+        "lencode_validator": { "value": 35970474, "unit": "ns/100 blocks" }
       },
-      "lencode_payload_bytes": 47784650,
+      "lencode_payload_bytes": 47849490,
       "wincode_wire_bytes": 172931616,
-      "lencode_wire_bytes": 125011744,
-      "wire_reduction_vs_wincode_pct": 27.71,
+      "lencode_wire_bytes": 125089536,
+      "wire_reduction_vs_wincode_pct": 27.665,
       "frame": "LCSH version 1, native lencode dictionary flag 2",
       "scope_status": "qualifying lencode-owned codec with an Agave replacement-call-site adapter"
     },
@@ -1442,6 +1442,39 @@
         "borrowed_input_effect": "legacy and v0 instructions with two raw sub-64-byte vectors are validated and copied from one borrowed compact-input slice, with one canonical output-bound check and one input advance; compressed and larger vectors keep the general path",
         "unsafe_code_added": false,
         "validation": "three alternating CPU-affined 31-trial exact-final-binary pairs; every run reconstructed exact canonical bytes for 100 blocks, 68,392 entries, and 124,218 transactions and retained 47,784,650 payload bytes and 125,011,744 Turbine wire bytes; 217 lencode tests and 5 doctests passed, one doctest remained ignored; no-default, std-only, and all-feature all-target checks, formatting, and strict Clippy passed"
+      },
+      {
+        "iteration": 26,
+        "optimization": "skip zstd attempts for byte payloads shorter than 512 bytes",
+        "kept": true,
+        "integration": "lencode byte encoding used by reference-Solana instruction fields",
+        "baseline_binary_sha256": "5a70b00e95d457b8af5fff8ecec08dd85713c8a4ee826fba6a1f49b55c185b08",
+        "candidate_binary_sha256": "1c62af5c9ce456e65262f09806c6f24d7b02c59bd402962f2663165a392417ef",
+        "baseline_medians_ns": {
+          "wincode_leader": 278997603,
+          "wincode_validator": 21755771,
+          "lencode_leader": 218987662,
+          "lencode_validator": 36510245
+        },
+        "candidate_medians_ns": {
+          "wincode_leader": 278645182,
+          "wincode_validator": 21846421,
+          "lencode_leader": 216607893,
+          "lencode_validator": 35970474
+        },
+        "lencode_leader_improvement_pct": 1.087,
+        "lencode_leader_control_normalized_improvement_pct": 0.962,
+        "lencode_validator_improvement_pct": 1.478,
+        "lencode_validator_control_normalized_improvement_pct": 1.887,
+        "current_leader_speedup_vs_wincode": 1.286,
+        "current_validator_throughput_vs_wincode": 0.607,
+        "payload_bytes": 47849490,
+        "turbine_wire_bytes": 125089536,
+        "turbine_wire_regression_pct": 0.062,
+        "wire_reduction_vs_wincode_pct": 27.665,
+        "wire_compatibility": "compression selection changes, but raw and zstd payload tags retain their existing format and older compressed frames remain decodable",
+        "unsafe_code_added": false,
+        "validation": "three alternating CPU-affined 31-trial native exact-binary pairs plus two reverse-order seven-trial exact-binary primary-corpus pairs; all native runs reconstructed 100 blocks, 68,392 entries, and 124,218 transactions, and both primary runs verified sampled dictionary round trips; 217 lencode tests and 5 doctests passed, one doctest remained ignored; no-default, std-only, and all-feature all-target checks, formatting, and strict Clippy passed"
       }
     ],
     "failed_attempts": [
@@ -1689,6 +1722,18 @@
       {
         "optimization": "const-specialize instruction payload reconstruction by canonical-prefix mode",
         "reason": "a CPU-affined 31-trial exact-binary pair regressed lencode validator time by 2.37% absolutely and about 2.43% after normalization to wincode, so the two generated paths were removed"
+      },
+      {
+        "optimization": "extend whole-instruction borrowed decoding to multi-byte raw payload lengths",
+        "reason": "a CPU-affined 31-trial exact-binary pair regressed lencode validator time by 3.79% absolutely and more than 4% after normalization; the broader parser displaced the compact sub-64-byte hot path, so the committed narrow path was restored"
+      },
+      {
+        "optimization": "encode short raw Solana instructions directly through writer spare capacity",
+        "reason": "the pre-reserving form was neutral across two reverse-order 31-trial pairs; removing the reserve reduced the controlled leader gain to 0.28% with a flat validator, so both variants were removed below the 1% gate"
+      },
+      {
+        "optimization": "raise the byte-compression attempt cutoff from 96 to 1024 bytes",
+        "reason": "three 31-trial pairs improved normalized leader and validator time by 1.13% and 3.27%, but increased Turbine wire bytes by 1.49%; the retained 512-byte cutoff preserved qualifying CPU gains with only a 0.062% wire increase"
       }
     ],
     "full_resets": [
@@ -1911,10 +1956,10 @@
   },
   "final_summary": {
     "qualifying_scope": "lencode-owned changes and Agave replacement-call-site adapters only; general Agave optimizations are historical and excluded",
-    "native_entry_batch_leader_speedup_vs_wincode": 1.270,
-    "native_entry_batch_validator_throughput_vs_wincode": 0.566,
-    "native_entry_batch_payload_reduction_vs_wincode_pct": 28.238,
-    "native_entry_batch_turbine_wire_reduction_vs_wincode_pct": 27.710,
+    "native_entry_batch_leader_speedup_vs_wincode": 1.286,
+    "native_entry_batch_validator_throughput_vs_wincode": 0.607,
+    "native_entry_batch_payload_reduction_vs_wincode_pct": 28.141,
+    "native_entry_batch_turbine_wire_reduction_vs_wincode_pct": 27.665,
     "agave_production_batch_leader_speedup_vs_wincode": 2.086,
     "agave_production_batch_validator_throughput_vs_wincode": 0.932,
     "agave_turbine_wire_reduction_vs_wincode_pct": 59.211,
@@ -2961,6 +3006,43 @@
       "wire_bytes_changed": false,
       "copy_effect": "buffer-backed readers now lend compressed XOR bytes directly to zstd, and successful same-length frames XOR into the cached blob in place; this removes compressed staging plus full reconstruction while preserving the fallback for generic readers and length changes",
       "tests": "cargo test --offline --all-features: 189 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
+    },
+    {
+      "iteration": 27,
+      "optimization": "raise the byte-compression attempt cutoff from 96 to 512 bytes",
+      "commit": null,
+      "kept": true,
+      "validation": "two reverse-order seven-trial exact-binary primary-corpus pairs, three 31-trial native shred pairs, backward-compatible compression tests, and the full validation suite",
+      "baseline_binary_sha256": "0d43cde80b1734978d0e59e42e612590714ac8626416caf1cf02f48243230aee",
+      "candidate_binary_sha256": "07a759c10a55bdc0ad41b772b5c70aee982542a17010dfa75ef2ebd1323c1d11",
+      "primary_two_pair_mean_ns": {
+        "baseline_wincode_encode": 164198828,
+        "baseline_wincode_decode": 21470880,
+        "baseline_lencode_encode": 175122673,
+        "baseline_lencode_decode": 25591375,
+        "baseline_lencode_dict_encode": 150958608,
+        "baseline_lencode_dict_decode": 32669636,
+        "candidate_wincode_encode": 163096693,
+        "candidate_wincode_decode": 21329329,
+        "candidate_lencode_encode": 170070439,
+        "candidate_lencode_decode": 24959942,
+        "candidate_lencode_dict_encode": 145749899,
+        "candidate_lencode_dict_decode": 32107674
+      },
+      "primary_normalized_improvement_pct": {
+        "plain_encode": 2.229,
+        "plain_decode": 1.820,
+        "dict_encode": 2.798,
+        "dict_decode": 1.068
+      },
+      "primary_size_regression_pct": {
+        "plain": 0.147,
+        "dictionary": 0.228
+      },
+      "native_validator_normalized_improvement_pct": 1.887,
+      "native_turbine_wire_regression_pct": 0.062,
+      "wire_compatibility": "the cutoff changes encoder selection only; existing raw and zstd tags and both decode paths are unchanged",
+      "tests": "cargo test --offline --all-features: 209 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; no-default, std-only, and all-feature all-target checks passed; cargo fmt --all -- --check passed"
     }
   ],
   "failed_attempts": [
