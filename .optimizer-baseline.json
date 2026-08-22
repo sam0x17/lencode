@@ -1,12 +1,12 @@
 {
-  "version": 55,
+  "version": 56,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T14:47:12Z",
+  "updated_at": "2026-08-22T15:10:51Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 10,
+    "version": 11,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -94,52 +94,70 @@
         "lencode_validator_throughput": 0.851,
         "codec": "LZ4 FAST(4) through the normal two-FEC input limit and FAST(1) above it"
       },
-      "canonical_coalescing_result": {
+      "canonical_coalescing_trial": {
         "change": "for canonical LZ4 only, do not exit at a tightly packed FEC boundary until the existing two-typical-FEC target is reached; legacy wincode keeps the exact prior boundary behavior",
-        "latency_contract": "the receive deadline remains 50 ms from the first entry and the maximum component size is unchanged",
-        "protocol": "run the same frozen Rust 1.98.0 production benchmark executable on logical CPU 28 in three interleaved processes with 11 trials per format; compare the retained 1,982-component fixture with a queued-input regrouping at the canonical two-FEC target",
-        "model_limit": "the source corpus does not contain original BankingStage arrival timestamps; replaying retained boundaries produced 1,960 rather than 1,982 components, so the 1,153-component target fixture is an explicit queued-data upper bound rather than an exact live-arrival forecast",
-        "baseline_fixture": {
-          "path": "/tmp/agave-shred-broadcast-batches.bin",
-          "sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
-          "components": 1982,
-          "wincode_leader_ns": 452310876,
-          "wincode_validator_ns": 22145726,
-          "lencode_leader_ns": 266019062,
-          "lencode_validator_ns": 24018190,
-          "wincode_wire_bytes": 305022432,
-          "lencode_wire_bytes": 160407104,
-          "lencode_payload_bytes": 34593294
+        "status": "reverted after receiver-path validation",
+        "latency_contract": "the candidate retained the 50 ms receive deadline and maximum component size",
+        "queued_upper_bound": {
+          "protocol": "exercise the actual private receive function with every entry queued, then run the emitted fixture through the frozen Rust 1.98.0 production benchmark executable",
+          "legacy_components": 1960,
+          "canonical_components": 1153,
+          "legacy_fixture_sha256": "9ca46e2d646d3d2b41f46376a392f9f31df2257b995fb7a9fc836cd94b30ace5",
+          "canonical_fixture_sha256": "9ae88546b7befcdf069610e8374d492516cc7c5ed04e6cca91d93aa2800974e1",
+          "lencode_leader_improvement_pct": 12.977,
+          "lencode_validator_regression_pct": 1.256,
+          "lencode_wire_reduction_pct": 16.731
         },
-        "target_fixture": {
-          "path": "/tmp/agave-shred-broadcast-batches-target2.bin",
-          "sha256": "9ae88546b7befcdf069610e8374d492516cc7c5ed04e6cca91d93aa2800974e1",
-          "components": 1153,
-          "wincode_leader_ns": 364182601,
-          "wincode_validator_ns": 21831445,
-          "lencode_leader_ns": 231498137,
-          "lencode_validator_ns": 24319942,
-          "wincode_wire_bytes": 241077408,
-          "lencode_wire_bytes": 133568864,
-          "lencode_payload_bytes": 32753807
+        "paced_receiver_model": {
+          "protocol": "deliver each source slot through the actual channel and receive function over 400 ms, pacing entries by cumulative serialized bytes; benchmark each emitted fixture in three interleaved CPU-28 processes with 31 trials per format",
+          "model_limit": "entry timing is synthetic because the source corpus has no BankingStage timestamps",
+          "calibration": {
+            "legacy_components": 1974,
+            "frozen_components": 1982,
+            "component_count_difference_pct": 0.404,
+            "legacy_exited_timeout": 24,
+            "legacy_fixture_sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72"
+          },
+          "candidate": {
+            "components": 1167,
+            "exited_hit_max": 976,
+            "exited_slot_ended": 100,
+            "exited_timeout": 91,
+            "fixture_sha256": "2ef8626cc7eb3209640651fa2824ee752fa4876fca9281d5a0efa0138d6de0b9"
+          },
+          "same_codec_baseline": {
+            "lencode_leader_ns": 267955666,
+            "lencode_validator_ns": 23860255,
+            "lencode_payload_bytes": 34545514,
+            "lencode_wire_bytes": 161729568
+          },
+          "same_codec_candidate": {
+            "lencode_leader_ns": 230497012,
+            "lencode_validator_ns": 24424726,
+            "lencode_payload_bytes": 32763363,
+            "lencode_wire_bytes": 133802240
+          },
+          "component_reduction_pct": 40.881,
+          "lencode_leader_improvement_pct": 13.979,
+          "lencode_validator_regression_pct": 2.366,
+          "lencode_payload_reduction_pct": 5.159,
+          "lencode_wire_reduction_pct": 17.268,
+          "candidate_vs_legacy": {
+            "leader_improvement_pct": 50.375,
+            "validator_regression_pct": 10.103,
+            "wire_reduction_pct": 57.299,
+            "leader_speedup": 2.015,
+            "validator_throughput": 0.908
+          }
         },
-        "component_reduction_pct": 41.826,
-        "wincode_leader_improvement_pct": 19.484,
-        "lencode_leader_improvement_pct": 12.977,
-        "wincode_validator_improvement_pct": 1.419,
-        "lencode_validator_regression_pct": 1.256,
-        "lencode_payload_reduction_pct": 5.317,
-        "lencode_wire_reduction_vs_retained_pct": 16.731,
-        "lencode_wire_reduction_vs_target_wincode_pct": 44.595,
-        "lencode_wire_reduction_vs_original_wincode_pct": 56.210,
         "benchmark_binary_sha256": "953fac34562551a152a1e9422fab9805d9ede5f972dd094a8b103bce6fc583b2",
-        "source_sha256": {
-          "broadcast_utils": "2bfbf0bd39c0f61486605516272e79d2c84eceb952c9fbaf16d5e87b189ea959",
-          "broadcast_duplicates_run": "b76918c0cee44223426fed76132836204a5a7d030915aef5b8c7ddf81dd6b895",
-          "standard_broadcast_run": "0431f12d402968a307a911eef24b29abde033a9de3dc030b4662cf17d2c89188"
+        "restored_source_sha256": {
+          "broadcast_utils": "c68f5d644a21632c9ef687c51d4e9da061e2e138faf9539b4f206ec89f801fa1",
+          "broadcast_duplicates_run": "f7faaada659fbdf95b8d4be0b5bfe683b351a8f5b8c354b33e9c032199952ad1",
+          "standard_broadcast_run": "8fc035e067f664c956bd555ba2fc557fe13ee7ab3555bc21090f60544b83b31b",
+          "production_codec": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b"
         },
-        "wire_compatibility": "component grouping changes, but the canonical LCSH version-1 frame and shred formats do not; full Turbine tests include canonical frame reconstruction and legacy fallback",
-        "validation": "7 focused coalescing tests and all 49 Turbine library tests passed; strict Turbine library Clippy passed on Rust 1.98.0; no unsafe code was added"
+        "decision": "reverted because the calibrated receiver-path validator regression exceeded the 2% ceiling; protected sources and the exact benchmark binary were restored"
       }
     },
     "blockstore_component_benchmark": {
@@ -785,21 +803,21 @@
       {
         "iteration": 12,
         "optimization": "coalesce canonical LZ4 broadcast components to the existing two-FEC target before accepting a tightly packed early boundary",
-        "kept": true,
+        "kept": false,
         "integration": "Agave StandardBroadcastRun receive batching",
         "legacy_behavior_changed": false,
         "receive_deadline_changed": false,
-        "component_reduction_pct": 41.826,
-        "lencode_leader_improvement_upper_bound_pct": 12.977,
-        "lencode_validator_regression_upper_bound_pct": 1.256,
-        "lencode_wire_reduction_upper_bound_pct": 16.731,
+        "component_reduction_pct": 40.881,
+        "lencode_leader_improvement_pct": 13.979,
+        "lencode_validator_regression_pct": 2.366,
+        "lencode_wire_reduction_pct": 17.268,
         "benchmark_binary_sha256": "953fac34562551a152a1e9422fab9805d9ede5f972dd094a8b103bce6fc583b2",
-        "baseline_fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
-        "target_fixture_sha256": "9ae88546b7befcdf069610e8374d492516cc7c5ed04e6cca91d93aa2800974e1",
-        "model_limit": "queued production-corpus upper bound; the fixture has no original entry-arrival timestamps",
+        "baseline_fixture_sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72",
+        "target_fixture_sha256": "2ef8626cc7eb3209640651fa2824ee752fa4876fca9281d5a0efa0138d6de0b9",
+        "model_limit": "actual receiver path with 400 ms synthetic per-slot pacing; the source corpus has no original entry-arrival timestamps",
         "wire_compatibility": "canonical LCSH v1 and shred bytes retain their existing formats; only component boundaries change",
         "unsafe_code_added": false,
-        "validation": "7 focused coalescing tests, all 49 Turbine library tests, and strict Turbine Clippy passed on Rust 1.98.0"
+        "validation": "legacy calibration landed within 0.4% of the frozen component count; three 31-trial process pairs confirmed the validator regression, then protected sources and the exact binary were restored"
       }
     ],
     "failed_attempts": [
@@ -978,6 +996,14 @@
       {
         "optimization": "write parsed Blockstore components directly into the final output allocation",
         "reason": "three interleaved CPU-affined 31-trial pairs changed median wincode loading from 27.499 ms to 27.537 ms (0.14% slower) and canonical-LZ4 from 29.307 ms to 29.158 ms (0.51% faster, 0.65% normalized); candidate binary 1829685902840c7ee186e9bd003c9ec496fa81e31e3330eef9cd09e1c8ce1cbc was removed below the 5% threshold, and source ae2f69dafadcb6891736577a4eb9c9fa627a403b80c84bb2aee06cb376529fc5 plus binary bfa7c7d191f804e3dd9cf69c375adf41d026311fae2c3914cb14ca7776ad2120 were restored"
+      },
+      {
+        "optimization": "coalesce canonical LZ4 broadcast components to the existing two-FEC target",
+        "reason": "the actual receive path with 400 ms byte-paced slots produced 1,974 legacy components versus 1,982 in the frozen fixture, then reduced canonical components to 1,167; three CPU-affined 31-trial process pairs improved same-codec leader time by 13.98% and wire bytes by 17.27% but regressed validator time from 23.860 ms to 24.425 ms (2.37%), so the batching change was removed under the regression gate"
+      },
+      {
+        "optimization": "use LZ4 FAST(8) only for coalesced components between one and two typical FEC inputs",
+        "reason": "an exact 11-trial candidate run left validator time unchanged at 24.439 ms, regressed leader time 3.12%, increased compressed payload 4.84%, and increased Turbine wire bytes 5.76%; FAST(4) was restored, followed by the rejected coalescing policy"
       }
     ],
     "full_resets": [
