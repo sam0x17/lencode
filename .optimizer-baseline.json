@@ -1,7 +1,7 @@
 {
-  "version": 26,
+  "version": 27,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T08:13:57Z",
+  "updated_at": "2026-08-22T08:50:57Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -109,6 +109,10 @@
       {
         "optimization": "specialize one- and two-byte multi-byte u64 varints before the general eight-byte load",
         "reason": "three interleaved exact-binary 11-trial runs increased median lencode validator time from 42.315 ms to 42.953 ms (1.5% absolute, 1.2% normalized to wincode) while leader time was flat; the extra branch was removed"
+      },
+      {
+        "optimization": "carry an opaque lazy transaction layout through reconstruction and build Agave views without the second eager instruction parse",
+        "reason": "three interleaved exact-binary 11-trial runs reduced median lencode validator time from 41.656 ms to 41.499 ms (0.4% absolute) but regressed 0.9% after normalization to wincode and regressed leader time 0.3%; even the allocation-free lazy frame sidecar cost roughly as much as the parse it replaced, so the lencode and Agave prototypes were removed"
       }
     ],
     "contention_events": [
