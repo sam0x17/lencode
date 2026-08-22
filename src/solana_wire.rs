@@ -288,15 +288,15 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
 
 /// Reconstructs one exact canonical-LZ4 entry-batch frame.
 ///
-/// `output` is cleared on entry and on every error. The caller still validates
-/// the reconstructed canonical entry-batch structure with its normal parser.
+/// Existing initialized output bytes are reused and overwritten on success.
+/// `output` is cleared on every error. The caller still validates the
+/// reconstructed canonical entry-batch structure with its normal parser.
 #[cfg(feature = "solana-types")]
 pub fn transcode_canonical_lz4_entry_batch(
     input: &[u8],
     output: &mut Vec<u8>,
     max_canonical_bytes: usize,
 ) -> Result<usize> {
-    output.clear();
     let result = transcode_canonical_lz4_entry_batch_inner(input, output, max_canonical_bytes);
     if result.is_err() {
         output.clear();
@@ -328,9 +328,13 @@ fn transcode_canonical_lz4_entry_batch_inner(
         return Err(Error::DecodeLimitExceeded);
     }
     output
-        .try_reserve(original_len)
+        .try_reserve(original_len.saturating_sub(output.len()))
         .map_err(|_| Error::DecodeLimitExceeded)?;
-    output.resize(original_len, 0);
+    if output.len() < original_len {
+        output.resize(original_len, 0);
+    } else {
+        output.truncate(original_len);
+    }
     let written = lz4_block::decompress_to_buffer(compressed, None, output)
         .map_err(|_| Error::InvalidData)?;
     if written != original_len {
@@ -1945,6 +1949,13 @@ mod tests {
         expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
         expected_frame.extend_from_slice(&compressed);
         assert_eq!(encoded, expected_frame);
+
+        canonical.extend_from_slice(&[1, 2, 3]);
+        transcode_canonical_lz4_entry_batch(&encoded, &mut canonical, expected.len()).unwrap();
+        assert_eq!(canonical, expected);
+        canonical.truncate(expected.len() / 2);
+        transcode_canonical_lz4_entry_batch(&encoded, &mut canonical, expected.len()).unwrap();
+        assert_eq!(canonical, expected);
 
         canonical.extend_from_slice(&[1, 2, 3]);
         assert!(matches!(
