@@ -1,7 +1,7 @@
 {
-  "version": 34,
+  "version": 35,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T10:05:24Z",
+  "updated_at": "2026-08-22T10:17:33Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -33,10 +33,10 @@
       "lencode_validator_throughput": 0.504601927
     },
     "current_baseline": {
-      "wincode_leader": { "value": 278110209, "unit": "ns/100 blocks" },
-      "wincode_validator": { "value": 22992643, "unit": "ns/100 blocks" },
-      "lencode_leader": { "value": 192508962, "unit": "ns/100 blocks" },
-      "lencode_validator": { "value": 24755819, "unit": "ns/100 blocks" },
+      "wincode_leader": { "value": 289026758, "unit": "ns/100 blocks" },
+      "wincode_validator": { "value": 18821318, "unit": "ns/100 blocks" },
+      "lencode_leader": { "value": 192438840, "unit": "ns/100 blocks" },
+      "lencode_validator": { "value": 23297474, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
       "lencode_wire_bytes": 80592512,
       "mode": "canonical wincode entry batch inside LZ4 outer frame"
@@ -142,6 +142,30 @@
         "wire_reduction_vs_wincode_pct": 53.396,
         "leader_speedup_vs_wincode": 1.445,
         "validator_throughput_vs_wincode": 0.929
+      },
+      {
+        "iteration": 5,
+        "optimization": "reuse caller-owned deshred output buffers on both validator paths",
+        "kept": true,
+        "integration": "Agave Shredder API and canonical-LZ4 prototype",
+        "results": {
+          "wincode_leader": { "value": 289026758, "unit": "ns/100 blocks", "range": [288893537, 291716157] },
+          "wincode_validator": { "value": 18821318, "unit": "ns/100 blocks", "range": [18740658, 18891958] },
+          "lencode_leader": { "value": 192438840, "unit": "ns/100 blocks", "range": [192422221, 194231777] },
+          "lencode_validator": { "value": 23297474, "unit": "ns/100 blocks", "range": [23279923, 23301463] },
+          "wincode_wire_bytes": 172931616,
+          "lencode_wire_bytes": 80592512
+        },
+        "candidate_binary_sha256": "b11a45b05147ed73abbef7efa0052f72e864e66db9ff13a6e21fd662d115f465",
+        "candidate_source_sha256": "e82858cf4b4e1a99fcab861a305d22fbe51a955e551f485f9cfd4bbe0ece1a06",
+        "leader_change_vs_canonical_lz4_pct": -0.238,
+        "leader_change_vs_canonical_lz4_normalized_pct": -0.092,
+        "validator_change_vs_canonical_lz4_pct": -6.624,
+        "validator_change_vs_canonical_lz4_normalized_pct": 14.876,
+        "wire_change_vs_canonical_lz4_pct": 0.0,
+        "wire_reduction_vs_wincode_pct": 53.396,
+        "leader_speedup_vs_wincode": 1.502,
+        "validator_throughput_vs_wincode": 0.808
       }
     ],
     "failed_attempts": [
