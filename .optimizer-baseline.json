@@ -1,7 +1,7 @@
 {
-  "version": 31,
+  "version": 32,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T09:42:55Z",
+  "updated_at": "2026-08-22T09:46:27Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -176,6 +176,10 @@
       {
         "optimization": "reuse caller-owned deshred buffers across entry batches",
         "reason": "an exact 11-trial run reduced contextual lencode validator time from 40.571 ms to 39.547 ms (2.5%), below the 5% keep threshold; wincode fell from 23.458 ms to 20.774 ms, making lencode 10.1% worse after normalization, so the Agave API and benchmark prototype were removed"
+      },
+      {
+        "optimization": "disable per-field zstd when selective outer LZ4 is available",
+        "reason": "an exact 11-trial run improved the retained LZ4 path by 2.7% on the leader and 2.5% on the validator (3.4% and 2.3% normalized to wincode), below the 5% keep threshold, while increasing Turbine wire bytes by 0.6%; the global compression cutoff experiment and Agave benchmark prototype were removed"
       }
     ],
     "contention_events": [
