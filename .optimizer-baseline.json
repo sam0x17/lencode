@@ -1,7 +1,7 @@
 {
-  "version": 20,
+  "version": 21,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T00:47:11Z",
+  "updated_at": "2026-08-22T01:13:56Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -128,14 +128,15 @@
     "micro_pubkey_vec_lencode_dict_encode": { "value": 1616.6, "unit": "ns/iter" },
     "micro_pubkey_vec_lencode_dict_decode": { "value": 2320.3, "unit": "ns/iter" },
     "micro_u64_pack": { "value": 1.131, "unit": "ns/iter" },
-    "diff_encode_4kb_1pct_scatter": { "value": 1.8802, "unit": "us/iter" },
-    "diff_encode_4kb_10pct_scatter": { "value": 13.423, "unit": "us/iter" },
-    "diff_encode_4kb_contiguous_64b": { "value": 1.3253, "unit": "us/iter" },
-    "diff_encode_4kb_identical": { "value": 1.2721, "unit": "us/iter" },
-    "diff_encode_64kb_1pct_scatter": { "value": 27.783, "unit": "us/iter" },
-    "diff_encode_64kb_10pct_scatter": { "value": 198.76, "unit": "us/iter" },
-    "diff_encode_256kb_0_1pct_scatter": { "value": 80.136, "unit": "us/iter" },
-    "diff_encode_256kb_10pct_scatter": { "value": 1154.8, "unit": "us/iter" },
+    "diff_encode_4kb_1pct_scatter": { "value": 1.6922, "unit": "us/iter" },
+    "diff_encode_4kb_10pct_scatter": { "value": 13.235, "unit": "us/iter" },
+    "diff_encode_4kb_contiguous_64b": { "value": 0.56787, "unit": "us/iter" },
+    "diff_encode_4kb_identical": { "value": 0.44203, "unit": "us/iter" },
+    "diff_encode_64kb_1pct_scatter": { "value": 23.652, "unit": "us/iter" },
+    "diff_encode_64kb_10pct_scatter": { "value": 193.05, "unit": "us/iter" },
+    "diff_encode_64kb_contiguous_1kb": { "value": 7.5634, "unit": "us/iter" },
+    "diff_encode_256kb_0_1pct_scatter": { "value": 34.756, "unit": "us/iter" },
+    "diff_encode_256kb_10pct_scatter": { "value": 1131.9, "unit": "us/iter" },
     "diff_decode_4kb_1pct_scatter": { "value": 471.51, "unit": "ns/iter" }
   },
   "final_summary": {
@@ -150,11 +151,14 @@
     "micro_message_encode_time_improvement_vs_original_pct": 43.697,
     "micro_pubkey_vec_dict_encode_time_improvement_vs_original_pct": 21.608,
     "micro_u64_pack_time_improvement_pct": 85.88,
-    "diff_encode_4kb_10pct_time_improvement_pct": 55.024,
+    "diff_encode_4kb_10pct_time_improvement_pct": 55.654,
     "diff_rle_staging_4kb_1pct_time_improvement_pct": 17.223,
     "diff_deferred_rle_4kb_10pct_time_improvement_pct": 5.554,
     "diff_deferred_rle_256kb_10pct_time_improvement_pct": 6.590,
     "diff_slice_patch_4kb_1pct_time_improvement_pct": 8.591,
+    "diff_block_scan_4kb_identical_time_improvement_pct": 65.142,
+    "diff_block_scan_64kb_contiguous_time_improvement_pct": 61.437,
+    "diff_block_scan_256kb_0_1pct_time_improvement_pct": 56.559,
     "all_feature_tests": { "unit": 186, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
@@ -918,6 +922,92 @@
         "large_scatter_10pct": "6f9a3cbbd7e1e58f"
       },
       "copy_effect": "Patch payloads remain zero-copy borrows, while replacing Cow<[u8]> with &[u8] shrinks each patch descriptor from 32 to 24 bytes and removes the borrowed-variant dispatch; this cuts patch-vector metadata by 25% without changing selection or serialization",
+      "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
+    },
+    {
+      "iteration": 24,
+      "optimization": "skip equal blocks during sparse RLE patch discovery",
+      "commit": null,
+      "kept": true,
+      "validation": "paired exact-binary Criterion groups plus long isolated winners and controls, a seven-round primary-corpus A/B pair, exact prior-version wire fingerprints, and the full validation suite",
+      "diff_encode": {
+        "4kb_1pct_scatter": {
+          "baseline_us": 1.8878,
+          "candidate_us": 1.6922,
+          "latency_improvement_pct": 10.361
+        },
+        "4kb_10pct_scatter": {
+          "baseline_us": 13.351,
+          "candidate_us": 13.235,
+          "latency_improvement_pct": 0.869
+        },
+        "4kb_25pct_scatter": {
+          "baseline_us": 17.118,
+          "candidate_us": 17.431,
+          "latency_change_pct": 1.828
+        },
+        "4kb_contiguous_64b": {
+          "baseline_us": 1.3150,
+          "candidate_us": 0.56787,
+          "latency_improvement_pct": 56.816
+        },
+        "4kb_identical": {
+          "baseline_us": 1.2681,
+          "candidate_us": 0.44203,
+          "latency_improvement_pct": 65.142
+        },
+        "64kb_1pct_scatter": {
+          "baseline_us": 28.059,
+          "candidate_us": 23.652,
+          "latency_improvement_pct": 15.706
+        },
+        "64kb_10pct_scatter": {
+          "baseline_us": 200.62,
+          "candidate_us": 193.05,
+          "latency_improvement_pct": 3.773
+        },
+        "64kb_contiguous_1kb": {
+          "baseline_us": 19.613,
+          "candidate_us": 7.5634,
+          "latency_improvement_pct": 61.437
+        },
+        "256kb_0_1pct_scatter": {
+          "baseline_us": 80.007,
+          "candidate_us": 34.756,
+          "latency_improvement_pct": 56.559
+        },
+        "256kb_10pct_scatter": {
+          "baseline_us": 1130.1,
+          "candidate_us": 1131.9,
+          "latency_change_pct": 0.159
+        }
+      },
+      "primary_final_ab": {
+        "baseline_wincode_encode_ns": 130575765,
+        "baseline_wincode_decode_ns": 21010058,
+        "baseline_lencode_encode_ns": 142329268,
+        "baseline_lencode_decode_ns": 25390584,
+        "baseline_lencode_dict_encode_ns": 116937224,
+        "baseline_lencode_dict_decode_ns": 31869278,
+        "candidate_wincode_encode_ns": 130443954,
+        "candidate_wincode_decode_ns": 21278949,
+        "candidate_lencode_encode_ns": 142662409,
+        "candidate_lencode_decode_ns": 25596834,
+        "candidate_lencode_dict_encode_ns": 117325085,
+        "candidate_lencode_dict_decode_ns": 32127740,
+        "plain_encode_normalized_change_pct": 0.335,
+        "dict_encode_normalized_change_pct": 0.433,
+        "plain_decode_normalized_change_pct": -0.462,
+        "dict_decode_normalized_change_pct": -0.463
+      },
+      "wire_bytes_changed": false,
+      "wire_fingerprints": {
+        "identical": "152268ea6ef80dfe",
+        "scatter_1pct": "bcc1decfa901be2f",
+        "scatter_10pct": "7dac679a4b0a0bfb",
+        "contiguous": "03ac37670f684af9"
+      },
+      "copy_effect": "two zero-copy edge probes select a sparse scanner that compares 32-byte borrowed blocks and skips equal blocks wholesale; dense inputs retain the compact bytewise scanner, and patch coalescing preserves the exact prior wire layout",
       "tests": "cargo test --offline --all-features: 186 unit and 8 integration passed; doctests: 5 passed, 1 ignored; cargo clippy --offline --all-features --all-targets -- -D warnings passed; cargo check --offline --no-default-features passed; cargo fmt --all -- --check passed"
     }
   ],

@@ -73,6 +73,7 @@ struct RleCandidate<'a> {
 /// Minimum gap between patches before they get coalesced into one.
 /// Coalescing avoids 2 varint headers (gap + len) when the gap is tiny.
 const COALESCE_GAP: usize = 8;
+const SCAN_BLOCK: usize = 32;
 
 #[inline(always)]
 const fn varint_len(value: usize) -> usize {
@@ -151,9 +152,96 @@ fn compute_patches<'a>(old: &[u8], new: &'a [u8]) -> Option<Vec<Patch<'a>>> {
     }
 }
 
+#[inline(always)]
+fn should_scan_blocks(old: &[u8], new: &[u8]) -> bool {
+    let min_len = old.len().min(new.len());
+    if min_len < SCAN_BLOCK * 2 {
+        return false;
+    }
+
+    old[..SCAN_BLOCK] == new[..SCAN_BLOCK]
+        && old[min_len - SCAN_BLOCK..min_len] == new[min_len - SCAN_BLOCK..min_len]
+}
+
+/// Computes sparse patches while skipping equal blocks wholesale. This stays
+/// separate so dense inputs retain the compact bytewise scanner's code layout.
+#[inline(never)]
+fn compute_patches_blockwise<'a>(old: &[u8], new: &'a [u8]) -> Option<Vec<Patch<'a>>> {
+    let min_len = old.len().min(new.len());
+    let mut patches: Vec<Patch> = Vec::new();
+    let mut i = 0;
+
+    while i < min_len {
+        let remaining = min_len - i;
+        let block_end = if remaining >= SCAN_BLOCK {
+            i + SCAN_BLOCK
+        } else {
+            min_len
+        };
+        if old[i..block_end] == new[i..block_end] {
+            i = block_end;
+            continue;
+        }
+
+        while i < block_end {
+            if old[i] != new[i] {
+                let start = i;
+                // Runs crossing a block boundary are joined below.
+                while i < block_end && old[i] != new[i] {
+                    i += 1;
+                }
+                patches.push(Patch {
+                    offset: start,
+                    data: &new[start..i],
+                });
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    if new.len() > old.len() {
+        patches.push(Patch {
+            offset: old.len(),
+            data: &new[old.len()..],
+        });
+    }
+
+    if patches.len() > 1 {
+        let mut coalesced: Vec<Patch> = Vec::with_capacity(patches.len());
+        coalesced.push(patches.remove(0));
+        for p in patches {
+            let last = coalesced.last_mut().unwrap();
+            let last_end = last.offset + last.data.len();
+            let gap = p.offset - last_end;
+            if gap < COALESCE_GAP {
+                let p_end = p.offset + p.data.len();
+                last.data = &new[last.offset..p_end];
+            } else {
+                coalesced.push(p);
+            }
+        }
+        let patch_bytes: usize = coalesced.iter().map(|p| p.data.len()).sum();
+        if patch_bytes > new.len() / 2 {
+            return None;
+        }
+        Some(coalesced)
+    } else {
+        let patch_bytes: usize = patches.iter().map(|p| p.data.len()).sum();
+        if patch_bytes > new.len() / 2 {
+            return None;
+        }
+        Some(patches)
+    }
+}
+
 /// Plan an RLE frame without copying its patch payloads into a staging buffer.
 fn plan_rle<'a>(old: &[u8], new: &'a [u8]) -> Option<RleCandidate<'a>> {
-    let patches = compute_patches(old, new)?;
+    let patches = if should_scan_blocks(old, new) {
+        compute_patches_blockwise(old, new)?
+    } else {
+        compute_patches(old, new)?
+    };
     let mut encoded_len = 1 + varint_len(new.len()) + varint_len(patches.len());
     let mut cursor = 0usize;
     for patch in &patches {
