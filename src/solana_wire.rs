@@ -812,21 +812,23 @@ fn append_byte_payload(
         }
         reader.advance(payload_len);
         if short_u16_prefix {
-            append_short_u16(output, original_len, max_output)?;
+            append_short_u16_payload(output, decompressed, max_output)?;
+        } else {
+            append_bytes(output, decompressed, max_output)?;
         }
-        append_bytes(output, decompressed, max_output)?;
         Ok(original_len)
     } else {
         reader.claim_sequence(payload_len, 1)?;
-        if short_u16_prefix {
-            append_short_u16(output, payload_len, max_output)?;
-        }
         {
             let available = reader.buf().ok_or(Error::InvalidData)?;
             if available.len() < payload_len {
                 return Err(Error::ReaderOutOfData);
             }
-            append_bytes(output, &available[..payload_len], max_output)?;
+            if short_u16_prefix {
+                append_short_u16_payload(output, &available[..payload_len], max_output)?;
+            } else {
+                append_bytes(output, &available[..payload_len], max_output)?;
+            }
         }
         reader.advance(payload_len);
         Ok(payload_len)
@@ -964,6 +966,19 @@ fn append_short_u16(output: &mut Vec<u8>, len: usize, max_output: usize) -> Resu
     };
     append_bytes(output, &bytes[..encoded_len], max_output)?;
     Ok(encoded_len)
+}
+
+#[inline(always)]
+fn append_short_u16_payload(output: &mut Vec<u8>, payload: &[u8], max_output: usize) -> Result<()> {
+    if payload.len() < 0x80 {
+        ensure_output(output, payload.len() + 1, max_output)?;
+        output.push(payload.len() as u8);
+        output.extend_from_slice(payload);
+    } else {
+        append_short_u16(output, payload.len(), max_output)?;
+        append_bytes(output, payload, max_output)?;
+    }
+    Ok(())
 }
 
 fn append_zeroes(output: &mut Vec<u8>, len: usize, max_output: usize) -> Result<()> {
