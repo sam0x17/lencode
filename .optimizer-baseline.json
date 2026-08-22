@@ -1,12 +1,12 @@
 {
-  "version": 49,
+  "version": 50,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T13:01:21Z",
+  "updated_at": "2026-08-22T13:26:46Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 4,
+    "version": 5,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -146,7 +146,94 @@
         "independent_runs": 3,
         "binary_sha256": "7813da8df908a744835ec3b92fa859b350f354c480c6ee4c6e889cd82952bc47"
       },
-      "conclusion": "end-to-end Blockstore loading is at parity within run-to-run variation; reading 47.4% fewer Turbine bytes offsets the LZ4 and parser work that made the isolated candidate decoder 14.9% slower in throughput"
+      "production_jemalloc_baseline": {
+        "benchmark_command": "LENCODE_BLOCKSTORE_RUNS=11 taskset -c 28 target/release/deps/lencode_blockstore_components_jemalloc-e75e0765f3288836 /tmp/agave-shred-broadcast-batches.bin",
+        "allocator": "tikv-jemallocator 0.6.0, matching the validator global allocator",
+        "benchmark_source_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "baseline_binary_sha256": "3fcfdc07c2b7313bfac514b4a9d5074fc1f1921519d55edb0b5d6c0d63ec1c00",
+        "wincode_validator": { "value": 64298300, "unit": "ns/100 Blockstore slots", "range": [63716388, 65283713] },
+        "lencode_validator": { "value": 64765541, "unit": "ns/100 Blockstore slots", "range": [63751278, 66827219] },
+        "lencode_validator_throughput": 0.993,
+        "trials_per_run": 11,
+        "independent_runs": 3,
+        "profile": {
+          "protocol": "perf record at 999 Hz on logical CPU 28 over the exact jemalloc baseline binary with 101 alternating warmed trials per format",
+          "samples": 15000,
+          "lost_samples": 0,
+          "self_cycles_pct": {
+            "rocksdb_memtable_key_compare": 10.32,
+            "rocksdb_memtable_multiget": 7.00,
+            "memcmp": 5.52,
+            "rocksdb_find_greater_or_equal": 5.50,
+            "transaction_frame_parse": 4.77,
+            "memmove": 4.29,
+            "rocksdb_introsort": 4.15,
+            "rocksdb_comparator_thunk": 3.88,
+            "lz4_decompress_safe": 3.86,
+            "sha256_blocks": 3.73,
+            "block_component_parse": 2.04,
+            "shredder_deshred": 0.92
+          },
+          "conclusion": "the benchmark supplied ascending big-endian shred keys but asked RocksDB to copy and sort them again"
+        }
+      },
+      "sorted_input_result": {
+        "change": "pass the proven ascending shred-key range to RocksDB batched MultiGet with sorted_input enabled; generic typed multi-get callers retain the unsorted path",
+        "rocksdb_contract": "sorted_input skips RocksDB's internal key copy and std::sort when keys already follow comparator order",
+        "blockstore_source_sha256": "88df8e61c5eb854247f9260c8122919d4af978af66bf592ce64af78891c21b7f",
+        "blockstore_db_source_sha256": "5cef012698a9a972c5d658e99f89ec265f1a91aaaab637e251d2acfb4f43352c",
+        "production_codec_source_sha256": "915184c31dafd6b3c512b4f527e8656ab2ceb6beb7ff974cae1d9a3df69087ba",
+        "jemalloc": {
+          "protocol": "median of three paired independent processes on logical CPU 28, each with 31 alternating warmed trials per format",
+          "baseline_wincode_validator": { "value": 64048756, "unit": "ns/100 Blockstore slots", "range": [63471194, 65006930] },
+          "baseline_lencode_validator": { "value": 63630455, "unit": "ns/100 Blockstore slots", "range": [63585215, 65279701] },
+          "candidate_wincode_validator": { "value": 58319346, "unit": "ns/100 Blockstore slots", "range": [58038335, 58437486] },
+          "candidate_lencode_validator": { "value": 58025464, "unit": "ns/100 Blockstore slots", "range": [56293828, 59631260] },
+          "wincode_latency_improvement_pct": 8.945,
+          "lencode_latency_improvement_pct": 8.809,
+          "lencode_validator_throughput_vs_wincode": 1.005,
+          "baseline_binary_sha256": "3fcfdc07c2b7313bfac514b4a9d5074fc1f1921519d55edb0b5d6c0d63ec1c00",
+          "candidate_binary_sha256": "8a7dc09e889f3e9f5b0cdb0427bcab1482fac6101d4f1a58ca9c1ed4587d90d8"
+        },
+        "glibc": {
+          "protocol": "median of three paired independent processes on logical CPU 28, each with 31 alternating warmed trials per format",
+          "baseline_wincode_validator": { "value": 70501590, "unit": "ns/100 Blockstore slots", "range": [70405320, 71947786] },
+          "baseline_lencode_validator": { "value": 71706524, "unit": "ns/100 Blockstore slots", "range": [71273854, 71817675] },
+          "candidate_wincode_validator": { "value": 63418115, "unit": "ns/100 Blockstore slots", "range": [62942602, 65469922] },
+          "candidate_lencode_validator": { "value": 63970486, "unit": "ns/100 Blockstore slots", "range": [63468794, 64843219] },
+          "wincode_latency_improvement_pct": 10.047,
+          "lencode_latency_improvement_pct": 10.788,
+          "lencode_validator_throughput_vs_wincode": 0.991,
+          "baseline_binary_sha256": "7813da8df908a744835ec3b92fa859b350f354c480c6ee4c6e889cd82952bc47",
+          "candidate_binary_sha256": "d6ef962385a2df45d79ac4da6ade95ec592734991736e38bd36874bd2d7ca655"
+        },
+        "retained_profile": {
+          "protocol": "perf record at 999 Hz on logical CPU 28 over the exact retained jemalloc binary with 101 alternating warmed trials per format",
+          "samples": 13894,
+          "lost_samples": 0,
+          "wincode_validator_ns": 57917374,
+          "lencode_validator_ns": 59587611,
+          "rocksdb_introsort_baseline_self_cycles_pct": 4.15,
+          "rocksdb_introsort_candidate_samples": 0,
+          "conclusion": "the internal RocksDB sort disappeared; the remaining hot path is the actual MemTable lookup and comparison work"
+        },
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
+      },
+      "rust_1_98_compiler_trial": {
+        "change": "raise the Agave workspace toolchain and MSRV from Rust 1.97.1 to 1.98.0 while keeping the frozen benchmark and sorted-read sources exact",
+        "protocol": "median of three paired independent processes on logical CPU 28, each with 31 alternating warmed trials per format",
+        "rust_1_97_binary_sha256": "8a7dc09e889f3e9f5b0cdb0427bcab1482fac6101d4f1a58ca9c1ed4587d90d8",
+        "rust_1_98_binary_sha256": "98fe60e6c0248f865752a8b146e9b22751fe2b16ff5350579a7b5f73f1e4655e",
+        "rust_1_97_wincode_validator_ns": 58251482,
+        "rust_1_98_wincode_validator_ns": 61349343,
+        "rust_1_97_lencode_validator_ns": 57224889,
+        "rust_1_98_lencode_validator_ns": 59174306,
+        "wincode_latency_regression_pct": 5.318,
+        "lencode_latency_regression_pct": 3.407,
+        "result": "reverted the Agave compiler bump and restored lencode's Rust 1.97.1 compatibility floor; lencode retains Rust 1.98.0 as its development toolchain"
+      },
+      "conclusion": "sorted shred-key reads make production-jemalloc Blockstore loading 8.8% faster and leave canonical LZ4 at parity with wincode while preserving the 47.4% Turbine wire reduction"
     },
     "history": [
       {
@@ -472,6 +559,23 @@
         "leader_speedup_vs_wincode": 1.706,
         "validator_throughput_vs_wincode": 0.851,
         "validation": "three independent 11-trial runs cleared the 5% control-normalized leader threshold with no measured regression above 2%; 345 ledger tests and 47 turbine tests passed, strict ledger and turbine Clippy passed, and focused tests covered both acceleration paths and prior FAST(1) decoding"
+      },
+      {
+        "iteration": 11,
+        "optimization": "mark ascending Blockstore shred keys as sorted for RocksDB batched MultiGet",
+        "kept": true,
+        "integration": "Agave Blockstore and RocksDB wrapper",
+        "behavior": "ShredData keys encode slot and shred index in big-endian order; the range reader proves the generated Vec is sorted in debug builds and only that caller enables RocksDB's sorted-input path",
+        "jemalloc_wincode_latency_improvement_pct": 8.945,
+        "jemalloc_lencode_latency_improvement_pct": 8.809,
+        "glibc_wincode_latency_improvement_pct": 10.047,
+        "glibc_lencode_latency_improvement_pct": 10.788,
+        "lencode_validator_throughput_vs_wincode_jemalloc": 1.005,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false,
+        "candidate_binary_sha256": "8a7dc09e889f3e9f5b0cdb0427bcab1482fac6101d4f1a58ca9c1ed4587d90d8",
+        "benchmark_source_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "validation": "345 ledger library tests passed with 3 ignored; strict ledger library and both frozen Blockstore benchmark Clippy passed; scoped rustfmt and git diff checks passed; the retained 101-trial profile contained no RocksDB sort samples"
       }
     ],
     "failed_attempts": [
@@ -630,6 +734,10 @@
       {
         "optimization": "recycle bounded compressed deshred allocations across Blockstore slot calls in thread-local storage",
         "reason": "after discarding noisy 11-trial pairs, three independent CPU-affined 31-trial pairs improved canonical-LZ4 loading from 72.071 ms to 71.147 ms (1.28% absolute, 0.93% normalized to wincode), below the 5% keep threshold; the thread-local state and codec plumbing were removed"
+      },
+      {
+        "optimization": "compile the Agave Blockstore path with Rust 1.98.0",
+        "reason": "three paired CPU-affined 31-trial runs increased wincode time by 5.318% and canonical-LZ4 time by 3.407% versus the byte-identical Rust 1.97.1 source, beyond the 2% regression ceiling; the Agave toolchain bump was removed while lencode kept Rust 1.98.0 for development and its Rust 1.97.1 compatibility floor"
       }
     ],
     "full_resets": [
@@ -807,6 +915,10 @@
     "diff_decode_256kb_10pct_scatter": { "value": 223.23, "unit": "us/iter" }
   },
   "final_summary": {
+    "agave_production_batch_leader_speedup_vs_wincode": 1.706,
+    "agave_turbine_wire_reduction_vs_wincode_pct": 47.411,
+    "agave_jemalloc_blockstore_validator_throughput_vs_wincode": 1.005,
+    "agave_jemalloc_sorted_read_latency_improvement_pct": 8.809,
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
     "primary_dict_decode_throughput_vs_wincode": 0.669785173,
     "primary_dict_encode_time_improvement_vs_original_pct": 17.540,
