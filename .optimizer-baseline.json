@@ -1,7 +1,7 @@
 {
-  "version": 37,
+  "version": 38,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T10:29:42Z",
+  "updated_at": "2026-08-22T10:37:45Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -264,6 +264,14 @@
       {
         "optimization": "skip zero-filling canonical LZ4 output bytes already present in the reused Vec",
         "reason": "an exact 11-trial run reduced canonical-LZ4 validator time from 23.297 ms to 22.825 ms (2.0% absolute, 2.4% normalized to wincode), below the 5% keep threshold; leader time and Turbine wire bytes were unchanged, so the length-preserving resize branch was removed"
+      },
+      {
+        "optimization": "skip LZ4 when raw canonical bytes occupy the same number of Turbine FEC sets",
+        "reason": "only one of 100 retained-corpus batches had the same FEC-set count before and after LZ4, covering 3,080 of 66,587,751 canonical bytes; the opportunity was too small to reach the performance threshold, so no raw-frame branch was added"
+      },
+      {
+        "optimization": "reuse the canonical serialization buffer without reusing the LZ4 destination",
+        "reason": "an exact 11-trial run reduced canonical-LZ4 leader time from 192.439 ms to 184.018 ms (4.4% absolute, 2.6% normalized to wincode), below the 5% keep threshold, while validator time increased 1.0% absolute and 0.5% normalized; the extra scratch buffer was removed"
       }
     ],
     "contention_events": [
