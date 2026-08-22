@@ -55,10 +55,10 @@ impl Pack for sol_pubkey::Pubkey {
     }
 }
 impl DedupeEncodeable for sol_pubkey::Pubkey {
-    type Hasher = DefaultDedupeHasher;
+    type Hasher = sol_pubkey::PubkeyHasherBuilder;
 }
 impl DedupeDecodeable for sol_pubkey::Pubkey {
-    type Hasher = DefaultDedupeHasher;
+    type Hasher = sol_pubkey::PubkeyHasherBuilder;
 }
 
 impl Encode for sol_hash::Hash {
