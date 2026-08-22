@@ -87,6 +87,39 @@ use crate::prelude::*;
 const DEFAULT_INITIAL_CAPACITY: usize = 128;
 const DEFAULT_NUM_TYPES: usize = 4;
 
+#[derive(Clone, Copy)]
+enum DedupeIdEncoding {
+    Lencode,
+    #[cfg_attr(not(feature = "solana-types"), allow(dead_code))]
+    Leb128,
+}
+
+#[inline(always)]
+fn encode_dedupe_id(
+    encoding: DedupeIdEncoding,
+    id: usize,
+    writer: &mut impl Write,
+) -> Result<usize> {
+    if matches!(encoding, DedupeIdEncoding::Lencode) {
+        return Lencode::encode_varint_u64(id as u64, writer);
+    }
+
+    let mut value = id;
+    let mut bytes = [0u8; 10];
+    let mut len = 0usize;
+    loop {
+        let byte = value as u8 & 0x7f;
+        value >>= 7;
+        bytes[len] = byte | u8::from(value != 0) << 7;
+        len += 1;
+        if value == 0 {
+            break;
+        }
+    }
+    writer.write(&bytes[..len])?;
+    Ok(len)
+}
+
 trait TypedVecStore: Any + Send + Sync {
     fn clear(&mut self);
     fn into_boxed_values(self: Box<Self>) -> Vec<Box<dyn Any + Send + Sync>>;
@@ -308,6 +341,7 @@ pub struct DedupeEncoder {
     // `frozen.total_primed + 1` when frozen.
     next_id: usize,
     initial_capacity: usize,
+    id_encoding: DedupeIdEncoding,
 }
 
 impl Default for DedupeEncoder {
@@ -327,6 +361,7 @@ impl DedupeEncoder {
             type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
             next_id: 1, // Start at 1 to match decoder
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
+            id_encoding: DedupeIdEncoding::Lencode,
         }
     }
 
@@ -342,6 +377,7 @@ impl DedupeEncoder {
             type_stores: Vec::with_capacity(num_types),
             next_id: 1,
             initial_capacity,
+            id_encoding: DedupeIdEncoding::Lencode,
         }
     }
 
@@ -364,7 +400,16 @@ impl DedupeEncoder {
             type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
             next_id: total_primed + 1,
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
+            id_encoding: DedupeIdEncoding::Lencode,
         }
+    }
+
+    #[inline(always)]
+    #[cfg(feature = "solana-types")]
+    pub(crate) fn with_frozen_leb128(frozen: Arc<FrozenEncoderState>) -> Self {
+        let mut encoder = Self::with_frozen(frozen);
+        encoder.id_encoding = DedupeIdEncoding::Leb128;
+        encoder
     }
 
     /// Consumes this encoder and produces an immutable snapshot suitable for
@@ -551,7 +596,7 @@ impl DedupeEncoder {
                 &*(&*store.values as *const (dyn Any + Send + Sync) as *const HashMap<T, usize, S>)
             };
             if let Some(&existing_id) = typed_store.get(val) {
-                return Lencode::encode_varint_u64(existing_id as u64, writer);
+                return encode_dedupe_id(self.id_encoding, existing_id, writer);
             }
         }
 
@@ -593,7 +638,7 @@ impl DedupeEncoder {
         // Check if we've already seen this value in scratch
         if let Some(&existing_id) = typed_store.get(val) {
             // Value has been seen before, encode its ID
-            return Lencode::encode_varint_u64(existing_id as u64, writer);
+            return encode_dedupe_id(self.id_encoding, existing_id, writer);
         }
 
         // New value - assign an ID and store it
@@ -605,7 +650,7 @@ impl DedupeEncoder {
 
         // Encode as new value (ID 0 followed by the actual value)
         let mut total_bytes = 0;
-        total_bytes += Lencode::encode_varint_u64(0, writer)?; // Special ID for new values
+        total_bytes += encode_dedupe_id(self.id_encoding, 0, writer)?; // Special ID for new values
         total_bytes += val.pack(writer)?;
         Ok(total_bytes)
     }
@@ -669,15 +714,16 @@ impl DedupeEncoder {
             .downcast_mut::<HashMap<T, usize, S>>()
             .expect("typed scratch map must match its TypeId");
         let next_id = &mut self.next_id;
+        let id_encoding = self.id_encoding;
 
         let mut total_bytes = 0;
         for value in values {
             if let Some(existing_id) = frozen_store.and_then(|store| store.get(value)).copied() {
-                total_bytes += Lencode::encode_varint_u64(existing_id as u64, writer)?;
+                total_bytes += encode_dedupe_id(id_encoding, existing_id, writer)?;
                 continue;
             }
             if let Some(existing_id) = scratch_store.get(value).copied() {
-                total_bytes += Lencode::encode_varint_u64(existing_id as u64, writer)?;
+                total_bytes += encode_dedupe_id(id_encoding, existing_id, writer)?;
                 continue;
             }
 
@@ -685,7 +731,7 @@ impl DedupeEncoder {
             let new_id = *next_id;
             *next_id += 1;
             scratch_store.insert(value.clone(), new_id);
-            total_bytes += Lencode::encode_varint_u64(0, writer)?;
+            total_bytes += encode_dedupe_id(id_encoding, 0, writer)?;
             total_bytes += value.pack(writer)?;
         }
         Ok(total_bytes)

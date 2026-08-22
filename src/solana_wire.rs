@@ -57,6 +57,8 @@ pub const SOLANA_ENTRY_BATCH_VERSION: u8 = 1;
 pub const SOLANA_ENTRY_BATCH_DICTIONARY_FLAG: u8 = 2;
 /// Frame flag for native lencode transactions sharing address IDs across the batch.
 pub const SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG: u8 = 4;
+/// Contextual frame flag using LEB128 for reference-Solana address IDs.
+pub const SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_DICTIONARY_FLAG: u8 = 8;
 /// Bytes used to identify the frozen address dictionary.
 pub const SOLANA_DICTIONARY_ID_BYTES: usize = 16;
 /// Fixed compact entry-batch header size.
@@ -177,6 +179,7 @@ pub struct SolanaEntryBatchEncoder {
     dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
     context: EncoderContext,
     contextual: bool,
+    leb128_address_ids: bool,
 }
 
 #[cfg(feature = "solana-types")]
@@ -193,6 +196,7 @@ impl SolanaEntryBatchEncoder {
                 diff: None,
             },
             contextual: false,
+            leb128_address_ids: false,
         }
     }
 
@@ -212,6 +216,26 @@ impl SolanaEntryBatchEncoder {
                 diff: None,
             },
             contextual: true,
+            leb128_address_ids: false,
+        }
+    }
+
+    /// Creates a contextual encoder with compact unsigned-LEB128 address IDs.
+    ///
+    /// This emits the explicit flag-8 frame variant. The transcoder continues
+    /// to accept the older independent flag-2 and contextual flag-4 variants.
+    pub fn with_frozen_contextual_leb128(
+        dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+        frozen: Arc<FrozenEncoderState>,
+    ) -> Self {
+        Self {
+            dictionary_id,
+            context: EncoderContext {
+                dedupe: Some(DedupeEncoder::with_frozen_leb128(frozen)),
+                diff: None,
+            },
+            contextual: true,
+            leb128_address_ids: true,
         }
     }
 
@@ -242,7 +266,9 @@ impl SolanaEntryBatchEncoder {
         }
         output.0.extend_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
         output.0.push(SOLANA_ENTRY_BATCH_VERSION);
-        output.0.push(if self.contextual {
+        output.0.push(if self.leb128_address_ids {
+            SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_DICTIONARY_FLAG
+        } else if self.contextual {
             SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG
         } else {
             SOLANA_ENTRY_BATCH_DICTIONARY_FLAG
@@ -334,11 +360,13 @@ impl SolanaEntryBatchTranscoder {
         {
             return Err(Error::InvalidData);
         }
-        let contextual = match input[5] {
-            SOLANA_ENTRY_BATCH_DICTIONARY_FLAG => false,
-            SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG => true,
+        let (contextual, leb128_address_ids) = match input[5] {
+            SOLANA_ENTRY_BATCH_DICTIONARY_FLAG => (false, false),
+            SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG => (true, false),
+            SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_DICTIONARY_FLAG => (true, true),
             _ => return Err(Error::InvalidData),
         };
+        self.transaction.leb128_address_ids = leb128_address_ids;
         if contextual {
             self.transaction.reset_context();
         }
@@ -429,6 +457,7 @@ impl SolanaEntryBatchTranscoder {
 pub struct SolanaTransactionTranscoder {
     decoder: DedupeDecoder,
     frozen_addresses: Option<Arc<Vec<[u8; 32]>>>,
+    leb128_address_ids: bool,
     decompressed: Vec<u8>,
     address_offsets: Vec<usize>,
     direct_addresses: bool,
@@ -446,6 +475,7 @@ impl SolanaTransactionTranscoder {
         Self {
             decoder: DedupeDecoder::new(),
             frozen_addresses: None,
+            leb128_address_ids: false,
             decompressed: Vec::new(),
             address_offsets: Vec::new(),
             direct_addresses: false,
@@ -459,6 +489,7 @@ impl SolanaTransactionTranscoder {
         Self {
             decoder,
             frozen_addresses,
+            leb128_address_ids: false,
             decompressed: Vec::new(),
             address_offsets: Vec::new(),
             direct_addresses: false,
@@ -727,26 +758,35 @@ impl SolanaTransactionTranscoder {
         count: usize,
     ) -> Result<()> {
         if self.direct_addresses {
-            if let Some(frozen) = self.frozen_addresses.as_deref() {
-                return Self::transcode_address_values_direct(
-                    reader,
-                    output,
-                    max_output,
-                    count,
-                    frozen,
-                    &mut self.address_offsets,
-                );
+            let frozen = self
+                .frozen_addresses
+                .as_deref()
+                .map(Vec::as_slice)
+                .or_else(|| (self.decoder.frozen_len() == 0).then_some(&[] as &[[u8; 32]]));
+            if let Some(frozen) = frozen {
+                return if self.leb128_address_ids {
+                    Self::transcode_address_values_direct::<true>(
+                        reader,
+                        output,
+                        max_output,
+                        count,
+                        frozen,
+                        &mut self.address_offsets,
+                    )
+                } else {
+                    Self::transcode_address_values_direct::<false>(
+                        reader,
+                        output,
+                        max_output,
+                        count,
+                        frozen,
+                        &mut self.address_offsets,
+                    )
+                };
             }
-            if self.decoder.frozen_len() == 0 {
-                return Self::transcode_address_values_direct(
-                    reader,
-                    output,
-                    max_output,
-                    count,
-                    &[],
-                    &mut self.address_offsets,
-                );
-            }
+        }
+        if self.leb128_address_ids {
+            return Err(Error::InvalidData);
         }
         for _ in 0..count {
             let address = self.decoder.decode_ref::<[u8; 32]>(reader)?;
@@ -755,7 +795,7 @@ impl SolanaTransactionTranscoder {
         Ok(())
     }
 
-    fn transcode_address_values_direct(
+    fn transcode_address_values_direct<const LEB128: bool>(
         reader: &mut impl Read,
         output: &mut Vec<u8>,
         max_output: usize,
@@ -774,8 +814,12 @@ impl SolanaTransactionTranscoder {
             let mut input = Cursor::new(available);
             let mut novel_count = 0usize;
             for _ in 0..count {
-                let id = usize::try_from(Lencode::decode_varint_u64(&mut input)?)
-                    .map_err(|_| Error::DecodeLimitExceeded)?;
+                let id = if LEB128 {
+                    decode_leb128_usize(&mut input)?
+                } else {
+                    usize::try_from(Lencode::decode_varint_u64(&mut input)?)
+                        .map_err(|_| Error::DecodeLimitExceeded)?
+                };
                 if id == 0 {
                     let available = input.buf().ok_or(Error::InvalidData)?;
                     if available.len() < 32 {
@@ -1002,6 +1046,44 @@ fn read_len(reader: &mut impl Read) -> Result<usize> {
     usize::try_from(Lencode::decode_varint_u64(reader)?).map_err(|_| Error::DecodeLimitExceeded)
 }
 
+#[inline(always)]
+fn decode_leb128_usize(reader: &mut impl Read) -> Result<usize> {
+    let input = reader.buf().ok_or(Error::InvalidData)?;
+    let first = *input.first().ok_or(Error::ReaderOutOfData)?;
+    if first < 0x80 {
+        reader.advance(1);
+        return Ok(usize::from(first));
+    }
+
+    let second = *input.get(1).ok_or(Error::ReaderOutOfData)?;
+    let mut value = usize::from(first & 0x7f) | (usize::from(second & 0x7f) << 7);
+    if second < 0x80 {
+        reader.advance(2);
+        return Ok(value);
+    }
+
+    let third = *input.get(2).ok_or(Error::ReaderOutOfData)?;
+    value |= usize::from(third & 0x7f) << 14;
+    if third < 0x80 {
+        reader.advance(3);
+        return Ok(value);
+    }
+
+    for (index, &byte) in input.iter().enumerate().skip(3) {
+        let shift = index * 7;
+        let payload = usize::from(byte & 0x7f);
+        if shift >= usize::BITS as usize || payload > usize::MAX >> shift {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        value |= payload << shift;
+        if byte < 0x80 {
+            reader.advance(index + 1);
+            return Ok(value);
+        }
+    }
+    Err(Error::ReaderOutOfData)
+}
+
 #[cfg(feature = "solana-types")]
 fn write_len(len: usize, output: &mut impl Write) -> Result<usize> {
     let len = u64::try_from(len).map_err(|_| Error::IncorrectLength)?;
@@ -1131,7 +1213,7 @@ mod tests {
         v0::{Message as V0Message, MessageAddressTableLookup},
         v1::{Message as V1Message, TransactionConfig},
     };
-    use solana_pubkey::Pubkey;
+    use solana_pubkey::{Pubkey, PubkeyHasherBuilder};
     use solana_signature::Signature;
     use solana_transaction::versioned::VersionedTransaction;
 
@@ -1201,11 +1283,33 @@ mod tests {
         (Arc::new(encoder.freeze()), Arc::new(decoder.freeze()))
     }
 
+    fn frozen_reference_dictionary(
+        addresses: &[[u8; 32]],
+    ) -> (
+        Arc<crate::dedupe::FrozenEncoderState>,
+        Arc<FrozenDecoderState>,
+    ) {
+        let mut encoder = DedupeEncoder::new();
+        let mut decoder = DedupeDecoder::new();
+        for &address in addresses {
+            encoder.prime::<Pubkey, PubkeyHasherBuilder>(&canonical_address(address));
+            decoder.prime(address);
+        }
+        (Arc::new(encoder.freeze()), Arc::new(decoder.freeze()))
+    }
+
     #[cfg(feature = "solana-types")]
     #[test]
     fn entry_batch_roundtrips_reference_transactions() {
-        let address = [2u8; 32];
-        let (frozen_encoder, frozen_decoder) = frozen_dictionary(&[address]);
+        let addresses: Vec<[u8; 32]> = (0..300u16)
+            .map(|index| {
+                let mut address = [0u8; 32];
+                address[..2].copy_from_slice(&index.to_le_bytes());
+                address
+            })
+            .collect();
+        let address = addresses[299];
+        let (frozen_encoder, frozen_decoder) = frozen_reference_dictionary(&addresses);
         let transaction = VersionedTransaction {
             signatures: vec![Signature::from([1u8; 64])],
             message: VersionedMessage::Legacy(LegacyMessage {
@@ -1227,13 +1331,26 @@ mod tests {
             transactions: core::slice::from_ref(&transaction),
         }];
 
-        let mut encoder = SolanaEntryBatchEncoder::with_frozen(dictionary_id, frozen_encoder);
+        let mut old_encoder = SolanaEntryBatchEncoder::with_frozen_contextual(
+            dictionary_id,
+            Arc::clone(&frozen_encoder),
+        );
+        let mut old = Vec::new();
+        old_encoder
+            .encode(entries.iter().copied(), &mut old)
+            .unwrap();
+        let mut encoder =
+            SolanaEntryBatchEncoder::with_frozen_contextual_leb128(dictionary_id, frozen_encoder);
         let mut compact = Vec::new();
         let compact_len = encoder.encode(entries.into_iter(), &mut compact).unwrap();
         assert_eq!(compact_len, compact.len());
+        assert_eq!(old.len(), compact.len() + 1);
         assert_eq!(compact[..4], SOLANA_ENTRY_BATCH_MAGIC);
         assert_eq!(compact[4], SOLANA_ENTRY_BATCH_VERSION);
-        assert_eq!(compact[5], SOLANA_ENTRY_BATCH_DICTIONARY_FLAG);
+        assert_eq!(
+            compact[5],
+            SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_DICTIONARY_FLAG
+        );
         assert_eq!(compact[6..SOLANA_ENTRY_BATCH_HEADER_BYTES], dictionary_id);
 
         let canonical_transaction = wincode::serialize(&transaction).unwrap();
@@ -1401,13 +1518,21 @@ mod tests {
         assert_eq!(canonical, expected);
 
         let mut unknown = contextual;
-        unknown[5] = 8;
+        unknown[5] = 16;
         assert!(
             transcoder
                 .transcode_exact(&unknown, &mut canonical, limits)
                 .is_err()
         );
         assert!(canonical.is_empty());
+    }
+
+    #[test]
+    fn leb128_address_ids_reject_truncation_and_overflow() {
+        for input in [&[0x80][..], &[0xff; 10][..]] {
+            let mut reader = Cursor::new(input);
+            assert!(decode_leb128_usize(&mut reader).is_err());
+        }
     }
 
     fn canonical_address(bytes: [u8; 32]) -> Pubkey {
