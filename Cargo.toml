@@ -51,6 +51,11 @@ bincode = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 wincode = { version = "0.6.1", features = ["derive"] }
 solana-short-vec = { version = "3.3.0", features = ["wincode"] }
+solana-address-v2 = { package = "solana-address", version = "2.7.0" }
+solana-hash-v4 = { package = "solana-hash", version = "4.6.0" }
+solana-message-v4 = { package = "solana-message", version = "4.5.0", features = ["wincode"] }
+solana-signature = { version = "3.5.2" }
+solana-transaction-v4 = { package = "solana-transaction", version = "4.3.0", features = ["wincode"] }
 
 [features]
 default = []

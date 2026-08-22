@@ -146,6 +146,8 @@ pub mod varint;
 
 #[cfg(feature = "solana")]
 pub mod solana;
+#[cfg(feature = "std")]
+pub mod solana_wire;
 
 /// Convenience re‑exports for common traits, modules and derive macros.
 pub mod prelude {
