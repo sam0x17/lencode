@@ -697,26 +697,46 @@ impl SolanaTransactionTranscoder {
         frozen: &[[u8; 32]],
         offsets: &mut Vec<usize>,
     ) -> Result<()> {
-        for _ in 0..count {
-            let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
-                .map_err(|_| Error::DecodeLimitExceeded)?;
-            if id == 0 {
-                reader.claim_allocation(32)?;
-                offsets.push(output.len());
-                append_input(reader, output, 32, max_output)?;
-            } else if let Some(address) = frozen.get(id - 1) {
-                append_bytes(output, address, max_output)?;
-            } else {
-                let index = id - frozen.len() - 1;
-                let offset = *offsets.get(index).ok_or(Error::InvalidData)?;
-                let end = offset.checked_add(32).ok_or(Error::DecodeLimitExceeded)?;
-                if end > output.len() {
-                    return Err(Error::InvalidData);
-                }
-                ensure_output(output, 32, max_output)?;
-                output.extend_from_within(offset..end);
-            }
+        let output_bytes = count.checked_mul(32).ok_or(Error::DecodeLimitExceeded)?;
+        ensure_output(output, output_bytes, max_output)?;
+        if count == 0 {
+            return Ok(());
         }
+
+        let (consumed, novel_count) = {
+            let available = reader.buf().ok_or(Error::InvalidData)?;
+            let mut input = Cursor::new(available);
+            let mut novel_count = 0usize;
+            for _ in 0..count {
+                let id = usize::try_from(Lencode::decode_varint_u64(&mut input)?)
+                    .map_err(|_| Error::DecodeLimitExceeded)?;
+                if id == 0 {
+                    let available = input.buf().ok_or(Error::InvalidData)?;
+                    if available.len() < 32 {
+                        return Err(Error::ReaderOutOfData);
+                    }
+                    offsets.push(output.len());
+                    output.extend_from_slice(&available[..32]);
+                    input.advance(32);
+                    novel_count += 1;
+                } else if let Some(address) = frozen.get(id - 1) {
+                    output.extend_from_slice(address);
+                } else {
+                    let index = id - frozen.len() - 1;
+                    let offset = *offsets.get(index).ok_or(Error::InvalidData)?;
+                    let end = offset.checked_add(32).ok_or(Error::DecodeLimitExceeded)?;
+                    if end > output.len() {
+                        return Err(Error::InvalidData);
+                    }
+                    output.extend_from_within(offset..end);
+                }
+            }
+            (input.position(), novel_count)
+        };
+        if novel_count != 0 {
+            reader.claim_allocation(novel_count * 32)?;
+        }
+        reader.advance(consumed);
         Ok(())
     }
 
