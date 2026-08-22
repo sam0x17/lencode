@@ -905,7 +905,8 @@ impl DedupeDecoder {
         &mut self,
         reader: &mut impl Read,
     ) -> Result<T> {
-        let id = Lencode::decode_varint_u64(reader)? as usize;
+        let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
+            .map_err(|_| crate::io::Error::DecodeLimitExceeded)?;
         let type_id = TypeId::of::<T>();
         let total_primed = self.frozen_total_primed;
 
@@ -929,6 +930,7 @@ impl DedupeDecoder {
                 unsafe { &mut *(store.as_mut() as *mut dyn TypedVecStore as *mut Vec<T>) };
             if id == 0 {
                 let value = T::unpack(reader)?;
+                reader.claim_allocation(core::mem::size_of::<T>())?;
                 vec.push(value.clone());
                 self.scratch_count += 1;
                 return Ok(value);
@@ -946,6 +948,7 @@ impl DedupeDecoder {
             let mut vec: Vec<T> = Vec::with_capacity(DEFAULT_INITIAL_CAPACITY);
             if id == 0 {
                 let value = T::unpack(reader)?;
+                reader.claim_allocation(core::mem::size_of::<T>())?;
                 vec.push(value.clone());
                 self.typed_vec = Some((type_id, Box::new(vec)));
                 self.scratch_count += 1;
@@ -962,6 +965,9 @@ impl DedupeDecoder {
         self.promote_scratch_to_boxed();
         if id == 0 {
             let value = T::unpack(reader)?;
+            reader.claim_allocation(
+                core::mem::size_of::<T>() + core::mem::size_of::<Box<dyn Any + Send + Sync>>(),
+            )?;
             self.boxed_values.push(Box::new(value.clone()));
             self.scratch_count += 1;
             Ok(value)
@@ -1040,7 +1046,8 @@ impl DedupeDecoder {
 
         let mut values = Vec::with_capacity(count);
         for _ in 0..count {
-            let id = Lencode::decode_varint_u64(reader)? as usize;
+            let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
+                .map_err(|_| crate::io::Error::DecodeLimitExceeded)?;
             if id != 0 && id <= total_primed {
                 let value = frozen_vec
                     .and_then(|vec| vec.get(id - 1))
@@ -1050,6 +1057,7 @@ impl DedupeDecoder {
             }
             if id == 0 {
                 let value = T::unpack(reader)?;
+                reader.claim_allocation(core::mem::size_of::<T>())?;
                 scratch_vec.push(value.clone());
                 self.scratch_count += 1;
                 values.push(value);

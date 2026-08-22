@@ -16,6 +16,10 @@ pub enum Error {
     WriterOutOfSpace,
     /// The reader ran out of data before the operation completed.
     ReaderOutOfData,
+    /// A caller-provided decode limit was exceeded.
+    DecodeLimitExceeded,
+    /// Bytes remained after an exact decode completed.
+    TrailingData,
     #[cfg(feature = "std")]
     /// Wrapped `std::io::Error` when using the `std` feature.
     StdIo(std::io::Error),
@@ -42,6 +46,8 @@ impl core::fmt::Display for Error {
                 f,
                 "Tried to read past the end of the reader's available data"
             ),
+            Error::DecodeLimitExceeded => write!(f, "A configured decode limit was exceeded"),
+            Error::TrailingData => write!(f, "Trailing data remained after decoding"),
             #[cfg(feature = "std")]
             Error::StdIo(e) => write!(f, "IO error: {e}"),
             #[cfg(not(feature = "std"))]
@@ -79,6 +85,39 @@ impl From<Error> for std::io::Error {
             Error::ReaderOutOfData => {
                 std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "End of data")
             }
+            Error::DecodeLimitExceeded => {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Decode limit exceeded")
+            }
+            Error::TrailingData => {
+                std::io::Error::new(std::io::ErrorKind::InvalidData, "Trailing data")
+            }
+        }
+    }
+}
+
+/// Resource limits enforced by [`LimitedReader`] during untrusted decoding.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DecodeLimits {
+    /// Maximum encoded bytes that may be consumed.
+    pub max_input_bytes: usize,
+    /// Maximum element count accepted for any one variable-length collection.
+    pub max_sequence_len: usize,
+    /// Maximum cumulative allocation bytes claimed by decoded values.
+    pub max_total_allocation: usize,
+}
+
+impl DecodeLimits {
+    /// Creates a set of decode limits.
+    #[inline(always)]
+    pub const fn new(
+        max_input_bytes: usize,
+        max_sequence_len: usize,
+        max_total_allocation: usize,
+    ) -> Self {
+        Self {
+            max_input_bytes,
+            max_sequence_len,
+            max_total_allocation,
         }
     }
 }
@@ -100,6 +139,124 @@ pub trait Read {
     /// Only valid when `buf()` returned `Some` with at least `n` bytes.
     #[inline(always)]
     fn advance(&mut self, _n: usize) {}
+
+    /// Claims allocation bytes against an optional reader-owned decode budget.
+    /// Readers without a budget accept the claim.
+    #[inline(always)]
+    fn claim_allocation(&mut self, _bytes: usize) -> Result<()> {
+        Ok(())
+    }
+
+    /// Validates a variable-length collection and claims its backing storage.
+    /// Readers without a budget accept the claim.
+    #[inline(always)]
+    fn claim_sequence(&mut self, _len: usize, _element_size: usize) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// Reader adapter that bounds input consumption, collection lengths, and
+/// cumulative allocation claims without changing the encoded format.
+pub struct LimitedReader<R> {
+    inner: R,
+    limits: DecodeLimits,
+    remaining_input: usize,
+    claimed_allocation: usize,
+}
+
+impl<R> LimitedReader<R> {
+    /// Wraps `inner` with `limits`.
+    #[inline(always)]
+    pub const fn new(inner: R, limits: DecodeLimits) -> Self {
+        Self {
+            inner,
+            limits,
+            remaining_input: limits.max_input_bytes,
+            claimed_allocation: 0,
+        }
+    }
+
+    /// Returns the wrapped reader.
+    #[inline(always)]
+    pub const fn inner(&self) -> &R {
+        &self.inner
+    }
+
+    /// Consumes the adapter and returns the wrapped reader.
+    #[inline(always)]
+    pub fn into_inner(self) -> R {
+        self.inner
+    }
+
+    /// Returns the number of input bytes consumed through this adapter.
+    #[inline(always)]
+    pub const fn consumed(&self) -> usize {
+        self.limits.max_input_bytes - self.remaining_input
+    }
+
+    /// Returns cumulative allocation bytes claimed by decoders.
+    #[inline(always)]
+    pub const fn claimed_allocation(&self) -> usize {
+        self.claimed_allocation
+    }
+}
+
+impl<R: Read> Read for LimitedReader<R> {
+    #[inline(always)]
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        if self.remaining_input == 0 {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        let len = buf.len().min(self.remaining_input);
+        let read = self.inner.read(&mut buf[..len])?;
+        self.remaining_input = self
+            .remaining_input
+            .checked_sub(read)
+            .ok_or(Error::DecodeLimitExceeded)?;
+        Ok(read)
+    }
+
+    #[inline(always)]
+    fn buf(&self) -> Option<&[u8]> {
+        self.inner
+            .buf()
+            .map(|buf| &buf[..buf.len().min(self.remaining_input)])
+    }
+
+    #[inline(always)]
+    fn advance(&mut self, n: usize) {
+        debug_assert!(n <= self.remaining_input);
+        self.remaining_input -= n;
+        self.inner.advance(n);
+    }
+
+    #[inline(always)]
+    fn claim_allocation(&mut self, bytes: usize) -> Result<()> {
+        let claimed = self
+            .claimed_allocation
+            .checked_add(bytes)
+            .ok_or(Error::DecodeLimitExceeded)?;
+        if claimed > self.limits.max_total_allocation {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        self.inner.claim_allocation(bytes)?;
+        self.claimed_allocation = claimed;
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn claim_sequence(&mut self, len: usize, element_size: usize) -> Result<()> {
+        if len > self.limits.max_sequence_len {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        let bytes = len
+            .checked_mul(element_size.max(1))
+            .ok_or(Error::DecodeLimitExceeded)?;
+        self.claim_allocation(bytes)
+    }
 }
 
 /// Minimal write abstraction used by this crate in both std and no‑std modes.

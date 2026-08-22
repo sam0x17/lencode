@@ -204,6 +204,44 @@ pub fn decode_ext<T: Decode>(
     T::decode_ext(reader, ctx)
 }
 
+/// Decodes exactly one value from `bytes` and rejects trailing data.
+#[inline]
+pub fn decode_exact<T: Decode>(bytes: &[u8]) -> Result<T> {
+    decode_exact_ext(bytes, None)
+}
+
+/// Decodes exactly one value from `bytes` with an optional decoder context and
+/// rejects trailing data.
+#[inline]
+pub fn decode_exact_ext<T: Decode>(bytes: &[u8], ctx: Option<&mut DecoderContext>) -> Result<T> {
+    let mut reader = Cursor::new(bytes);
+    let value = T::decode_ext(&mut reader, ctx)?;
+    if reader.position() != bytes.len() {
+        return Err(Error::TrailingData);
+    }
+    Ok(value)
+}
+
+/// Decodes exactly one value while enforcing input, collection, and allocation
+/// limits. The limits affect resource use only and do not change wire bytes.
+#[inline]
+pub fn decode_exact_with_limits<T: Decode>(
+    bytes: &[u8],
+    ctx: Option<&mut DecoderContext>,
+    limits: DecodeLimits,
+) -> Result<T> {
+    if bytes.len() > limits.max_input_bytes {
+        return Err(Error::DecodeLimitExceeded);
+    }
+    let reader = Cursor::new(bytes);
+    let mut reader = LimitedReader::new(reader, limits);
+    let value = T::decode_ext(&mut reader, ctx)?;
+    if reader.inner().position() != bytes.len() {
+        return Err(Error::TrailingData);
+    }
+    Ok(value)
+}
+
 // Provide a Result alias that defaults to this crate's [`Error`] type while still allowing
 // callers (and macros) to specify a different error type when needed. This avoids clashing
 // with macros that expect the standard `Result` alias to accept two generic parameters.
@@ -304,7 +342,7 @@ pub trait Decode {
     /// Decodes a collection length previously encoded with [`Encode::encode_len`].
     #[inline(always)]
     fn decode_len(reader: &mut impl Read) -> Result<usize> {
-        Lencode::decode_varint_u64(reader).map(|v| v as usize)
+        usize::try_from(Lencode::decode_varint_u64(reader)?).map_err(|_| Error::DecodeLimitExceeded)
     }
 
     /// Decodes an enum discriminant previously encoded with [`Encode::encode_discriminant`].
@@ -312,7 +350,7 @@ pub trait Decode {
     /// The default reads an unsigned varint.
     #[inline(always)]
     fn decode_discriminant(reader: &mut impl Read) -> Result<usize> {
-        Lencode::decode_varint_u64(reader).map(|v| v as usize)
+        usize::try_from(Lencode::decode_varint_u64(reader)?).map_err(|_| Error::DecodeLimitExceeded)
     }
 
     /// Convenience wrapper around [`Decode::decode_ext`] without deduplication.
@@ -883,24 +921,30 @@ impl Decode for String {
         let payload_len = flagged >> 1;
         if is_compressed {
             // Zero-copy fast path
-            if let Some(slice) = reader.buf()
-                && slice.len() >= payload_len
-            {
-                let comp = &slice[..payload_len];
-                let orig_len = bytes::zstd_content_size(comp)?;
-                let out = bytes::zstd_decompress(comp, orig_len)?;
+            if reader.buf().is_some_and(|slice| slice.len() >= payload_len) {
+                let orig_len = bytes::zstd_content_size(
+                    &reader.buf().expect("buffer was checked above")[..payload_len],
+                )?;
+                reader.claim_sequence(orig_len, 1)?;
+                let out = bytes::zstd_decompress(
+                    &reader.buf().expect("buffer was checked above")[..payload_len],
+                    orig_len,
+                )?;
                 reader.advance(payload_len);
                 return String::from_utf8(out).map_err(|_| Error::InvalidData);
             }
+            reader.claim_allocation(payload_len)?;
             let mut comp = vec![0u8; payload_len];
             let mut read = 0usize;
             while read < payload_len {
                 read += reader.read(&mut comp[read..])?;
             }
             let orig_len = bytes::zstd_content_size(&comp)?;
+            reader.claim_sequence(orig_len, 1)?;
             let out = bytes::zstd_decompress(&comp, orig_len)?;
             String::from_utf8(out).map_err(|_| Error::InvalidData)
         } else {
+            reader.claim_sequence(payload_len, 1)?;
             // Zero-copy fast path
             if let Some(slice) = reader.buf()
                 && slice.len() >= payload_len
@@ -1181,26 +1225,32 @@ impl<T: Decode + 'static> Decode for Vec<T> {
             let payload_len = flagged >> 1;
             if is_compressed {
                 // Zero-copy fast path for compressed data
-                if let Some(slice) = reader.buf()
-                    && slice.len() >= payload_len
-                {
-                    let comp = &slice[..payload_len];
-                    let orig_len = bytes::zstd_content_size(comp)?;
-                    let out = bytes::zstd_decompress(comp, orig_len)?;
+                if reader.buf().is_some_and(|slice| slice.len() >= payload_len) {
+                    let orig_len = bytes::zstd_content_size(
+                        &reader.buf().expect("buffer was checked above")[..payload_len],
+                    )?;
+                    reader.claim_sequence(orig_len, 1)?;
+                    let out = bytes::zstd_decompress(
+                        &reader.buf().expect("buffer was checked above")[..payload_len],
+                        orig_len,
+                    )?;
                     reader.advance(payload_len);
                     let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                     return Ok(vec_t);
                 }
+                reader.claim_allocation(payload_len)?;
                 let mut comp = vec![0u8; payload_len];
                 let mut read = 0usize;
                 while read < payload_len {
                     read += reader.read(&mut comp[read..])?;
                 }
                 let orig_len = bytes::zstd_content_size(&comp)?;
+                reader.claim_sequence(orig_len, 1)?;
                 let out = bytes::zstd_decompress(&comp, orig_len)?;
                 let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                 return Ok(vec_t);
             } else {
+                reader.claim_sequence(payload_len, 1)?;
                 // Zero-copy fast path for raw data
                 if let Some(slice) = reader.buf()
                     && slice.len() >= payload_len
@@ -1229,6 +1279,7 @@ impl<T: Decode + 'static> Decode for Vec<T> {
         }
 
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(len, core::mem::size_of::<T>())?;
         T::decode_vec_ext(reader, len, ctx)
     }
 }
@@ -1297,6 +1348,10 @@ impl<K: Decode + Ord, V: Decode> Decode for collections::BTreeMap<K, V> {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(
+            len,
+            core::mem::size_of::<(K, V)>() + 3 * core::mem::size_of::<usize>(),
+        )?;
         let mut map = collections::BTreeMap::new();
         for _ in 0..len {
             let key = K::decode_ext(reader, ctx.as_deref_mut())?;
@@ -1327,6 +1382,10 @@ impl<V: Decode + Ord> Decode for collections::BTreeSet<V> {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(
+            len,
+            core::mem::size_of::<V>() + 3 * core::mem::size_of::<usize>(),
+        )?;
         let mut set = collections::BTreeSet::new();
         for _ in 0..len {
             let value = V::decode_ext(reader, ctx.as_deref_mut())?;
@@ -1394,6 +1453,7 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
                 && diff.current_key.is_some()
             {
                 let out = diff.decode_blob(reader)?;
+                reader.claim_sequence(out.len(), core::mem::size_of::<V>())?;
                 let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
                 let mut deque = collections::VecDeque::with_capacity(out_v.len());
                 deque.extend(out_v);
@@ -1404,25 +1464,30 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
             let is_compressed = (flagged & 1) == 1;
             let payload_len = flagged >> 1;
             if is_compressed {
+                reader.claim_allocation(payload_len)?;
                 let mut comp = vec![0u8; payload_len];
                 let mut read = 0usize;
                 while read < payload_len {
                     read += reader.read(&mut comp[read..])?;
                 }
                 let orig_len = bytes::zstd_content_size(&comp)?;
+                reader.claim_sequence(orig_len, 1)?;
                 let out = bytes::zstd_decompress(&comp, orig_len)?;
                 // SAFETY: V == u8, so reinterpretation is sound
                 let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
+                reader.claim_sequence(orig_len, core::mem::size_of::<V>())?;
                 let mut deque = collections::VecDeque::with_capacity(orig_len);
                 deque.extend(out_v);
                 return Ok(deque);
             } else {
+                reader.claim_sequence(payload_len, 1)?;
                 let mut out = vec![0u8; payload_len];
                 let mut read = 0usize;
                 while read < payload_len {
                     read += reader.read(&mut out[read..])?;
                 }
                 let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
+                reader.claim_sequence(payload_len, core::mem::size_of::<V>())?;
                 let mut deque = collections::VecDeque::with_capacity(payload_len);
                 deque.extend(out_v);
                 return Ok(deque);
@@ -1430,6 +1495,7 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
         }
 
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(len, core::mem::size_of::<V>())?;
         let mut deque = collections::VecDeque::with_capacity(len);
         for _ in 0..len {
             let value = V::decode_ext(reader, ctx.as_deref_mut())?;
@@ -1459,6 +1525,10 @@ impl<V: Decode> Decode for collections::LinkedList<V> {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(
+            len,
+            core::mem::size_of::<V>() + 2 * core::mem::size_of::<usize>(),
+        )?;
         let mut list = collections::LinkedList::new();
         for _ in 0..len {
             let value = V::decode_ext(reader, ctx.as_deref_mut())?;
@@ -1487,6 +1557,7 @@ impl<T: Decode + Ord> Decode for collections::BinaryHeap<T> {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(len, core::mem::size_of::<T>())?;
         let mut heap = collections::BinaryHeap::with_capacity(len);
         for _ in 0..len {
             let value = T::decode_ext(reader, ctx.as_deref_mut())?;
@@ -1519,6 +1590,7 @@ impl<K: Decode + Eq + std::hash::Hash, V: Decode> Decode for std::collections::H
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(len, core::mem::size_of::<(K, V)>())?;
         let mut map = std::collections::HashMap::with_capacity(len);
         for _ in 0..len {
             let key = K::decode_ext(reader, ctx.as_deref_mut())?;
@@ -1551,6 +1623,7 @@ impl<V: Decode + Eq + std::hash::Hash> Decode for std::collections::HashSet<V> {
     #[inline(always)]
     fn decode_ext(reader: &mut impl Read, mut ctx: Option<&mut DecoderContext>) -> Result<Self> {
         let len = Self::decode_len(reader)?;
+        reader.claim_sequence(len, core::mem::size_of::<V>())?;
         let mut set = std::collections::HashSet::with_capacity(len);
         for _ in 0..len {
             let value = V::decode_ext(reader, ctx.as_deref_mut())?;
@@ -1853,6 +1926,65 @@ fn test_encode_decode_arrays() {
     assert_eq!(n, 5);
     let decoded: [u128; 5] = Decode::decode(&mut Cursor::new(&buf[..])).unwrap();
     assert_eq!(decoded, values);
+}
+
+#[test]
+fn test_decode_exact_rejects_trailing_data() {
+    let mut bytes = Vec::new();
+    42u64.encode(&mut bytes).unwrap();
+    bytes.push(0);
+    assert!(matches!(
+        decode_exact::<u64>(&bytes),
+        Err(Error::TrailingData)
+    ));
+}
+
+#[test]
+fn test_decode_limits_reject_input_over_budget() {
+    let mut bytes = Vec::new();
+    42u64.encode(&mut bytes).unwrap();
+    let limits = DecodeLimits::new(bytes.len() - 1, 16, 1024);
+    assert!(matches!(
+        decode_exact_with_limits::<u64>(&bytes, None, limits),
+        Err(Error::DecodeLimitExceeded)
+    ));
+}
+
+#[test]
+fn test_decode_limits_reject_sequence_over_budget() {
+    let values = vec![1u64, 2, 3];
+    let mut bytes = Vec::new();
+    values.encode(&mut bytes).unwrap();
+    let limits = DecodeLimits::new(bytes.len(), 2, 1024);
+    assert!(matches!(
+        decode_exact_with_limits::<Vec<u64>>(&bytes, None, limits),
+        Err(Error::DecodeLimitExceeded)
+    ));
+}
+
+#[test]
+fn test_decode_limits_reject_allocation_over_budget() {
+    let values = vec![1u64, 2, 3];
+    let mut bytes = Vec::new();
+    values.encode(&mut bytes).unwrap();
+    let limits = DecodeLimits::new(bytes.len(), 16, 16);
+    assert!(matches!(
+        decode_exact_with_limits::<Vec<u64>>(&bytes, None, limits),
+        Err(Error::DecodeLimitExceeded)
+    ));
+}
+
+#[test]
+fn test_decode_limits_bound_zstd_expansion() {
+    let values = vec![0u8; 4096];
+    let mut bytes = Vec::new();
+    values.encode(&mut bytes).unwrap();
+    assert!(bytes.len() < values.len());
+    let limits = DecodeLimits::new(bytes.len(), values.len(), 1024);
+    assert!(matches!(
+        decode_exact_with_limits::<Vec<u8>>(&bytes, None, limits),
+        Err(Error::DecodeLimitExceeded)
+    ));
 }
 
 #[cfg(test)]

@@ -55,6 +55,11 @@ use hashbrown::HashMap;
 use crate::bytes;
 use crate::prelude::*;
 
+#[inline(always)]
+fn decode_usize(reader: &mut impl Read) -> Result<usize> {
+    usize::try_from(Lencode::decode_varint_u64(reader)?).map_err(|_| Error::DecodeLimitExceeded)
+}
+
 /// A single contiguous region of changed bytes.
 #[derive(Debug)]
 struct Patch<'a> {
@@ -610,7 +615,9 @@ impl DiffDecoder {
     /// callers on a hot path should prefer the borrowed variant, which
     /// performs no allocation in steady state.
     pub fn decode_blob(&mut self, reader: &mut impl Read) -> Result<Vec<u8>> {
-        Ok(self.decode_blob_ref(reader)?.to_vec())
+        let decoded = self.decode_blob_ref(reader)?;
+        reader.claim_sequence(decoded.len(), 1)?;
+        Ok(decoded.to_vec())
     }
 
     /// Decodes a byte blob like [`decode_blob`](Self::decode_blob), but
@@ -652,7 +659,8 @@ impl DiffDecoder {
         match mode {
             0 => {
                 // Full blob: read straight into its destination buffer.
-                let len = Lencode::decode_varint_u64(reader)? as usize;
+                let len = decode_usize(reader)?;
+                reader.claim_sequence(len, 1)?;
                 match self.current_key {
                     Some(key) => {
                         let dest = self.store.entry(key).or_default();
@@ -667,8 +675,10 @@ impl DiffDecoder {
             }
             1 => {
                 // Patch diff — need old blob
-                let new_len = Lencode::decode_varint_u64(reader)? as usize;
-                let num_patches = Lencode::decode_varint_u64(reader)? as usize;
+                let new_len = decode_usize(reader)?;
+                let num_patches = decode_usize(reader)?;
+                reader.claim_sequence(new_len, 1)?;
+                reader.claim_sequence(num_patches, 1)?;
 
                 let key = self.current_key.ok_or(Error::InvalidData)?;
                 let old_len = self.store.get(&key).ok_or(Error::InvalidData)?.len();
@@ -715,14 +725,18 @@ impl DiffDecoder {
                     let mut old_cursor = 0usize;
 
                     for _ in 0..num_patches {
-                        let gap = Lencode::decode_varint_u64(reader)? as usize;
-                        let patch_len = Lencode::decode_varint_u64(reader)? as usize;
+                        let gap = decode_usize(reader)?;
+                        let patch_len = decode_usize(reader)?;
 
                         // Copy unchanged bytes from old blob
-                        let copy_end = old_cursor + gap;
-                        if copy_end > old.len() {
-                            return Err(Error::InvalidData);
-                        }
+                        let copy_end = old_cursor
+                            .checked_add(gap)
+                            .filter(|end| *end <= old.len())
+                            .ok_or(Error::InvalidData)?;
+                        let patch_end = copy_end
+                            .checked_add(patch_len)
+                            .filter(|end| *end <= new_len)
+                            .ok_or(Error::InvalidData)?;
                         result.extend_from_slice(&old[old_cursor..copy_end]);
 
                         // Read patch data directly into the vec without zero-filling.
@@ -730,13 +744,14 @@ impl DiffDecoder {
                         // uninitialized region; on a short read we clear the buffer
                         // before returning, so the uninit tail is never observable.
                         let start = result.len();
+                        debug_assert_eq!(start, copy_end);
                         result.reserve(patch_len);
                         #[allow(clippy::uninit_vec)]
                         // perf: avoid zero-fill before overwrite
                         unsafe {
-                            result.set_len(start + patch_len);
+                            result.set_len(patch_end);
                         }
-                        let n = match reader.read(&mut result[start..start + patch_len]) {
+                        let n = match reader.read(&mut result[start..patch_end]) {
                             Ok(n) => n,
                             Err(e) => {
                                 result.clear();
@@ -748,7 +763,7 @@ impl DiffDecoder {
                             return Err(Error::ReaderOutOfData);
                         }
 
-                        old_cursor = copy_end + patch_len;
+                        old_cursor = patch_end;
                     }
 
                     // Copy any remaining unchanged tail from old blob
@@ -769,8 +784,8 @@ impl DiffDecoder {
             }
             2 => {
                 // XOR + zstd diff
-                let new_len = Lencode::decode_varint_u64(reader)? as usize;
-                let compressed_len = Lencode::decode_varint_u64(reader)? as usize;
+                let new_len = decode_usize(reader)?;
+                let compressed_len = decode_usize(reader)?;
                 let key = self.current_key.ok_or(Error::InvalidData)?;
                 self.decode_xor_ref(reader, key, new_len, compressed_len)
             }
@@ -788,6 +803,7 @@ impl DiffDecoder {
     ) -> Result<&[u8]> {
         let old_len = self.store.get(&key).ok_or(Error::InvalidData)?.len();
         let xor_len = old_len.max(new_len);
+        reader.claim_sequence(xor_len, 1)?;
 
         // Borrow contiguous compressed input when possible; generic readers
         // retain the reusable staging-buffer fallback.
@@ -798,6 +814,7 @@ impl DiffDecoder {
             bytes::zstd_decompress_into(&input[..compressed_len], xor_len, &mut self.xor_scratch)?;
             reader.advance(compressed_len);
         } else {
+            reader.claim_allocation(compressed_len)?;
             read_exact_into(reader, compressed_len, &mut self.compressed_scratch)?;
             bytes::zstd_decompress_into(&self.compressed_scratch, xor_len, &mut self.xor_scratch)?;
         }
@@ -855,8 +872,8 @@ fn visit_rle_patches(
     let mut previous_end = 0usize;
 
     for _ in 0..num_patches {
-        let gap = Lencode::decode_varint_u64(&mut cursor)? as usize;
-        let patch_len = Lencode::decode_varint_u64(&mut cursor)? as usize;
+        let gap = decode_usize(&mut cursor)?;
+        let patch_len = decode_usize(&mut cursor)?;
         let patch_start = previous_end.checked_add(gap).ok_or(Error::InvalidData)?;
         let patch_end = patch_start
             .checked_add(patch_len)

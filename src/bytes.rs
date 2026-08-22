@@ -288,7 +288,7 @@ pub fn zstd_decompress_into(
 #[inline(always)]
 pub fn zstd_content_size(compressed: &[u8]) -> Result<usize> {
     match zstd_safe::get_frame_content_size(compressed) {
-        Ok(Some(n)) => Ok(n as usize),
+        Ok(Some(n)) => usize::try_from(n).map_err(|_| Error::DecodeLimitExceeded),
         _ => Err(Error::InvalidData),
     }
 }
