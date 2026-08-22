@@ -1,12 +1,12 @@
 {
-  "version": 62,
+  "version": 63,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T16:28:03Z",
+  "updated_at": "2026-08-22T16:48:11Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 17,
+    "version": 18,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -341,6 +341,40 @@
         "wire_compatibility": "LCSH v1 and shred encoding were unchanged; only component boundaries changed",
         "unsafe_code_added": false,
         "decision": "reverted because the lower component count did not improve either timed hot path and every timing change stayed below the 5% keep threshold; the 1.5 target and exact protected source were restored"
+      },
+      "fast1_retained_fixture_ceiling": {
+        "change": "use LZ4 FAST(1) instead of retained FAST(4) for every canonical component to bound the largest possible gain from selective near-FEC recompression",
+        "status": "reverted after feasibility check",
+        "protocol": "one CPU-28 process over the retained 1.5 fixture with seven warmed trials per format; compare against the restored three-process baseline from the same exact Rust 1.98.0 source",
+        "baseline": {
+          "wincode_leader_ns": 353202775,
+          "wincode_validator_ns": 21445229,
+          "canonical_lz4_leader_ns": 222454517,
+          "canonical_lz4_validator_ns": 23799487,
+          "canonical_lz4_payload_bytes": 33559843,
+          "canonical_lz4_data_shreds": 52576,
+          "canonical_lz4_coding_shreds": 52576,
+          "canonical_lz4_wire_bytes": 127812256
+        },
+        "candidate": {
+          "wincode_leader_ns": 353197673,
+          "wincode_validator_ns": 21347057,
+          "canonical_lz4_leader_ns": 231146913,
+          "canonical_lz4_validator_ns": 24407968,
+          "canonical_lz4_payload_bytes": 32110857,
+          "canonical_lz4_data_shreds": 50496,
+          "canonical_lz4_coding_shreds": 50496,
+          "canonical_lz4_wire_bytes": 122755776,
+          "binary_sha256": "e50fb3af974c6efe8c5680671f18f5fce601fc90822ad3d5557e9e7355cbff55"
+        },
+        "payload_reduction_pct": 4.318,
+        "wire_reduction_pct": 3.956,
+        "leader_regression_pct": 3.907,
+        "validator_regression_pct": 2.557,
+        "restored_codec_sha256": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b",
+        "wire_compatibility": "FAST(1) and FAST(4) emit the same LZ4 block format inside unchanged LCSH v1 frames",
+        "unsafe_code_added": false,
+        "decision": "reverted because recompressing every component recovered only 3.956% of wire bytes while regressing leader time by 3.907%; a selective second pass can recover only a subset of that wire gain and cannot clear the 5% keep threshold"
       }
     },
     "blockstore_component_benchmark": {
@@ -639,7 +673,110 @@
         "unsafe_code_added": false,
         "public_api_change": "additive"
       },
-      "conclusion": "the borrowed range scan plus framed-input allocation reuse cuts canonical Blockstore latency by 50.4% on Rust 1.98.0 while preserving the 47.4% Turbine wire reduction; canonical decoding now costs 6.7% more latency than wincode"
+      "paced_receiver_confirmation": {
+        "purpose": "measure the retained Rust 1.98.0 Blockstore path with the actual paced receiver fixtures after selective canonical coalescing",
+        "benchmark_command": "LENCODE_BLOCKSTORE_RUNS=31 taskset -c 28 /tmp/lencode-blockstore-paced-baseline-rust-1.98.0 <fixture>",
+        "binary_sha256": "6a2c2d515d5eb32695f631fdbeefb67c4053fb729881f5c170cb76179989b8ab",
+        "benchmark_source_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "source_sha256": {
+          "blockstore": "ae2f69dafadcb6891736577a4eb9c9fa627a403b80c84bb2aee06cb376529fc5",
+          "blockstore_db": "e878ae7fe85c91c05b01744bded6801e4a4218bc613502f0a080b4c6988c0c66",
+          "entry": "9f2a6fe7bf33a9c006d6e20047640ce9dd3b12d910e4243c02b30186a6ae1deb",
+          "block_component_parser": "b1d1c84fb9657b794ea76590626d101320aa146a3408dd1efb3ad1a1dc892eac",
+          "block_component_processor": "e2fa421be89b39d2e0befb818a69b04ca6289a9be58d825d0b37d061f59d6309",
+          "production_codec": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b"
+        },
+        "profile": {
+          "protocol": "perf record at 999 Hz on CPU 28 over the exact current-source binary with 101 alternating warmed trials",
+          "data_path": "/tmp/lencode-blockstore-paced-baseline.data",
+          "data_sha256": "fe04b9082c5a6e006b87ff61dced3f4d517dc805734f1ed7656ace1c1c500403",
+          "samples": 8080,
+          "lost_samples": 0,
+          "wincode_validator_ns": 31271422,
+          "canonical_lz4_validator_ns": 27572750,
+          "self_cycles_pct": {
+            "transaction_frame_parse": 9.18,
+            "rocksdb_iterator_next": 8.86,
+            "lz4_decompress_safe": 7.26,
+            "sha256_blocks": 6.65,
+            "rocksdb_thread_local_initialization": 5.24,
+            "memmove": 4.04,
+            "block_component_parse": 3.76,
+            "malloc": 1.18
+          },
+          "scope_note": "the SHA-256 and RocksDB initialization samples include benchmark setup and insertion"
+        },
+        "corpus_transaction_distribution": {
+          "slots": 100,
+          "entries": 68392,
+          "transactions": 124218,
+          "entries_by_transaction_count": {
+            "0": 6400,
+            "1": 54175,
+            "2": 1209,
+            "3": 459,
+            "4": 2043,
+            "5": 104,
+            "6": 97,
+            "7": 99,
+            "8": 130,
+            "9_or_more": 3676
+          }
+        },
+        "same_component_boundaries": {
+          "protocol": "run both formats over the retained 1.5 canonical fixture in three CPU-28 processes with 31 alternating warmed trials per process",
+          "components": 1533,
+          "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+          "wincode_validator": { "value": 31026602, "unit": "ns/100 Blockstore slots", "range": [30955532, 31054352] },
+          "canonical_lz4_validator": { "value": 27259549, "unit": "ns/100 Blockstore slots", "range": [27235308, 27331859] },
+          "canonical_lz4_latency_improvement_pct": 12.141,
+          "canonical_lz4_throughput_vs_wincode": 1.138192
+        },
+        "actual_paced_end_to_end": {
+          "protocol": "compare each format using the fixture emitted for that format by the actual receiver under the same 400 ms byte-paced model",
+          "model_limit": "entry timing is synthetic because the source corpus has no BankingStage timestamps",
+          "legacy_wincode": {
+            "components": 1974,
+            "fixture_sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72",
+            "validator": { "value": 27685310, "unit": "ns/100 Blockstore slots", "range": [27675009, 27768210] }
+          },
+          "canonical_lz4": {
+            "components": 1533,
+            "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+            "validator": { "value": 27259549, "unit": "ns/100 Blockstore slots", "range": [27235308, 27331859] }
+          },
+          "canonical_lz4_latency_improvement_pct": 1.538,
+          "canonical_lz4_throughput_vs_wincode": 1.015619
+        },
+        "conclusion": "the canonical codec is 7.311% slower in isolation, but its 22.340% lower component count makes the full paced Blockstore read 1.538% faster than legacy wincode; with equal component boundaries it is 12.141% faster"
+      },
+      "inline_single_transaction_trial": {
+        "change": "store the common single transaction view inline in EntryView with SmallVec<[UnsanitizedTransactionView<D>; 1]>",
+        "status": "reverted on exact-source regression",
+        "motivation": "54,175 of 68,392 corpus entries contain exactly one transaction, so inline storage could remove their transaction-vector allocations",
+        "protocol": "three interleaved exact-source process pairs on CPU 28 with 31 alternating warmed trials per format",
+        "baseline": {
+          "binary_sha256": "6a2c2d515d5eb32695f631fdbeefb67c4053fb729881f5c170cb76179989b8ab",
+          "wincode_validator": { "value": 31026602, "unit": "ns/100 Blockstore slots", "range": [30955532, 31054352] },
+          "canonical_lz4_validator": { "value": 27259549, "unit": "ns/100 Blockstore slots", "range": [27235308, 27331859] }
+        },
+        "candidate": {
+          "binary_sha256": "4441dfb4ba01ce1ff65eda7b0b9077e5b58be72dd5a82677b0564db453621151",
+          "wincode_validator": { "value": 31919186, "unit": "ns/100 Blockstore slots", "range": [31885736, 31921015] },
+          "canonical_lz4_validator": { "value": 28307532, "unit": "ns/100 Blockstore slots", "range": [28175792, 28346612] }
+        },
+        "wincode_regression_pct": 2.877,
+        "canonical_lz4_regression_pct": 3.845,
+        "canonical_lz4_control_normalized_regression_pct": 0.941,
+        "restored_source_sha256": {
+          "entry": "9f2a6fe7bf33a9c006d6e20047640ce9dd3b12d910e4243c02b30186a6ae1deb",
+          "block_component_parser": "b1d1c84fb9657b794ea76590626d101320aa146a3408dd1efb3ad1a1dc892eac",
+          "block_component_processor": "e2fa421be89b39d2e0befb818a69b04ca6289a9be58d825d0b37d061f59d6309"
+        },
+        "unsafe_code_added": false,
+        "decision": "reverted because the larger EntryView layout and added cache traffic outweighed removing the common single-transaction allocation; both formats exceeded the 2% absolute regression ceiling"
+      },
+      "conclusion": "the borrowed range scan plus framed-input allocation reuse cuts canonical Blockstore latency by 50.4% on Rust 1.98.0; with each codec's actual paced component boundaries, canonical completes 1.538% faster than legacy wincode while retaining the 59.211% Turbine wire reduction"
     },
     "history": [
       {
@@ -1046,6 +1183,49 @@
         "wire_compatibility": "canonical LCSH v1 and shred encoding stayed unchanged",
         "unsafe_code_added": false,
         "validation": "the receiver harness first regenerated the retained 1.5 fixture byte for byte, then the 1.75 fixture preserved all 68,392 entries and 124,218 transactions; protected source was restored"
+      },
+      {
+        "iteration": 16,
+        "optimization": "raise the canonical coalescing target from 1.5 to 1.625 typical FEC inputs",
+        "kept": false,
+        "integration": "Agave StandardBroadcastRun receive batching",
+        "component_reduction_pct": 7.567,
+        "payload_reduction_pct": 0.623,
+        "wire_regression_pct": 1.278,
+        "leader_regression_pct": 1.140,
+        "validator_regression_pct": 1.411,
+        "candidate_fixture_sha256": "04c5fcead7372bed37b65518c9f73b53dcf6bb283ba894b49c666c04e37cd58b",
+        "wire_compatibility": "canonical LCSH v1 and shred encoding stayed unchanged",
+        "unsafe_code_added": false,
+        "validation": "the calibrated receiver preserved all 68,392 entries and 124,218 transactions; the 1.5 target and exact protected source were restored"
+      },
+      {
+        "iteration": 17,
+        "optimization": "store one transaction view inline in Agave EntryView",
+        "kept": false,
+        "integration": "Agave entry view and block-component parser",
+        "wincode_regression_pct": 2.877,
+        "canonical_lz4_regression_pct": 3.845,
+        "canonical_lz4_control_normalized_regression_pct": 0.941,
+        "baseline_binary_sha256": "6a2c2d515d5eb32695f631fdbeefb67c4053fb729881f5c170cb76179989b8ab",
+        "candidate_binary_sha256": "4441dfb4ba01ce1ff65eda7b0b9077e5b58be72dd5a82677b0564db453621151",
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false,
+        "validation": "three interleaved CPU-affined 31-trial exact-source pairs; all candidate sources and the current baseline binary were restored"
+      },
+      {
+        "iteration": 18,
+        "optimization": "use LZ4 FAST(1) for every retained canonical component as an upper bound on selective recompression",
+        "kept": false,
+        "integration": "Agave shred block-component codec",
+        "payload_reduction_pct": 4.318,
+        "wire_reduction_pct": 3.956,
+        "leader_regression_pct": 3.907,
+        "validator_regression_pct": 2.557,
+        "candidate_binary_sha256": "e50fb3af974c6efe8c5680671f18f5fce601fc90822ad3d5557e9e7355cbff55",
+        "wire_compatibility": "FAST(1) and FAST(4) use the same LZ4 block format inside unchanged LCSH v1 frames",
+        "unsafe_code_added": false,
+        "validation": "the all-component ceiling stayed below the 5% wire threshold and exceeded both latency regression limits; FAST(4) source was restored"
       }
     ],
     "failed_attempts": [
@@ -1248,6 +1428,14 @@
       {
         "optimization": "raise the canonical coalescing target from 1.5 to 1.625 typical FEC inputs",
         "reason": "the calibrated actual receiver reduced components from 1,533 to 1,417 and payload by 0.62%, but increased canonical wire bytes by 1.28%, leader time by 1.14%, and validator time by 1.41%; no timed hot path cleared the 5% threshold, so the target was restored to 1.5"
+      },
+      {
+        "optimization": "store the common single transaction view inline in Agave EntryView",
+        "reason": "although 54,175 of 68,392 entries contain one transaction, three interleaved exact-source 31-trial pairs regressed wincode Blockstore loading by 2.88% and canonical-LZ4 by 3.85% (0.94% after control normalization); the larger EntryView layout outweighed the avoided allocations, so the SmallVec change was removed"
+      },
+      {
+        "optimization": "selectively recompress near-FEC canonical components with LZ4 FAST(1)",
+        "reason": "the stronger all-component FAST(1) upper bound reduced retained-fixture wire bytes only 3.96% while regressing leader time 3.91% and validator time 2.56%; any selective second pass can capture only part of that wire reduction, so no additional production branch was added"
       }
     ],
     "full_resets": [
@@ -1468,6 +1656,8 @@
     "agave_turbine_wire_reduction_vs_wincode_pct": 59.211,
     "agave_jemalloc_blockstore_validator_throughput_vs_wincode": 1.005,
     "agave_jemalloc_sorted_read_latency_improvement_pct": 8.809,
+    "agave_paced_blockstore_validator_throughput_vs_wincode": 1.015619,
+    "agave_paced_blockstore_validator_latency_improvement_pct": 1.538,
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
     "primary_dict_decode_throughput_vs_wincode": 0.669785173,
     "primary_dict_encode_time_improvement_vs_original_pct": 17.540,
