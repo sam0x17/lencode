@@ -1,12 +1,12 @@
 {
-  "version": 61,
+  "version": 62,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T16:16:07Z",
+  "updated_at": "2026-08-22T16:28:03Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 16,
+    "version": 17,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench -p solana-ledger --bench lencode_shreds -- /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -300,6 +300,47 @@
         "wire_compatibility": "LCSH v1 and shred encoding were unchanged; only component boundaries changed",
         "unsafe_code_added": false,
         "decision": "reverted before longer timing runs because the deterministic 2.252% canonical wire regression exceeded the 2% ceiling; the 1.5 target and exact protected source were restored"
+      },
+      "one_and_five_eighths_target_trial": {
+        "change": "raise only the canonical coalescing input target from 1.5 to 1.625 typical FEC inputs",
+        "status": "reverted below threshold",
+        "receiver_protocol": "the calibrated harness delivered all 100 source slots through the actual receive function over 400 ms each, paced by cumulative serialized bytes",
+        "baseline": {
+          "components": 1533,
+          "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+          "canonical_lz4_payload_bytes": 33559843,
+          "canonical_lz4_wire_bytes": 127812256
+        },
+        "candidate": {
+          "components": 1417,
+          "entries": 68392,
+          "transactions": 124218,
+          "exited_hit_max": 1290,
+          "exited_tightly_packed": 0,
+          "exited_slot_ended": 100,
+          "exited_timeout": 27,
+          "fixture_sha256": "04c5fcead7372bed37b65518c9f73b53dcf6bb283ba894b49c666c04e37cd58b",
+          "canonical_lz4_payload_bytes": 33350777,
+          "canonical_lz4_data_shreds": 53248,
+          "canonical_lz4_coding_shreds": 53248,
+          "canonical_lz4_wire_bytes": 129445888
+        },
+        "component_reduction_pct": 7.567,
+        "payload_reduction_pct": 0.623,
+        "wire_regression_pct": 1.278,
+        "timing_smoke": {
+          "protocol": "one CPU-28 process per fixture with seven warmed trials per format",
+          "baseline_canonical_lz4_leader_ns": 223013781,
+          "baseline_canonical_lz4_validator_ns": 23803048,
+          "candidate_canonical_lz4_leader_ns": 225556470,
+          "candidate_canonical_lz4_validator_ns": 24138859,
+          "leader_regression_pct": 1.140,
+          "validator_regression_pct": 1.411
+        },
+        "benchmark_binary_sha256": "953fac34562551a152a1e9422fab9805d9ede5f972dd094a8b103bce6fc583b2",
+        "wire_compatibility": "LCSH v1 and shred encoding were unchanged; only component boundaries changed",
+        "unsafe_code_added": false,
+        "decision": "reverted because the lower component count did not improve either timed hot path and every timing change stayed below the 5% keep threshold; the 1.5 target and exact protected source were restored"
       }
     },
     "blockstore_component_benchmark": {
@@ -1203,6 +1244,10 @@
       {
         "optimization": "raise the canonical coalescing target from 1.5 to 1.75 typical FEC inputs",
         "reason": "the calibrated actual receiver reduced components from 1,533 to 1,316 and payload by 1.32%, but compressed batches crossed more FEC boundaries and increased canonical wire bytes from 127,812,256 to 130,690,560 (2.25%); the target was restored to 1.5 under the 2% regression ceiling"
+      },
+      {
+        "optimization": "raise the canonical coalescing target from 1.5 to 1.625 typical FEC inputs",
+        "reason": "the calibrated actual receiver reduced components from 1,533 to 1,417 and payload by 0.62%, but increased canonical wire bytes by 1.28%, leader time by 1.14%, and validator time by 1.41%; no timed hot path cleared the 5% threshold, so the target was restored to 1.5"
       }
     ],
     "full_resets": [
@@ -1229,6 +1274,28 @@
           "lencode_validator_throughput": 0.944
         },
         "result": "exact protected sources and binaries restored; the retained Rust 1.98.0 Blockstore baseline was re-established"
+      },
+      {
+        "after": "canonical encoder tail-slice, 1.75-FEC coalescing target, and 1.625-FEC coalescing target reverts",
+        "restored_broadcast_utils_sha256": "b5c4b19838a68bc58d84f59a75033e02a37ea4a00180a51a6ab1f0185fd465d1",
+        "restored_standard_broadcast_run_sha256": "75bf241b1f4e5813bb17cf461272b6b61ccd4c87d66017624cb8b2eb11fc8782",
+        "restored_codec_sha256": "f4107df2240dda9998be48aa7bbce3b3467115acd3200cf027e1a4a301cfdd9b",
+        "restored_shredder_sha256": "084c5f92ef51b76c3e2c0290339ae48bfd9c799f33fc43a5439b883735501cd8",
+        "restored_production_binary_sha256": "953fac34562551a152a1e9422fab9805d9ede5f972dd094a8b103bce6fc583b2",
+        "retained_fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "fresh_production_confirmation": {
+          "protocol": "median of three CPU-28 processes with 31 warmed trials per format",
+          "wincode_leader_ns": 353202775,
+          "wincode_leader_range_ns": [352968856, 355342586],
+          "wincode_validator_ns": 21445229,
+          "wincode_validator_range_ns": [21432689, 21453679],
+          "canonical_lz4_leader_ns": 222454517,
+          "canonical_lz4_leader_range_ns": [222335556, 222779037],
+          "canonical_lz4_validator_ns": 23799487,
+          "canonical_lz4_validator_range_ns": [23758287, 23802418],
+          "canonical_lz4_wire_bytes": 127812256
+        },
+        "result": "exact protected sources and frozen binary restored; the retained 1.5-FEC Rust 1.98.0 production baseline was re-established"
       }
     ],
     "contention_events": [
