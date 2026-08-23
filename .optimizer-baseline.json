@@ -1,12 +1,12 @@
 {
-  "version": 127,
+  "version": 128,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T22:49:27Z",
+  "updated_at": "2026-08-23T23:20:22Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 81,
+    "version": 82,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3590,6 +3590,151 @@
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       }
     },
+    "iteration_64_exact_mixed_slots_and_7_4_target": {
+      "status": "retained a direct canonical-lencode Agave batching update; lencode source was unchanged after two codec candidates failed the keep gate",
+      "scope": "measure exact final and nonfinal component boundaries, profile the current mixed-slot path, and retain only lencode-owned codec work or a direct CanonicalLz4V1 replacement-site change",
+      "exact_boundary_recovery": {
+        "method": "align every paced component entry against the original 100-slot corpus, then carry the recovered slot id, shred indices, chained root, and final-component flag through the frozen benchmark",
+        "entry_identity_checks": "passed with no leftover entries or cross-slot divergence",
+        "binary_path": "/tmp/lencode-mixed-slots-13_8-retained-rust-1.98.0",
+        "binary_sha256": "3dbbd2921c624e0bf4d68109714f4f205537e86503061cec1fc184fa977d9642",
+        "fixture_path": "/tmp/agave-shred-paced-repartition-13_8.bin",
+        "fixture_sha256": "04c5fcead7372bed37b65518c9f73b53dcf6bb283ba894b49c666c04e37cd58b",
+        "slots": 100,
+        "components": 1417,
+        "payload_bytes": 33239548,
+        "data_shreds": 46496,
+        "coding_shreds": 46496,
+        "wire_bytes": 113031776
+      },
+      "current_profile": {
+        "path": "/tmp/lencode-mixed-slots-current-perf.data",
+        "sha256": "749edfb617b472a5d426208c9d1640b377c347fc8b0032407fe7c1a79998d81e",
+        "samples": 20389,
+        "lost_samples": 0,
+        "largest_in_scope_self_cycle_pct": {
+          "LZ4_compress_fast_extState": 3.90,
+          "wincode_component_serialize_control": 2.26,
+          "lz4_decompress_safe": 0.95,
+          "append_canonical_short_u16": 0.77,
+          "append_canonical_addresses": 0.75,
+          "append_canonical_instructions": 0.52,
+          "encode_canonical_transaction": 0.35,
+          "append_canonical": 0.20
+        },
+        "excluded_hotspots": "SHA-256, Reed-Solomon, field arithmetic, signature work, and general Agave processing are outside the lencode-specific scope"
+      },
+      "rejected_codec_candidates": {
+        "uniform_nonfinal_fast4": {
+          "binary_path": "/tmp/lencode-mixed-slots-uniform-fast4-rust-1.98.0",
+          "binary_sha256": "f997598f95061ce9ae584ebd1a12cb0c6f6a2d5c42a4ed3de9e9b52bbc01f8c3",
+          "payload_bytes": 33343365,
+          "data_shreds": 48608,
+          "coding_shreds": 48608,
+          "wire_bytes": 118166048,
+          "wire_regression_pct": 4.542326,
+          "decision": "reverted before timing because wire volume exceeded the 2% regression ceiling"
+        },
+        "strong_retry_divisor_16": {
+          "binary_path": "/tmp/lencode-mixed-slots-divisor16-rust-1.98.0",
+          "binary_sha256": "e57d34e3e10ac4dc6580e65d77c0f9ee840e3c70cc59652a6b3913d2b271088f",
+          "output_changed": false,
+          "absolute_lencode_leader_improvement_pct_by_pair": [0.405197, 0.637138],
+          "control_normalized_lencode_leader_change_pct_by_pair": [-0.399432, 0.427253],
+          "decision": "reverted because neither alternating pair established the required 1% gain"
+        }
+      },
+      "retained_7_4_canonical_target": {
+        "agave_replacement_site": "change only the CanonicalLz4V1 coalescing target from 13/8 to 7/4 of the typical uncompressed FEC input size; LegacyWincode remains unchanged",
+        "fixture_path": "/tmp/agave-shred-broadcast-receiver-canonical-1_75-400ms.bin",
+        "fixture_sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+        "fixture_construction": "calibrated receiver replay with the production 50 ms receive deadline and exact recovered 100-slot boundaries; the harness first reproduced the old 1.5 target fixture byte for byte",
+        "fixture_counts": {
+          "slots": 100,
+          "entries": 68392,
+          "transactions": 124218,
+          "components": 1316,
+          "coalesce_exited_hit_max": 1154,
+          "coalesce_exited_slot_ended": 100,
+          "coalesce_exited_timeout": 62
+        },
+        "exact_output": {
+          "payload_bytes": 32957717,
+          "data_shreds": 46016,
+          "coding_shreds": 46016,
+          "wire_bytes": 111864896
+        },
+        "incremental_vs_13_8": {
+          "component_reduction_pct": 7.127735,
+          "payload_reduction_pct": 0.847879,
+          "wire_reduction_pct": 1.032347
+        },
+        "end_to_end_pairs": [
+          {
+            "process_order": ["current_13_8", "target_7_4"],
+            "current_lencode_leader_ns": 211899626,
+            "target_lencode_leader_ns": 211688115,
+            "leader_improvement_pct": 0.099817,
+            "current_lencode_validator_ns": 23015354,
+            "target_lencode_validator_ns": 23099094,
+            "validator_regression_pct": 0.363844
+          },
+          {
+            "process_order": ["target_7_4", "current_13_8"],
+            "current_lencode_leader_ns": 211667465,
+            "target_lencode_leader_ns": 211495425,
+            "leader_improvement_pct": 0.081278,
+            "current_lencode_validator_ns": 23014994,
+            "target_lencode_validator_ns": 23087924,
+            "validator_regression_pct": 0.316880
+          }
+        ],
+        "balanced_blockstore_100_slots": {
+          "binary_sha256": "f240001302617652a412b633dde77f3df052a0415d0cffe3d2039e0f58ff0942",
+          "absolute_lencode_validator_improvement_pct_by_pair": [0.012987, 0.479662]
+        },
+        "decision": "the exact wire reduction clears the 1% keep gate, component count falls by 7.128%, and all measured latency movements remain below the 2% ceiling"
+      },
+      "rejected_2x_target": {
+        "fixture_path": "/tmp/agave-shred-broadcast-receiver-canonical-400ms.bin",
+        "fixture_sha256": "2ef8626cc7eb3209640651fa2824ee752fa4876fca9281d5a0efa0138d6de0b9",
+        "components": 1167,
+        "payload_bytes": 32583948,
+        "data_shreds": 47328,
+        "coding_shreds": 47328,
+        "wire_bytes": 115054368,
+        "wire_regression_vs_7_4_pct": 2.851182,
+        "decision": "rejected because it exceeded the wire regression ceiling and was slower in the leader screen"
+      },
+      "current_7_4_vs_production_legacy": {
+        "legacy_components": 1974,
+        "canonical_components": 1316,
+        "component_reduction_pct": 33.333333,
+        "legacy_wire_bytes": 179154976,
+        "canonical_wire_bytes": 111864896,
+        "wire_reduction_pct": 37.559705,
+        "leader_speedup_by_pair": [1.368448, 1.353737],
+        "validator_latency_regression_pct_by_pair": [13.741462, 15.156071]
+      },
+      "zero_copy": "the borrowed selected-frame slice, caller-owned encoder arena, caller-owned decode arena, and BytesMut freeze handoff are unchanged; no copy, allocation, or owned side buffer was added",
+      "wire_compatibility": "every retained output remains a standard size-prefixed LZ4 block inside the existing LCSH version-1 flag-1 frame; only trusted leader batching boundaries changed",
+      "security": "the retained change only raises a bounded trusted-leader coalescing target below the existing legacy maximum; the 50 ms deadline, oversized-entry handling, exact capacity checks, decoder, parser, hostile-input bounds, dependencies, and audited unsafe surface are unchanged",
+      "validation": "Rust 1.98 passed the focused canonical target test, all 48 solana-turbine library tests, strict turbine library Clippy, repository formatting, and diff whitespace checks; JSON and staged security checks are recorded with the state commit",
+      "source_sha256": {
+        "lencode_solana_wire": "0445dde85cbe7e704e5a7862daceffb59e1fd8f970cb0dfbef609156cda81d3b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_ledger_manifest": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_broadcast_utils": "b0bc31a78afc880f3adda624e5a2e43328eacf26cbd224474873a734ab3171fc",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_standard_broadcast": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
     "production_batch_benchmark": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
       "fixture": {
@@ -6764,6 +6909,14 @@
     "agave_13_8_uniform_fast1_validator_regression_pct_by_pair": [0.544574, 0.241167],
     "agave_current_conservative_wire_reduction_vs_legacy_pct": 36.908380,
     "agave_current_target_only_leader_speedup_vs_legacy_by_pair": [1.305208, 1.299072],
+    "agave_7_4_component_reduction_vs_13_8_pct": 7.127735,
+    "agave_7_4_wire_reduction_vs_13_8_pct": 1.032347,
+    "agave_7_4_leader_improvement_vs_13_8_pct_by_pair": [0.099817, 0.081278],
+    "agave_7_4_validator_regression_vs_13_8_pct_by_pair": [0.363844, 0.316880],
+    "agave_current_7_4_component_reduction_vs_legacy_pct": 33.333333,
+    "agave_current_7_4_wire_reduction_vs_legacy_pct": 37.559705,
+    "agave_current_7_4_leader_speedup_vs_legacy_by_pair": [1.368448, 1.353737],
+    "agave_current_7_4_validator_regression_vs_legacy_pct_by_pair": [13.741462, 15.156071],
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
     "primary_dict_decode_throughput_vs_wincode": 0.669785173,
     "primary_dict_encode_time_improvement_vs_original_pct": 17.540,
