@@ -244,8 +244,8 @@ pub struct SolanaCanonicalLz4Config {
     pub max_canonical_bytes: usize,
     /// Largest canonical input encoded with LZ4 FAST(4).
     ///
-    /// Larger inputs use FAST(1), which spends more leader CPU for smaller
-    /// frames. This threshold does not affect decoder compatibility.
+    /// Larger inputs use FAST(2), which balances leader CPU against frame
+    /// size. This threshold does not affect decoder compatibility.
     pub fast_acceleration_max_input: usize,
 }
 
@@ -382,7 +382,7 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         let acceleration = if canonical_len <= self.config.fast_acceleration_max_input {
             4
         } else {
-            1
+            2
         };
 
         output
@@ -404,7 +404,7 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
                 )
                 .map_err(|_| Error::InvalidData)?
         };
-        if acceleration != 1
+        if acceleration == 4
             && wire_blocks.is_some_and(|blocks| should_recompress(frame_len, blocks))
         {
             let strong_offset = arena_len;
@@ -2838,15 +2838,23 @@ mod tests {
             Err(Error::IncorrectLength)
         ));
 
-        let fast_one_config = SolanaCanonicalLz4Config::new(expected.len(), expected.len() - 1);
-        let mut fast_one_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(fast_one_config);
-        fast_one_encoder
+        let fast_two_config = SolanaCanonicalLz4Config::new(expected.len(), expected.len() - 1);
+        let mut fast_two_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(fast_two_config);
+        fast_two_encoder
             .encode(entries.iter().copied(), &mut encoded)
             .unwrap();
         let compressed =
-            lz4_block::compress(&expected, Some(CompressionMode::FAST(1)), true).unwrap();
+            lz4_block::compress(&expected, Some(CompressionMode::FAST(2)), true).unwrap();
         expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
         expected_frame.extend_from_slice(&compressed);
+        assert_eq!(encoded, expected_frame);
+        fast_two_encoder
+            .encode_for_wire_blocks(
+                entries.iter().copied(),
+                &mut encoded,
+                SolanaCanonicalLz4WireBlocks::new(1, 1),
+            )
+            .unwrap();
         assert_eq!(encoded, expected_frame);
 
         canonical.extend_from_slice(&[1, 2, 3]);
