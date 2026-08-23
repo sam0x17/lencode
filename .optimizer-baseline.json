@@ -1,12 +1,12 @@
 {
-  "version": 87,
+  "version": 88,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T03:24:58Z",
+  "updated_at": "2026-08-23T03:30:29Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 42,
+    "version": 43,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2414,6 +2414,14 @@
         "wire_bytes_changed": false,
         "unsafe_code_added": false,
         "validation": "the candidate passed 348 ledger tests with 3 ignored, ledger-library and replacement-benchmark strict Clippy, and touched-file nightly rustfmt before the benchmark rerun"
+      },
+      {
+        "optimization": "allocate the canonical Blockstore result vector for the known component count",
+        "reason": "three alternating CPU-affined seven-trial pairs at the direct lencode replacement site changed control-normalized latency by +0.916%, +1.765%, and -1.302%; the median 0.916% gain missed the 1% gate and one pair reversed, so the canonical-only capacity hint was removed",
+        "baseline_binary_sha256": "f29b3ff6c88fc39480858c027577d572bc6f616ceb5c339d20b783331fcd0521",
+        "candidate_binary_sha256": "5bf29877a125178f05e5afdc850d1dfa6bd783c77bb87d62592a74a1fa3fa19e",
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
