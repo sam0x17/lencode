@@ -1,12 +1,12 @@
 {
-  "version": 111,
+  "version": 112,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T16:58:38Z",
+  "updated_at": "2026-08-23T17:30:47Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 65,
+    "version": 66,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1677,6 +1677,105 @@
         }
       ],
       "security": "all candidates retained checked bounds before output mutation or entered fast paths whose lengths were intrinsically below the canonical limits. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, or wire behavior was added. Every source patch was inverse-reverted.",
+      "restored_source_sha256": {
+        "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_shredder": "08652377c89783b9e927edcfb953731fefecaee1486877066245e6e3779284e7",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_blockstore_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
+      }
+    },
+    "post_iteration_48_current_frontier_refresh": {
+      "status": "all candidates reverted",
+      "scope": "lencode-only canonical sizing, canonical LZ4 encoding, and canonical LZ4 frame validation; Agave production sources and replacement call sites were unchanged",
+      "benchmark_protocol": {
+        "rust_version": "1.98.0",
+        "cpu": 28,
+        "end_to_end_trials_per_binary": [15, 31],
+        "focused_sizing_trials_per_binary": 101,
+        "focused_sizing_repeats": 3,
+        "normalization": "each exact candidate binary was normalized to the wincode control measured by that same binary; reverse-order pairs were used",
+        "baseline_end_to_end_binary_sha256": "8612b28412ddbed6ef7a048b72958f6738917c33a67fec49bc92996e4ac3a8ac",
+        "baseline_focused_sizing_binary_sha256": "30cca2db2d0407920eddd89f412ffe29fd610f19f00669f51654598646f998b9",
+        "payload_bytes": 30292964,
+        "wire_bytes": 80592512,
+        "wincode_payload_bytes": 66587751,
+        "wincode_wire_bytes": 172931616
+      },
+      "screens": [
+        {
+          "change": "overwrite selective canonical LZ4 retries in the existing bounded frame buffer",
+          "candidate_binary_sha256": "48e412b8c1842ee0a11d6428a9c0f284c3241c2a16671479328e03d04fd4a844",
+          "control_normalized_leader_improvement_pct_by_pair": [-0.643, 0.346],
+          "control_normalized_validator_improvement_pct_by_pair": [-0.781, -1.167],
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false,
+          "decision": "inverse-reverted because the current single-signature baseline remained below the 1% gate and both validator pairs regressed"
+        },
+        {
+          "change": "raise normal canonical LZ4 acceleration from FAST(4) to FAST(5)",
+          "candidate_binary_sha256": "3878b3dd34ab48153fbf28c675635579f4276bb7b9f5934438154ffe0487cc62",
+          "control_normalized_leader_improvement_pct_by_pair": [-0.033, -0.488],
+          "control_normalized_validator_improvement_pct_by_pair": [-0.408, -0.095],
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false,
+          "decision": "inverse-reverted because the current selector preserved aggregate bytes but both leader pairs regressed"
+        },
+        {
+          "change": "raise normal canonical LZ4 acceleration from FAST(4) to FAST(8)",
+          "candidate_binary_sha256": "54ae26e0c34cf2006fc9061bb03c20b2add20a7f126f32be9ee9692c5f2fb23e",
+          "control_normalized_leader_improvement_pct_by_pair": [-0.355, 0.200],
+          "control_normalized_validator_improvement_pct_by_pair": [-0.722, -0.138],
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false,
+          "decision": "inverse-reverted because the wider skip remained below the 1% gate and both validator pairs regressed"
+        },
+        {
+          "change": "give the bounded canonical append helper a normal inline hint",
+          "candidate_binary_sha256": "cc54bd733e305ef75e675e5e360c461d154c74b68a53a463ebe711dc696d6f7f",
+          "candidate_binary_size_change_bytes": -440,
+          "control_normalized_leader_improvement_pct_by_pair": [0.743, 0.152],
+          "control_normalized_validator_improvement_pct_by_pair": [-0.693, -1.078],
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false,
+          "decision": "inverse-reverted because both leader gains missed 1% and receive latency regressed"
+        },
+        {
+          "change": "form the fixed 48-byte canonical entry header size as a compile-time expression",
+          "candidate_binary_sha256": "88339eb1aacc691b84b303d6e1acce473145e1e8b17921d2b8198c457973f132",
+          "control_normalized_focused_sizing_improvement_pct_by_pair": [0.203, 0.030],
+          "decision": "inverse-reverted because the exact focused gains were below 1%"
+        },
+        {
+          "change": "return the private canonical transaction size walk through one packed u64 while retaining public Result errors",
+          "candidate_binary_sha256": "2b1b50484f54003cb054471fe947f920d676ecfc97c3dbaf004a4dc3091731e8",
+          "control_normalized_focused_sizing_improvement_pct_by_pair": [-2.540, -2.476],
+          "decision": "inverse-reverted above the 2% ceiling because unpacking and code layout outweighed the narrower private return ABI"
+        },
+        {
+          "change": "reject canonical LZ4 frames that advertise fewer than the 56 bytes required by one non-empty canonical entry batch",
+          "candidate_binary_sha256_by_layout": {
+            "minimum_check_first": "53144882c95f0bd231bcbbb729ca29b7005ad76a4b8841325542324f6b0a3dd5",
+            "existing_maximum_check_first": "41c2cd94036875ec939721b7606c526755df17b27497c0459271dbbb31fa7988"
+          },
+          "maximum_check_first_control_normalized_leader_improvement_pct_by_pair": [0.092, -0.500],
+          "maximum_check_first_control_normalized_validator_improvement_pct_by_pair": [-1.262, -0.397],
+          "security_result": "both layouts rejected the impossible length before allocation or libLZ4, added no unsafe code, and passed the malformed-frame test",
+          "decision": "inverse-reverted because the existing bounded decoder and post-decompression entry parser already reject the frame, while both final validator pairs regressed"
+        }
+      ],
+      "dependency_audit": {
+        "lz4_crate": "1.28.1 is the latest published crate and is already selected",
+        "lz4_sys_crate": "1.11.1+lz4-1.10.0 is the latest published crate and is already selected",
+        "decision": "no dependency or lockfile change"
+      },
+      "security": "all sizing candidates retained checked collection widths and overflow handling. Compression candidates used the existing standard LZ4 block encoder and bounded arenas. The frame-hardening candidate added no unsafe code but was reverted after measured receive regressions. No parser sidecar, private Agave layout, unchecked offset, dependency, wire flag, or unsafe block was retained.",
       "restored_source_sha256": {
         "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
         "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
