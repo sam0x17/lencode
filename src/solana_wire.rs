@@ -80,11 +80,16 @@ pub const SOLANA_ENTRY_BATCH_HEADER_BYTES: usize =
 pub const SOLANA_CANONICAL_LZ4_HEADER_BYTES: usize = SOLANA_ENTRY_BATCH_MAGIC.len() + 1 + 1;
 
 #[cfg(feature = "solana-types")]
-const STRONG_RECOMPRESSION_WINDOW_DIVISOR: usize = 18;
+const STRONG_RECOMPRESSION_WINDOW_DIVISOR: usize = 13;
 #[cfg(feature = "solana-types")]
-const HC_RECOMPRESSION_WINDOW_DIVISOR: usize = 44;
+const HC_RECOMPRESSION_WINDOW_DIVISOR: usize = 32;
 #[cfg(feature = "solana-types")]
 const HC_RECOMPRESSION_LEVEL: i32 = 3;
+// Use cheaper HC(2) for the closest boundary band. HC(3) retries any miss.
+#[cfg(feature = "solana-types")]
+const MID_HC_RECOMPRESSION_WINDOW_DIVISOR: usize = 58;
+#[cfg(feature = "solana-types")]
+const MID_HC_RECOMPRESSION_LEVEL: i32 = 2;
 
 /// Canonical version byte for a v0 message.
 pub const V0_PREFIX: u8 = 0x80;
@@ -270,9 +275,9 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
     /// removes a complete wire block.
     ///
     /// Near a boundary, FAST(4) may retry with FAST(1). A narrower remaining
-    /// boundary window may retry with HC(3). Every result uses the same standard
-    /// LZ4 block format and the smallest mode is selected only at wire-block
-    /// granularity.
+    /// boundary window may retry with HC(2) or HC(3). Every result uses the same
+    /// standard LZ4 block format and the smallest mode is selected only at
+    /// wire-block granularity.
     pub fn encode_for_wire_blocks<'a>(
         &mut self,
         entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
@@ -280,6 +285,26 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         wire_blocks: SolanaCanonicalLz4WireBlocks,
     ) -> Result<EntryBatchCounts> {
         self.encode_with_wire_blocks(entries, output, Some(wire_blocks))
+    }
+
+    /// Encodes one batch and returns the selected frame borrowed from `output`.
+    ///
+    /// Bytes before the returned slice are encoder scratch. Passing the slice
+    /// directly to the wire consumer avoids compacting the selected LZ4 frame
+    /// to the front of the retained arena.
+    pub fn encode_for_wire_blocks_in_arena<'entries, 'output>(
+        &mut self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'entries>>,
+        output: &'output mut Vec<u8>,
+        wire_blocks: SolanaCanonicalLz4WireBlocks,
+    ) -> Result<(EntryBatchCounts, &'output [u8])> {
+        output.clear();
+        let result = self.encode_inner(entries, output, Some(wire_blocks));
+        if result.is_err() {
+            output.clear();
+        }
+        let (counts, frame) = result?;
+        Ok((counts, &output[frame]))
     }
 
     fn encode_with_wire_blocks<'a>(
@@ -293,7 +318,11 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         if result.is_err() {
             output.clear();
         }
-        result
+        let (counts, frame) = result?;
+        let frame_len = frame.len();
+        output.copy_within(frame, 0);
+        output.truncate(frame_len);
+        Ok(counts)
     }
 
     fn encode_inner<'a>(
@@ -301,7 +330,7 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
         output: &mut Vec<u8>,
         wire_blocks: Option<SolanaCanonicalLz4WireBlocks>,
-    ) -> Result<EntryBatchCounts> {
+    ) -> Result<(EntryBatchCounts, core::ops::Range<usize>)> {
         let counts =
             encode_canonical_entry_batch(entries, output, self.config.max_canonical_bytes)?;
         let canonical_len = output.len();
@@ -372,9 +401,18 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
                 frame_offset = strong_offset;
                 frame_len = strong_len;
             }
-            if wire_blocks.is_some_and(|blocks| {
-                should_recompress_with_divisor(strong_len, blocks, HC_RECOMPRESSION_WINDOW_DIVISOR)
+            if let Some(blocks) = wire_blocks.filter(|blocks| {
+                should_recompress_with_divisor(strong_len, *blocks, HC_RECOMPRESSION_WINDOW_DIVISOR)
             }) {
+                let hc_level = if should_recompress_with_divisor(
+                    strong_len,
+                    blocks,
+                    MID_HC_RECOMPRESSION_WINDOW_DIVISOR,
+                ) {
+                    MID_HC_RECOMPRESSION_LEVEL
+                } else {
+                    HC_RECOMPRESSION_LEVEL
+                };
                 let hc_offset = strong_arena_len;
                 let hc_arena_len = hc_offset
                     .checked_add(frame_capacity)
@@ -390,26 +428,37 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
                     hc[..4].copy_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
                     hc[4] = SOLANA_ENTRY_BATCH_VERSION;
                     hc[5] = SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG;
-                    SOLANA_CANONICAL_LZ4_HEADER_BYTES
+                    let mut hc_len = SOLANA_CANONICAL_LZ4_HEADER_BYTES
                         + lz4_block::compress_to_buffer(
                             canonical,
-                            Some(CompressionMode::HIGHCOMPRESSION(HC_RECOMPRESSION_LEVEL)),
+                            Some(CompressionMode::HIGHCOMPRESSION(hc_level)),
                             true,
                             &mut hc[SOLANA_CANONICAL_LZ4_HEADER_BYTES..],
                         )
-                        .map_err(|_| Error::InvalidData)?
+                        .map_err(|_| Error::InvalidData)?;
+                    if hc_level == MID_HC_RECOMPRESSION_LEVEL
+                        && wire_block_count(hc_len, blocks) >= wire_block_count(frame_len, blocks)
+                    {
+                        hc_len = SOLANA_CANONICAL_LZ4_HEADER_BYTES
+                            + lz4_block::compress_to_buffer(
+                                canonical,
+                                Some(CompressionMode::HIGHCOMPRESSION(HC_RECOMPRESSION_LEVEL)),
+                                true,
+                                &mut hc[SOLANA_CANONICAL_LZ4_HEADER_BYTES..],
+                            )
+                            .map_err(|_| Error::InvalidData)?;
+                    }
+                    hc_len
                 };
-                if wire_blocks.is_some_and(|blocks| {
-                    wire_block_count(hc_len, blocks) < wire_block_count(frame_len, blocks)
-                }) {
+                if wire_block_count(hc_len, blocks) < wire_block_count(frame_len, blocks) {
                     frame_offset = hc_offset;
                     frame_len = hc_len;
                 }
             }
         }
-        output.copy_within(frame_offset..frame_offset + frame_len, 0);
-        output.truncate(frame_len);
-        Ok(counts)
+        let frame = frame_offset..frame_offset + frame_len;
+        output.truncate(frame.end);
+        Ok((counts, frame))
     }
 }
 
@@ -430,7 +479,7 @@ const fn wire_block_count(len: usize, blocks: SolanaCanonicalLz4WireBlocks) -> O
 #[cfg(feature = "solana-types")]
 fn should_recompress(len: usize, blocks: SolanaCanonicalLz4WireBlocks) -> bool {
     // FAST(1) averaged 4.3% smaller than FAST(4) on production-sized
-    // components. A 1/18 window bounds second passes while covering that gain.
+    // components. A 1/13 window bounds second passes while covering that gain.
     should_recompress_with_divisor(len, blocks, STRONG_RECOMPRESSION_WINDOW_DIVISOR)
 }
 
@@ -2204,7 +2253,7 @@ mod tests {
         assert!(stronger.len() < compressed.len());
         let strongest = lz4_block::compress(
             &expected,
-            Some(CompressionMode::HIGHCOMPRESSION(HC_RECOMPRESSION_LEVEL)),
+            Some(CompressionMode::HIGHCOMPRESSION(MID_HC_RECOMPRESSION_LEVEL)),
             true,
         )
         .unwrap();
@@ -2219,6 +2268,17 @@ mod tests {
         expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
         expected_frame.extend_from_slice(&strongest);
         assert_eq!(encoded, expected_frame);
+
+        let mut arena = Vec::new();
+        let (arena_counts, frame) = encoder
+            .encode_for_wire_blocks_in_arena(
+                entries.iter().copied(),
+                &mut arena,
+                SolanaCanonicalLz4WireBlocks::new(1, 1),
+            )
+            .unwrap();
+        assert_eq!(arena_counts, counts);
+        assert_eq!(frame, expected_frame);
 
         let mut canonical = Vec::new();
         let decoded_len =
@@ -2337,7 +2397,8 @@ mod tests {
         assert!(!should_recompress(90, blocks));
         assert!(should_recompress(181, blocks));
         assert!(should_recompress(190, blocks));
-        assert!(!should_recompress(191, blocks));
+        assert!(should_recompress(195, blocks));
+        assert!(!should_recompress(196, blocks));
         assert_eq!(
             wire_block_count(181, SolanaCanonicalLz4WireBlocks::new(0, 80)),
             None
