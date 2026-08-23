@@ -1,12 +1,12 @@
 {
-  "version": 115,
+  "version": 116,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T18:09:13Z",
+  "updated_at": "2026-08-23T18:36:32Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 69,
+    "version": 70,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2006,6 +2006,102 @@
       },
       "validation": "219 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, formatting, and all-feature all-target strict Clippy passed; 349 Agave ledger tests passed with 3 ignored, formatting passed, and strict Clippy passed for the ledger library and both benchmark targets"
     },
+    "post_iteration_52_oversized_fast4": {
+      "status": "retained",
+      "commit": "e8b6fd09f7baf576404da184739e5a9ef0466408",
+      "scope": "lencode-owned canonical-LZ4 compression policy; Agave only updates the feature-gated replacement adapter's policy documentation and exact-mode test",
+      "profile": {
+        "binary_sha256": "4d61ae82f900ffd6b6e5ae2b0ff96699881a49d2fa4dc196fb00d4b69ed8588f",
+        "trials": 31,
+        "cpu": 28,
+        "samples": 16000,
+        "lost_samples": 0,
+        "native_lz4_compression_self_cycles_pct": 6.63
+      },
+      "rejected_fast3_screen": {
+        "candidate_binary_sha256": "6343c77275e583cf01454493e6b8ae7a5c809e73940c3683b1bccf2d6a215937",
+        "leader_control_normalized_improvement_pct_by_pair": [0.804, 1.044],
+        "validator_control_normalized_improvement_pct_by_pair": [0.524, 0.598],
+        "payload_bytes": 30885835,
+        "payload_regression_pct": 1.577,
+        "wire_bytes": 82148352,
+        "wire_regression_pct": 1.441,
+        "decision": "reverted because median leader and validator gains remained below the 1% gate"
+      },
+      "benchmark_protocol": {
+        "rust_version": "1.98.0",
+        "cpu": 28,
+        "trials_per_exact_pair": 31,
+        "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "normalization": "each canonical latency was divided by the wincode control from the same frozen binary before comparison",
+        "baseline_binary_sha256": {
+          "end_to_end": "4d61ae82f900ffd6b6e5ae2b0ff96699881a49d2fa4dc196fb00d4b69ed8588f",
+          "blockstore": "ed0419c3ce1902e0fcda51f924544ee65616af54038a80f5ea0c2740e76f9844"
+        },
+        "candidate_binary_sha256": {
+          "end_to_end": "ff41faf0c81cb69189c0d79dd2fef828ca24221a81666b6721c97937bc0ef719",
+          "blockstore": "242f7e52897bf1b4ae5635ea8072a41552cfd4b3593a020ef7bf64fc32cf3229"
+        }
+      },
+      "exact_final_full_slot": {
+        "baseline_medians_ns": {
+          "wincode_leader": 275174206,
+          "wincode_validator": 22006309,
+          "canonical_lz4_leader": 175586529,
+          "canonical_lz4_validator": 23897085
+        },
+        "candidate_medians_ns": {
+          "wincode_leader": 275477757,
+          "wincode_validator": 22068260,
+          "canonical_lz4_leader": 174780906,
+          "canonical_lz4_validator": 23574594
+        },
+        "leader_control_normalized_improvement_pct": 0.569,
+        "validator_control_normalized_improvement_pct": 1.626,
+        "leader_absolute_improvement_pct": 0.459,
+        "validator_absolute_improvement_pct": 1.349,
+        "leader_speedup_vs_wincode": 1.576132,
+        "validator_throughput_vs_wincode": 0.936104,
+        "payload_bytes_before": 30406467,
+        "payload_bytes_after": 30979465,
+        "payload_regression_pct": 1.884,
+        "data_shreds_before": 33312,
+        "data_shreds_after": 33952,
+        "coding_shreds_before": 33312,
+        "coding_shreds_after": 33952,
+        "wire_bytes_before": 80981472,
+        "wire_bytes_after": 82537312,
+        "wire_regression_pct": 1.921,
+        "wire_reduction_vs_wincode_pct": 52.272
+      },
+      "exact_final_blockstore": {
+        "baseline_wincode_validator_ns": 27554009,
+        "baseline_canonical_lz4_validator_ns": 28110011,
+        "candidate_wincode_validator_ns": 27730960,
+        "candidate_canonical_lz4_validator_ns": 28046860,
+        "control_normalized_improvement_pct": 0.861,
+        "candidate_latency_over_wincode_pct": 1.139
+      },
+      "paced_production_fixture": {
+        "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "branch_activated": false,
+        "candidate_payload_bytes": 33402585,
+        "candidate_data_shreds": 49536,
+        "candidate_coding_shreds": 49536,
+        "candidate_wire_bytes": 120422016,
+        "bytes_changed_from_baseline": false
+      },
+      "wire_compatibility": "the encoder still emits the existing LCSH version-1 flag-1 size-prefixed standard LZ4 block; FAST(1), FAST(2), and FAST(4) outputs use the unchanged decoder",
+      "copy_effect": "caller-owned canonical, frame, and decode arenas are unchanged; no allocation or copy was added",
+      "security": "trusted reference-type encoding policy only; no parser, decoder, length check, offset, sidecar, private layout, unsafe block, or hostile-input behavior changed",
+      "source_sha256": {
+        "lencode_solana_wire": "9d2adbef07ccf763da3f86b4567c0fa639f4a76af4389bec496ac922fbe8b09d",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "8e23e13325cd1ed485ef068269957d2c6ba5d2d39c00b44b4e9574317bd6486a"
+      },
+      "validation": "219 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, formatting, and all-feature all-target strict Clippy passed; 349 Agave ledger tests passed with 3 ignored, the focused FAST(4) test passed, and strict Clippy passed for the ledger library and both benchmark targets"
+    },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
       "wincode_validator": { "value": 22007494, "unit": "ns/100 blocks", "range": [21925313, 22177764] },
@@ -2018,13 +2114,13 @@
       "lencode_validator_throughput": 0.504601927
     },
     "current_baseline": {
-      "wincode_leader": { "value": 275151003, "unit": "ns/100 blocks" },
-      "wincode_validator": { "value": 22059311, "unit": "ns/100 blocks" },
-      "lencode_leader": { "value": 175756446, "unit": "ns/100 blocks" },
-      "lencode_validator": { "value": 23889838, "unit": "ns/100 blocks" },
+      "wincode_leader": { "value": 275477757, "unit": "ns/100 blocks" },
+      "wincode_validator": { "value": 22068260, "unit": "ns/100 blocks" },
+      "lencode_leader": { "value": 174780906, "unit": "ns/100 blocks" },
+      "lencode_validator": { "value": 23574594, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
-      "lencode_wire_bytes": 80981472,
-      "mode": "canonical reference-type entry batch compressed in caller-owned arenas with FAST(4) for normal frames and FAST(2) for oversized frames",
+      "lencode_wire_bytes": 82537312,
+      "mode": "canonical reference-type entry batch compressed in caller-owned arenas with FAST(4) for all frames and stronger retries limited to ordinary frames",
       "scope_status": "qualifying lencode-owned codec; Agave changes are limited to the feature-gated wincode replacement adapter"
     },
     "native_reference_path": {
@@ -2064,8 +2160,8 @@
       "rust_version": "1.98.0",
       "former_agave_binary_sha256": "e50fb3af974c6efe8c5680671f18f5fce601fc90822ad3d5557e9e7355cbff55",
       "prior_lencode_binary_sha256": "9f57bdff6e2b7811feae82ce5977dca0bed694dda94bae2a0a2e26df360c27c2",
-      "lencode_binary_sha256": "4d61ae82f900ffd6b6e5ae2b0ff96699881a49d2fa4dc196fb00d4b69ed8588f",
-      "lencode_solana_wire_sha256": "6077678e76cf663813ad0ee6486e9fe82b85ccef89fe8a18b5ff47ab52860c49",
+      "lencode_binary_sha256": "ff41faf0c81cb69189c0d79dd2fef828ca24221a81666b6721c97937bc0ef719",
+      "lencode_solana_wire_sha256": "9d2adbef07ccf763da3f86b4567c0fa639f4a76af4389bec496ac922fbe8b09d",
       "lencode_cargo_toml_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
       "lencode_cargo_lock_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
       "former_agave_owned_medians_ns": {
@@ -2081,20 +2177,20 @@
         "canonical_lz4_validator": 24870689
       },
       "lencode_owned_medians_ns": {
-        "wincode_leader": 275151003,
-        "wincode_validator": 22059311,
-        "canonical_lz4_leader": 175756446,
-        "canonical_lz4_validator": 23889838
+        "wincode_leader": 275477757,
+        "wincode_validator": 22068260,
+        "canonical_lz4_leader": 174780906,
+        "canonical_lz4_validator": 23574594
       },
-      "leader_speedup_vs_wincode": 1.565524390,
-      "validator_throughput_vs_wincode": 0.923376333,
-      "payload_bytes": 30406467,
-      "wire_bytes": 80981472,
-      "payload_reduction_vs_wincode_pct": 54.336,
-      "wire_reduction_vs_wincode_pct": 53.171,
-      "leader_improvement_vs_native_lencode_pct": 8.413,
-      "validator_improvement_vs_native_lencode_pct": 30.980,
-      "wire_reduction_vs_native_lencode_pct": 26.587,
+      "leader_speedup_vs_wincode": 1.576131874,
+      "validator_throughput_vs_wincode": 0.936103502,
+      "payload_bytes": 30979465,
+      "wire_bytes": 82537312,
+      "payload_reduction_vs_wincode_pct": 53.476,
+      "wire_reduction_vs_wincode_pct": 52.272,
+      "leader_improvement_vs_native_lencode_pct": 9.030,
+      "validator_improvement_vs_native_lencode_pct": 31.918,
+      "wire_reduction_vs_native_lencode_pct": 25.176,
       "ownership_transition": {
         "leader_absolute_regression_pct": 0.024,
         "leader_control_normalized_improvement_pct": 0.078,
@@ -2167,7 +2263,18 @@
         "wire_compatibility": "FAST(2) changes only compressor search effort inside the existing LCSH version-1 flag-1 standard LZ4 block; the decoder and accepted framing are unchanged",
         "unsafe_code_added": false
       },
-      "frame": "existing LCSH version 1 canonical-LZ4 flag 1; normal frames use FAST(4), oversized frames use FAST(2), optional FAST(1) or HC wire-block retries originate only from FAST(4), and native flags 2, 4, and 8 remain unchanged",
+      "oversized_fast4": {
+        "commit": "e8b6fd09f7baf576404da184739e5a9ef0466408",
+        "leader_control_normalized_improvement_pct": 0.569,
+        "validator_control_normalized_improvement_pct": 1.626,
+        "blockstore_control_normalized_improvement_pct": 0.861,
+        "payload_regression_pct": 1.884,
+        "wire_regression_pct": 1.921,
+        "paced_production_bytes_changed": false,
+        "wire_compatibility": "FAST(4) changes compressor search effort only inside the existing LCSH version-1 flag-1 standard LZ4 block; the decoder and accepted framing are unchanged",
+        "unsafe_code_added": false
+      },
+      "frame": "existing LCSH version 1 canonical-LZ4 flag 1; every frame starts with FAST(4), optional FAST(1) or HC wire-block retries are limited to ordinary frames, and native flags 2, 4, and 8 remain unchanged",
       "scope_status": "qualifying lencode-owned codec; Agave only supplies borrowed reference entries and Turbine capacities at the feature-gated wincode replacement site, with no general Agave optimization credited"
     },
     "production_batch_benchmark": {
@@ -2221,7 +2328,7 @@
         "wire_reduction_vs_wincode_pct": 48.074,
         "lencode_leader_speedup": 1.706,
         "lencode_validator_throughput": 0.950,
-        "codec": "FAST(4) for normal components, selective FAST(1) within 1/18 of a removable wire-block boundary, and FAST(2) for oversized components"
+        "codec": "FAST(4) for all components, with selective FAST(1) within 1/18 of a removable wire-block boundary for ordinary components"
       },
       "canonical_coalescing_trial": {
         "change": "for canonical LZ4 only, do not exit at a tightly packed FEC boundary until the existing two-typical-FEC target is reached; legacy wincode keeps the exact prior boundary behavior",
@@ -4155,6 +4262,35 @@
         "wire_compatibility": "existing LCSH version-1 flag-1 framing and standard LZ4 block decoding are unchanged",
         "unsafe_code_added": false,
         "validation": "alternating CPU-affined frozen-binary pairs on full-slot, paced-production, and Blockstore fixtures; 219 lencode unit tests, 8 integration tests, and 5 doctests passed with one ignored; no-default, std-only, formatting, and all-feature all-target strict Clippy passed; 349 Agave ledger tests passed with 3 ignored, and strict Clippy passed for the ledger library and both benchmark targets"
+      },
+      {
+        "iteration": 37,
+        "optimization": "use FAST(4) for oversized canonical-LZ4 entry batches",
+        "commit": "e8b6fd09f7baf576404da184739e5a9ef0466408",
+        "kept": true,
+        "integration": "lencode owns compression effort and retry eligibility; Agave only updates the feature-gated wincode replacement adapter's policy comment and exact-mode test",
+        "baseline_binary_sha256": {
+          "end_to_end": "4d61ae82f900ffd6b6e5ae2b0ff96699881a49d2fa4dc196fb00d4b69ed8588f",
+          "blockstore": "ed0419c3ce1902e0fcda51f924544ee65616af54038a80f5ea0c2740e76f9844"
+        },
+        "candidate_binary_sha256": {
+          "end_to_end": "ff41faf0c81cb69189c0d79dd2fef828ca24221a81666b6721c97937bc0ef719",
+          "blockstore": "242f7e52897bf1b4ae5635ea8072a41552cfd4b3593a020ef7bf64fc32cf3229"
+        },
+        "full_slot_leader_control_normalized_improvement_pct": 0.569,
+        "full_slot_validator_control_normalized_improvement_pct": 1.626,
+        "blockstore_control_normalized_improvement_pct": 0.861,
+        "current_leader_speedup_vs_wincode": 1.576132,
+        "current_validator_throughput_vs_wincode": 0.936104,
+        "payload_bytes": 30979465,
+        "turbine_wire_bytes": 82537312,
+        "wire_reduction_vs_wincode_pct": 52.272,
+        "compression_tradeoff": "oversized payload and Turbine wire bytes rise 1.884% and 1.921% versus FAST(2); the paced production fixture remains byte-identical because its components stay below the retry threshold",
+        "copy_effect": "caller-owned canonical, frame, and decode arenas are unchanged; no allocation or copy is added",
+        "safety": "encode-side compressor effort only; no decoder, parser, bounds check, unchecked offset, sidecar, private layout, or unsafe code changed",
+        "wire_compatibility": "existing LCSH version-1 flag-1 framing and standard LZ4 block decoding are unchanged",
+        "unsafe_code_added": false,
+        "validation": "CPU-affined frozen-binary pairs on full-slot, paced-production, and Blockstore fixtures; 219 lencode unit tests, 8 integration tests, and 5 doctests passed with one ignored; no-default, std-only, formatting, and all-feature all-target strict Clippy passed; 349 Agave ledger tests passed with 3 ignored, the focused FAST(4) test passed, and strict Clippy passed for the ledger library and both benchmark targets"
       }
     ],
     "failed_attempts": [
@@ -4847,6 +4983,15 @@
         "wire_compatibility": "all candidates emitted the existing size-prefixed standard LZ4 block",
         "source_changed": false,
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "raise oversized canonical frames from FAST(2) to FAST(3) with the retained default libLZ4 table",
+        "reason": "Two reverse-order 31-trial pairs improved normalized leader latency by 0.804% and 1.044% and validator latency by 0.524% and 0.598%. Median gains stayed below the 1% gate while payload and Turbine wire bytes rose 1.577% and 1.441%, so FAST(3) was removed.",
+        "candidate_binary_sha256": "6343c77275e583cf01454493e6b8ae7a5c809e73940c3683b1bccf2d6a215937",
+        "candidate_payload_bytes": 30885835,
+        "candidate_wire_bytes": 82148352,
+        "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block",
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
@@ -5017,6 +5162,12 @@
         "reason": "one full-slot baseline process reported 22.746 ms wincode validator latency while adjacent controls remained near 22.0-22.3 ms, which produced a false normalized candidate regression",
         "reruns": 2,
         "resolution": "discarded the contaminated baseline-candidate pair and replaced both processes in the same order; the replacement and exact-final pair kept all normalized regressions inside the 2% ceiling"
+      },
+      {
+        "at_iteration": 37,
+        "reason": "the first exact Blockstore pair moved from positive preliminary screens to a 0.478% normalized regression while its baseline wincode control rose from about 27.6 ms to 29.0 ms",
+        "reruns": 2,
+        "resolution": "ran the reverse process order, which measured a 0.287% gain; the simplified exact-final binary then measured a 0.861% gain with both formats back in their established range"
       }
     ]
   },
@@ -5165,16 +5316,20 @@
   },
   "final_summary": {
     "qualifying_scope": "lencode-owned changes and Agave replacement-call-site adapters only; general Agave optimizations are historical and excluded",
-    "agave_full_slot_leader_speedup_vs_wincode": 1.565524,
-    "agave_full_slot_validator_throughput_vs_wincode": 0.923376,
-    "agave_full_slot_turbine_wire_reduction_vs_wincode_pct": 53.171,
+    "agave_full_slot_leader_speedup_vs_wincode": 1.576132,
+    "agave_full_slot_validator_throughput_vs_wincode": 0.936104,
+    "agave_full_slot_turbine_wire_reduction_vs_wincode_pct": 52.272,
     "agave_oversized_fast2_leader_control_normalized_improvement_pct": 3.059,
     "agave_oversized_fast2_validator_control_normalized_improvement_pct": 0.580,
     "agave_oversized_fast2_blockstore_control_normalized_change_pct": -1.003,
     "agave_oversized_fast2_full_slot_wire_regression_pct": 0.483,
-    "agave_full_slot_leader_normalized_improvement_vs_original_pct": 19.759,
-    "agave_full_slot_validator_normalized_improvement_vs_original_pct": 45.353,
-    "agave_full_slot_wire_improvement_vs_original_pct": 35.221,
+    "agave_oversized_fast4_leader_control_normalized_improvement_pct": 0.569,
+    "agave_oversized_fast4_validator_control_normalized_improvement_pct": 1.626,
+    "agave_oversized_fast4_blockstore_control_normalized_improvement_pct": 0.861,
+    "agave_oversized_fast4_full_slot_wire_regression_pct": 1.921,
+    "agave_full_slot_leader_normalized_improvement_vs_original_pct": 20.299,
+    "agave_full_slot_validator_normalized_improvement_vs_original_pct": 46.095,
+    "agave_full_slot_wire_improvement_vs_original_pct": 33.976,
     "native_entry_batch_leader_speedup_vs_wincode": 1.434,
     "native_entry_batch_validator_throughput_vs_wincode": 0.637,
     "native_entry_batch_payload_reduction_vs_wincode_pct": 37.101,
