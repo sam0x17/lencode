@@ -1,12 +1,12 @@
 {
-  "version": 88,
+  "version": 89,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T03:30:29Z",
+  "updated_at": "2026-08-23T03:35:45Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 43,
+    "version": 44,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2422,6 +2422,16 @@
         "candidate_binary_sha256": "5bf29877a125178f05e5afdc850d1dfa6bd783c77bb87d62592a74a1fa3fa19e",
         "wire_bytes_changed": false,
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "retain canonical serialization in the lencode encoder and write the ordinary LZ4 frame directly into caller output",
+        "reason": "a result that cleared the current gate under an older implementation did not reproduce against the retained single-arena encoder; three alternating CPU-affined seven-trial pairs regressed control-normalized leader latency by 0.691%, 1.087%, and 0.484%, while validator latency moved by -0.632%, -0.644%, and +0.075%, so the lencode-only scratch allocation was removed",
+        "baseline_binary_sha256": "f0e2ff70e38624a32ffee6859ecfb70a510fcb1750c2f2de2406c817c880d267",
+        "candidate_binary_sha256": "ce6f87e49799f42f67cf427e476c926fc90db402a80b46c59948c92daedafbbd",
+        "candidate_lencode_solana_wire_sha256": "3656b45885caed63524da7f5857ed3dee614d0e8c397229090bb352ef340de17",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
@@ -2485,6 +2495,23 @@
           "canonical_lz4_wire_bytes": 80592512
         },
         "result": "all three candidate patches and their temporary Agave replacement-site state were removed before the initialized-output decoder branch"
+      },
+      {
+        "after": "canonical deshred reservation, component-result capacity, and retained encoder scratch reverts",
+        "restored_lencode_solana_wire_sha256": "7517ab2fa0d9f4d5ce11dac225b6f5a90ea08505f282a2a311bb720aa8eae460",
+        "restored_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "restored_codec_sha256": "60140712c69d383cddc112c59780858c231d61669716dd980712bd7574d74f8b",
+        "restored_binary_sha256": "f0e2ff70e38624a32ffee6859ecfb70a510fcb1750c2f2de2406c817c880d267",
+        "fresh_confirmation": {
+          "protocol": "median of three CPU-28 baseline processes with seven alternating warmed trials per format",
+          "wincode_leader_ns": 453975770,
+          "wincode_validator_ns": 22190518,
+          "canonical_lz4_leader_ns": 264315902,
+          "canonical_lz4_validator_ns": 23449402,
+          "canonical_lz4_payload_bytes": 34564782,
+          "canonical_lz4_wire_bytes": 158384512
+        },
+        "result": "the exact lencode and direct replacement-site sources were restored; the next iteration switches away from allocation layout changes"
       }
     ],
     "contention_events": [
