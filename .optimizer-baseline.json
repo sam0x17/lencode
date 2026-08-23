@@ -1,12 +1,12 @@
 {
-  "version": 117,
+  "version": 118,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T19:07:53Z",
+  "updated_at": "2026-08-23T19:31:17Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 71,
+    "version": 72,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2235,7 +2235,7 @@
       "lencode_validator": { "value": 23790446, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
       "lencode_wire_bytes": 81448224,
-      "mode": "canonical reference-type entry batch compressed in caller-owned arenas with FAST(4) through eleven oversized thresholds, FAST(2) above that cutoff, and stronger retries limited to ordinary frames",
+      "mode": "canonical reference-type entry batch compressed in caller-owned arenas with FAST(4) through eleven oversized thresholds, FAST(2) above that cutoff, stronger retries limited to ordinary frames, and impossible LZ4 expansion rejected before output allocation",
       "scope_status": "qualifying lencode-owned codec; Agave changes are limited to the feature-gated wincode replacement adapter"
     },
     "native_reference_path": {
@@ -2402,6 +2402,117 @@
       },
       "frame": "existing LCSH version 1 canonical-LZ4 flag 1; frames through eleven oversized thresholds start with FAST(4), still-larger frames use FAST(2), optional FAST(1) or HC wire-block retries remain limited to ordinary frames, and native flags 2, 4, and 8 remain unchanged",
       "scope_status": "qualifying lencode-owned codec; Agave only supplies borrowed reference entries and Turbine capacities at the feature-gated wincode replacement site, with no general Agave optimization credited"
+    },
+    "post_iteration_54_security_expansion_bound": {
+      "status": "retained",
+      "commit": "f033dae3a50dce9d6aa45b764931423ece0b06c7",
+      "scope": "lencode-owned canonical-LZ4 hostile-frame validation; Agave source, parser behavior, and feature-gated replacement sites are unchanged",
+      "profile_refresh": {
+        "protocol": "perf record at 999 Hz on logical CPU 28 over the exact retained Rust 1.98.0 binaries",
+        "end_to_end": {
+          "data_sha256": "e705fffc3542ba8557aa737449c41876cf205e58135479689ea3d48bb51579db",
+          "samples": 16884,
+          "lost_samples": 0,
+          "wincode_leader_ns": 278487159,
+          "canonical_lz4_leader_ns": 176351125,
+          "wincode_validator_ns": 22168044,
+          "canonical_lz4_validator_ns": 23963270,
+          "self_cycles_pct": {
+            "sha256_blocks": 28.22,
+            "reed_solomon_xor": 15.48,
+            "reed_solomon_mul_slice": 6.32,
+            "lz4_compress_fast_ext_state": 5.98,
+            "memmove_all_paths": 2.28,
+            "lz4_decompress_safe": 1.27,
+            "canonical_short_u16": 1.19,
+            "canonical_addresses": 0.86
+          }
+        },
+        "blockstore": {
+          "data_sha256": "06a2c0cb95313cdfa1d56b98ce60dc5af1169a201de0396b3b0a9ebeac575385",
+          "samples": 7657,
+          "lost_samples": 0,
+          "wincode_validator_ns": 27775195,
+          "canonical_lz4_validator_ns": 28265006,
+          "self_cycles_pct": {
+            "transaction_frame_parse": 10.50,
+            "lz4_decompress_safe": 8.06,
+            "rocksdb_iterator_next": 7.39,
+            "sha256_blocks": 6.69,
+            "memmove_all_paths": 4.54,
+            "rocksdb_visibility": 4.25,
+            "block_component_parse": 4.22
+          }
+        },
+        "conclusion": "the remaining qualifying valid-path hotspot is libLZ4; general Agave parser, hashing, Reed-Solomon, and RocksDB work remain excluded"
+      },
+      "rejected_extreme_hc2": {
+        "change": "replace single-pass FAST(2) with single-pass HIGHCOMPRESSION(2) above the retained eleven-threshold extreme cutoff",
+        "binary_sha256": "70dc69b13f769dc6be548ab8abb650547ba6df43373f6778af69874f22721efb",
+        "wincode_leader_ns": 276741447,
+        "canonical_lz4_leader_ns": 272746382,
+        "wincode_validator_ns": 22295893,
+        "canonical_lz4_validator_ns": 23603869,
+        "canonical_lz4_payload_bytes": 29477078,
+        "canonical_lz4_wire_bytes": 78725504,
+        "payload_reduction_pct": 3.713,
+        "wire_reduction_pct": 3.343,
+        "leader_control_normalized_regression_pct": 55.526,
+        "validator_control_normalized_improvement_pct": 1.637,
+        "decision": "inverse-reverted after the one-trial feasibility screen because leader latency exceeded the 2% ceiling by a wide margin",
+        "restored_solana_wire_sha256": "dc5579253ff3d44b81523050b8ab2a0624f5912dc0d114214865840559ce11d1",
+        "unsafe_code_added": false
+      },
+      "change": "reject an advertised canonical output larger than 256 times the raw LZ4 block before reserving caller-owned output storage",
+      "format_basis": "the official LZ4 block specification gives a maximum achievable compression ratio of about 250; the 256 bound preserves margin and is checked with saturating arithmetic",
+      "security_effect": "a tiny hostile flag-1 frame can no longer force an otherwise impossible allocation up to MAX_DATA_SHREDS_SIZE; frame validation fails before Vec or BytesMut growth, and decompression still uses the retained exact-size LZ4_decompress_safe boundary",
+      "compatibility_test": "a valid one-MiB zero block above a 250:1 ratio passes and reconstructs exactly, while a one-byte raw block advertising 257 bytes fails without changing an eight-byte output arena's capacity",
+      "benchmark_protocol": {
+        "rust_version": "1.98.0",
+        "cpu": 28,
+        "full_slot_trials_per_binary": 31,
+        "blockstore_trials_per_binary": 101,
+        "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "blockstore_fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "normalization": "each canonical latency was divided by the wincode control from the same frozen binary"
+      },
+      "binaries": {
+        "end_to_end_baseline_sha256": "56692cafe33a0cc175e9fc96c2d685467ca6c90b8bf00f9b2267628ad6de463b",
+        "end_to_end_candidate_sha256": "b29af02da8889f2ea70a929297770a1d914693bf8b285e6e935b38c097c5ec69",
+        "blockstore_baseline_sha256": "4be973d97f20addb48ee2e5dd6e94a32086e2924e4d4b8a212fd6d3dc098b480",
+        "blockstore_candidate_sha256": "1263acaff8a54d31c993a939e0dbbd6d12439a7f023505d1cac9602b19574882"
+      },
+      "full_slot_exact_pairs": [
+        {
+          "baseline": { "wincode_leader_ns": 276049924, "canonical_lz4_leader_ns": 175209209, "wincode_validator_ns": 22143093, "canonical_lz4_validator_ns": 23905219 },
+          "candidate": { "wincode_leader_ns": 274985969, "canonical_lz4_leader_ns": 174487806, "wincode_validator_ns": 22128882, "canonical_lz4_validator_ns": 23952439 },
+          "leader_control_normalized_improvement_pct": 0.026,
+          "validator_control_normalized_regression_pct": 0.262
+        },
+        {
+          "baseline": { "wincode_leader_ns": 276077483, "canonical_lz4_leader_ns": 175324050, "wincode_validator_ns": 22089882, "canonical_lz4_validator_ns": 23808658 },
+          "candidate": { "wincode_leader_ns": 275290960, "canonical_lz4_leader_ns": 174925598, "wincode_validator_ns": 21930701, "canonical_lz4_validator_ns": 23821588 },
+          "leader_control_normalized_regression_pct": 0.058,
+          "validator_control_normalized_regression_pct": 0.781
+        }
+      ],
+      "blockstore_exact_pairs": [
+        { "baseline_wincode_ns": 27490192, "baseline_canonical_lz4_ns": 28078224, "candidate_wincode_ns": 27623262, "candidate_canonical_lz4_ns": 27981964, "control_normalized_improvement_pct": 0.823 },
+        { "baseline_wincode_ns": 27427781, "baseline_canonical_lz4_ns": 27979444, "candidate_wincode_ns": 27718322, "candidate_canonical_lz4_ns": 27840534, "control_normalized_improvement_pct": 1.539 },
+        { "baseline_wincode_ns": 27427872, "baseline_canonical_lz4_ns": 27987544, "candidate_wincode_ns": 27506202, "candidate_canonical_lz4_ns": 27673192, "control_normalized_improvement_pct": 1.405 }
+      ],
+      "blockstore_control_normalized_improvement_pct_median": 1.405,
+      "wire_compatibility": "valid existing LCSH version-1 flag-1 frames remain byte-for-byte unchanged; the new pre-allocation check accepts the complete standard LZ4 block ratio range with margin",
+      "copy_effect": "caller-owned canonical and compressed arenas, borrowed frame handoff, and checked spare-capacity decompression are unchanged",
+      "unsafe_code_added": false,
+      "source_sha256": {
+        "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "f367fdb239b3949fa40151493a31834eb4e9d4a8c8cd60ebd9ee672a95d6a69d",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      },
+      "validation": "220 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, formatting, and all-feature all-target strict Clippy passed; 349 Agave ledger tests passed with 3 ignored, and strict Clippy passed for the ledger library and both benchmark targets"
     },
     "production_batch_benchmark": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
@@ -5156,6 +5267,16 @@
         "candidate_wire_bytes": 82148352,
         "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block",
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "replace extreme canonical FAST(2) frames with single-pass HIGHCOMPRESSION(2)",
+        "reason": "The screen reduced payload and Turbine wire bytes by 3.713% and 3.343%, but regressed control-normalized leader latency by 55.526%. The encoder-only mode change was inverse-reverted after one trial because it exceeded the 2% ceiling.",
+        "candidate_binary_sha256": "70dc69b13f769dc6be548ab8abb650547ba6df43373f6778af69874f22721efb",
+        "candidate_payload_bytes": 29477078,
+        "candidate_wire_bytes": 78725504,
+        "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block",
+        "restored_lencode_solana_wire_sha256": "dc5579253ff3d44b81523050b8ab2a0624f5912dc0d114214865840559ce11d1",
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
@@ -5501,6 +5622,9 @@
     "agave_extreme_fast2_validator_control_normalized_regression_pct_by_pair": [0.6218, 1.0692],
     "agave_extreme_fast2_blockstore_control_normalized_change_pct_by_pair": [-0.3464, 0.8816],
     "agave_extreme_fast2_full_slot_wire_improvement_pct": 1.3195,
+    "agave_lz4_expansion_bound_blockstore_control_normalized_improvement_pct_median": 1.405,
+    "agave_lz4_expansion_bound_max_full_slot_regression_pct": 0.781,
+    "agave_lz4_expansion_bound_wire_bytes_changed": false,
     "agave_full_slot_leader_normalized_improvement_vs_original_pct": 20.395,
     "agave_full_slot_validator_normalized_improvement_vs_original_pct": 45.691,
     "agave_full_slot_wire_improvement_vs_original_pct": 34.848,
@@ -5543,7 +5667,7 @@
     "diff_in_place_xor_decode_4kb_25pct_time_improvement_pct": 48.588,
     "diff_in_place_xor_decode_64kb_10pct_time_improvement_pct": 59.050,
     "diff_in_place_xor_decode_256kb_10pct_time_improvement_pct": 58.318,
-    "all_feature_tests": { "unit": 219, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
+    "all_feature_tests": { "unit": 220, "integration": 8, "doctests_passed": 5, "doctests_ignored": 1 },
     "all_targets_all_features_check": "passed",
     "all_targets_all_features_clippy": "passed with -D warnings",
     "no_default_features_check": "passed",
