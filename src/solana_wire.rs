@@ -318,10 +318,10 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
     /// Encodes one batch and selectively spends more compression work when it
     /// removes a complete wire block.
     ///
-    /// Near a boundary, FAST(4) may retry with FAST(1). A narrower remaining
-    /// boundary window may retry with HC(2) or HC(3). Every result uses the same
-    /// standard LZ4 block format and the smallest mode is selected only at
-    /// wire-block granularity.
+    /// Near a boundary, FAST(4) may retry with FAST(1). When the final wire block
+    /// is smaller, a narrower boundary window may retry with HC(2) or HC(3).
+    /// Every result uses the same standard LZ4 block format and the smallest
+    /// mode is selected only at wire-block granularity.
     pub fn encode_for_wire_blocks<'a>(
         &mut self,
         entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
@@ -449,8 +449,15 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
                 frame_offset = strong_offset;
                 frame_len = strong_len;
             }
+            // Uniform-capacity blocks do not justify the extra HC pass. A
+            // smaller final block can still recover a constrained boundary.
             if let Some(blocks) = wire_blocks.filter(|blocks| {
-                should_recompress_with_divisor(strong_len, *blocks, HC_RECOMPRESSION_WINDOW_DIVISOR)
+                blocks.regular_bytes != blocks.final_bytes
+                    && should_recompress_with_divisor(
+                        strong_len,
+                        *blocks,
+                        HC_RECOMPRESSION_WINDOW_DIVISOR,
+                    )
             }) {
                 let hc_level = if should_recompress_with_divisor(
                     strong_len,
@@ -2780,6 +2787,17 @@ mod tests {
             )
             .unwrap();
         expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
+        expected_frame.extend_from_slice(&stronger);
+        assert_eq!(encoded, expected_frame);
+
+        encoder
+            .encode_for_wire_blocks(
+                entries.iter().copied(),
+                &mut encoded,
+                SolanaCanonicalLz4WireBlocks::new(5, 1),
+            )
+            .unwrap();
+        expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
         expected_frame.extend_from_slice(&strongest);
         assert_eq!(encoded, expected_frame);
 
@@ -2788,7 +2806,7 @@ mod tests {
             .encode_for_wire_blocks_in_arena(
                 entries.iter().copied(),
                 &mut arena,
-                SolanaCanonicalLz4WireBlocks::new(1, 1),
+                SolanaCanonicalLz4WireBlocks::new(5, 1),
             )
             .unwrap();
         assert_eq!(arena_counts, counts);

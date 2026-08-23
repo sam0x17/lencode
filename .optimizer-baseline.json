@@ -1,12 +1,12 @@
 {
-  "version": 126,
+  "version": 127,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T22:20:31Z",
+  "updated_at": "2026-08-23T22:49:27Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 80,
+    "version": 81,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3438,6 +3438,158 @@
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       }
     },
+    "iteration_63_larger_batches_uniform_capacity_fast1": {
+      "status": "retained a lencode encoder policy and a direct canonical-lencode Agave batching update",
+      "scope": "reduce canonical shred work and wire volume without changing the decoder, parser, frame version, general Agave paths, or legacy wincode batching",
+      "measurement_correction": "the iteration-62 target census treated every component as a separate final slot; an exact chained 100-slot model showed that the final-block capacity must carry across components, making the 13/8 target a qualifying wire and component-count improvement",
+      "retained_changes": {
+        "lencode": "skip the HC retry when regular and final wire-block capacities are equal; retain the existing HC boundary retry when the final block is smaller",
+        "agave_replacement_site": "raise only the CanonicalLz4V1 coalescing target from 49/32 to 13/8 of the typical uncompressed FEC input size; LegacyWincode keeps its existing target and boundary exits"
+      },
+      "exact_chained_batching": {
+        "binary_sha256": "34168544e0627842e4de0d4b7f5fd0b07841bd15a90c2dab99e59a96a0b67a86",
+        "protocol": "two reverse-order 31-trial CPU-28 process pairs over exact recovered 100-slot component chains; compare absolute same-codec lencode latency because changing the target also changes component boundaries",
+        "fixtures": {
+          "retained_49_32": {
+            "path": "/tmp/agave-shred-paced-repartition-49_32.bin",
+            "sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+            "components": 1497,
+            "data_shreds": 47968,
+            "coding_shreds": 47968,
+            "wire_bytes": 116610208
+          },
+          "candidate_13_8": {
+            "path": "/tmp/agave-shred-paced-repartition-13_8.bin",
+            "sha256": "04c5fcead7372bed37b65518c9f73b53dcf6bb283ba894b49c666c04e37cd58b",
+            "components": 1417,
+            "data_shreds": 45792,
+            "coding_shreds": 45792,
+            "wire_bytes": 111320352
+          },
+          "component_reduction_pct": 5.344021,
+          "wire_reduction_pct": 4.536358
+        },
+        "pairs": [
+          {
+            "process_order": ["retained_49_32", "candidate_13_8"],
+            "retained_lencode_leader_ns": 215729276,
+            "candidate_lencode_leader_ns": 216659928,
+            "leader_regression_pct": 0.431398,
+            "retained_lencode_validator_ns": 22983146,
+            "candidate_lencode_validator_ns": 23177157,
+            "validator_regression_pct": 0.844145
+          },
+          {
+            "process_order": ["candidate_13_8", "retained_49_32"],
+            "retained_lencode_leader_ns": 216698955,
+            "candidate_lencode_leader_ns": 216736987,
+            "leader_regression_pct": 0.017551,
+            "retained_lencode_validator_ns": 23010785,
+            "candidate_lencode_validator_ns": 23195476,
+            "validator_regression_pct": 0.802628
+          }
+        ],
+        "balanced_blockstore_100_slots": {
+          "binary_sha256": "f240001302617652a412b633dde77f3df052a0415d0cffe3d2039e0f58ff0942",
+          "absolute_lencode_validator_regression_pct_by_pair": [0.338365, 0.150991]
+        },
+        "decision": "the exact 4.536% wire reduction and 5.344% component reduction qualify, while every leader, validator, and balanced Blockstore movement remains below the 2% ceiling"
+      },
+      "uniform_capacity_fast1_policy": {
+        "retained_binary_sha256": "b267369af69dbf950ceb731ce8570b32ad49d4e80ba8f702045c27534c8a0d2c",
+        "screen_binary_sha256": "20d16911b314a4111889678b47ff00e303c602f327cb8c866369c4c6e2ce5806",
+        "source_built_binary_sha256": "9f50f0209c6f243b8af4cd04964fec8892631d1983b69bb4b69e349859142b05",
+        "source_reproduction": "the Rust 1.98 source build exactly reproduced the screened all-nonfinal output, including payload and shred totals",
+        "deterministic_13_8_all_nonfinal": {
+          "prior_hc_payload_bytes": 33200325,
+          "prior_hc_data_shreds": 45792,
+          "prior_hc_coding_shreds": 45792,
+          "prior_hc_wire_bytes": 111320352,
+          "uniform_fast1_payload_bytes": 33246960,
+          "uniform_fast1_data_shreds": 46496,
+          "uniform_fast1_coding_shreds": 46496,
+          "uniform_fast1_wire_bytes": 113031776,
+          "wire_regression_vs_13_8_hc_pct": 1.537386
+        },
+        "source_built_pairs": [
+          {
+            "process_order": ["prior_hc", "uniform_fast1"],
+            "prior_wincode_leader_ns": 336033447,
+            "prior_lencode_leader_ns": 215200210,
+            "candidate_wincode_leader_ns": 335312454,
+            "candidate_lencode_leader_ns": 210935424,
+            "absolute_leader_improvement_pct": 1.981776,
+            "control_normalized_leader_improvement_pct": 1.771016,
+            "absolute_validator_regression_pct": 0.504486,
+            "control_normalized_validator_improvement_pct": 0.070660
+          },
+          {
+            "process_order": ["uniform_fast1", "prior_hc"],
+            "prior_wincode_leader_ns": 337336101,
+            "prior_lencode_leader_ns": 215994561,
+            "candidate_wincode_leader_ns": 336544889,
+            "candidate_lencode_leader_ns": 209211008,
+            "absolute_leader_improvement_pct": 3.140613,
+            "control_normalized_leader_improvement_pct": 2.912898,
+            "absolute_validator_improvement_pct": 0.614933,
+            "control_normalized_validator_improvement_pct": 0.517260
+          }
+        ],
+        "decision": "the 1.771% to 2.913% normalized leader improvement qualifies; keeping HC for a smaller final block limits the compression tradeoff to uniform-capacity components"
+      },
+      "cumulative_vs_iteration_62": {
+        "baseline_49_32_all_nonfinal": {
+          "components": 1497,
+          "payload_bytes": 33459646,
+          "data_shreds": 47936,
+          "coding_shreds": 47936,
+          "wire_bytes": 116532416
+        },
+        "candidate_13_8_uniform_fast1": {
+          "components": 1417,
+          "payload_bytes": 33246960,
+          "data_shreds": 46496,
+          "coding_shreds": 46496,
+          "wire_bytes": 113031776
+        },
+        "component_reduction_pct": 5.344021,
+        "payload_reduction_pct": 0.635649,
+        "wire_reduction_pct": 3.004005,
+        "absolute_lencode_leader_improvement_pct_by_pair": [1.969467, 1.145035],
+        "absolute_lencode_validator_regression_pct_by_pair": [0.544574, 0.241167]
+      },
+      "current_vs_production_legacy": {
+        "legacy_fixture_sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72",
+        "legacy_components": 1974,
+        "legacy_wire_bytes": 179154976,
+        "canonical_components": 1417,
+        "conservative_canonical_wire_bytes_upper_bound": 113031776,
+        "conservative_wire_reduction_pct": 36.908380,
+        "all_hc_wire_reduction_pct": 37.863656,
+        "all_hc_target_only_leader_speedup_by_pair": [1.305208, 1.299072],
+        "all_hc_target_only_validator_regression_pct_by_pair": [13.732217, 14.192449],
+        "bound_note": "real paced slots retain HC for 100 smaller final blocks and skip it for uniform nonfinal blocks, so actual wire volume lies between the executed all-HC and all-nonfinal bounds"
+      },
+      "zero_copy": "the borrowed selected-frame slice, caller-owned encoder arena, caller-owned decode arena, and BytesMut freeze handoff are unchanged; no copy, allocation, or owned side buffer was added",
+      "wire_compatibility": "compressed bytes can change, but every result remains a standard size-prefixed LZ4 block inside the existing LCSH version-1 flag-1 frame and uses the unchanged decoder",
+      "security": "the new branch compares bounded encoder capacities derived from official Solana shred values; hostile bytes retain the same checked header, signed-length conversion, caller maximum, compression-ratio bound, exact decompressed-length check, audited exact-size libLZ4 call, and official parser; no unsafe block, decoder, parser, unchecked offset, dependency, sidecar, private layout, or partial output was added",
+      "validation": "Rust 1.98 passed 220 lencode unit tests, 8 integration tests, 5 doctests with 1 ignored, strict all-feature all-target Clippy, 162 no-default unit tests plus 8 integration tests and all targets, std-only production library check, and formatting; Agave passed 48 turbine library tests, strict turbine library Clippy, and repository formatting; the std-only test harness still requires its existing rand-gated Solana test helper",
+      "source_sha256": {
+        "lencode_io": "361d2e38ff7ad92e87e4f2c5b25bb27124b5e9f3a407ed4265c9efc3aff6ce2a",
+        "lencode_solana_wire": "0445dde85cbe7e704e5a7862daceffb59e1fd8f970cb0dfbef609156cda81d3b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_ledger_manifest": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_broadcast_utils": "4a94285444824fa49cdd4e961665ca67d5a5c7469e84e10640db72dbb64499bc",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_standard_broadcast": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
     "production_batch_benchmark": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
       "fixture": {
@@ -6606,6 +6758,12 @@
     "agave_jemalloc_sorted_read_latency_improvement_pct": 8.809,
     "agave_paced_blockstore_validator_throughput_vs_wincode": 1.015619,
     "agave_paced_blockstore_validator_latency_improvement_pct": 1.538,
+    "agave_13_8_component_reduction_vs_49_32_pct": 5.344021,
+    "agave_13_8_uniform_fast1_wire_reduction_vs_49_32_pct": 3.004005,
+    "agave_13_8_uniform_fast1_leader_improvement_pct_by_pair": [1.969467, 1.145035],
+    "agave_13_8_uniform_fast1_validator_regression_pct_by_pair": [0.544574, 0.241167],
+    "agave_current_conservative_wire_reduction_vs_legacy_pct": 36.908380,
+    "agave_current_target_only_leader_speedup_vs_legacy_by_pair": [1.305208, 1.299072],
     "primary_dict_encode_throughput_vs_wincode": 1.124800927,
     "primary_dict_decode_throughput_vs_wincode": 0.669785173,
     "primary_dict_encode_time_improvement_vs_original_pct": 17.540,
