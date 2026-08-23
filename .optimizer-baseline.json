@@ -1,7 +1,7 @@
 {
-  "version": 99,
+  "version": 100,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T11:41:21Z",
+  "updated_at": "2026-08-23T12:22:44Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -372,6 +372,62 @@
         "lencode_solana_wire": "a95e2855792b2da4ad554a7a938cd19bc2b5b83c273c4c45180b85ecd2d6573b",
         "retained_end_to_end_binary": "50dfc6a891e8e4c5d0a54022e77ab172d27d11c22132e51ec7a965b8b1e1158f"
       }
+    },
+    "iteration_38_reference_solana_exact_sizing": {
+      "status": "retained",
+      "change": "add checked exact canonical-size functions over reference Solana entries and use them at the two canonical-lencode batch-sizing sites that previously called wincode",
+      "scope": "the size walk lives in lencode; Agave keeps wincode sizing for legacy mode and changes only the canonical-lencode adapter and its two replacement call sites",
+      "protocol": "logical CPU 28; the focused benchmark used 31 alternating warmed trials per sizer, three full-corpus repetitions per trial, and three independent process runs; end-to-end and Blockstore guardrails used three reverse-order exact-binary process pairs with 31 alternating warmed trials per format",
+      "paced_fixture": {
+        "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218
+      },
+      "parity": "every complete batch and every receiver partial-batch decision matched wincode's exact serialized size; legacy mode still calls wincode and all payload, data-shred, coding-shred, and wire-byte totals were unchanged",
+      "focused_sizing": {
+        "wincode_median_ns_by_run": [35381964, 35380034, 35376704],
+        "lencode_median_ns_by_run": [32138722, 32123133, 32109173],
+        "time_reduction_pct_by_run": [9.166, 9.205, 9.236],
+        "median_time_reduction_pct": 9.205,
+        "median_speedup": 1.1014
+      },
+      "paced_end_to_end_guardrail": {
+        "control_normalized_leader_regression_pct_by_pair": [-0.845, 0.349, -0.215],
+        "control_normalized_leader_regression_pct_median": -0.215,
+        "control_normalized_validator_regression_pct_by_pair": [0.409, 0.307, 0.653],
+        "control_normalized_validator_regression_pct_median": 0.409,
+        "payload_bytes": 33402585,
+        "data_shreds": 49536,
+        "coding_shreds": 49536,
+        "wire_bytes": 120422016
+      },
+      "same_boundary_blockstore_guardrail": {
+        "control_normalized_regression_pct_by_pair": [-0.215, -0.182, 0.971],
+        "control_normalized_regression_pct_median": -0.182
+      },
+      "security": "the API reads already-parsed reference Solana values, validates u8, u16, and u64 collection widths, and uses checked addition and multiplication; it does not parse shred bytes, expose offsets, add a dependency, change the decoder, or add an unsafe block",
+      "rejected_screen": {
+        "change": "call std::hint::cold_path in the uncommon multi-byte canonical short-u16 branches",
+        "leader_regression_pct_by_pair": [1.677, -0.288, 0.537],
+        "validator_regression_pct_by_pair": [1.120, -1.653, 0.111],
+        "decision": "the median leader result regressed 0.537% and the median validator result regressed 0.111%, so the hint was removed below the 1% gate"
+      },
+      "binaries": {
+        "focused_sizing_sha256": "c44ec1d1fa8fc1b2dedfb9cf54df05a4a4d323f5f064e24671f8f2c96d7a91d6",
+        "end_to_end_baseline_sha256": "50dfc6a891e8e4c5d0a54022e77ab172d27d11c22132e51ec7a965b8b1e1158f",
+        "end_to_end_candidate_sha256": "e5f2198e89dde0fd7efdd903b393fed0ebfa1d8925b5c089a8ea808a1b7faf10",
+        "blockstore_baseline_sha256": "c8db03992487b1d8e29f95557f3fb890cd16c8a3076fd799e412058cbfe1092f",
+        "blockstore_candidate_sha256": "42806dd4388b1dc8f3fbecf66360be17454685a97e3ce029a14f74bf1d132f3d"
+      },
+      "source_sha256": {
+        "lencode_solana_wire": "7f558a9508d62cf034bda9341cb9d3a0cf4e28ffaa1291b2bd61b8a32d929d03",
+        "agave_size_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
+      },
+      "validation": "Rust 1.98.0 formatting passed; 214 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, and all-feature checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, sizing benchmark, and turbine library Clippy passed"
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },

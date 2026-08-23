@@ -34,7 +34,7 @@
 use std::{sync::Arc, vec::Vec};
 
 #[cfg(feature = "solana-types")]
-use std::mem::MaybeUninit;
+use std::mem::{MaybeUninit, size_of};
 
 use crate::{
     Decode, Lencode, Result,
@@ -197,6 +197,43 @@ pub struct SolanaEntryRef<'a> {
     pub hash: &'a SolanaHash,
     /// Reference Solana transactions in the entry.
     pub transactions: &'a [VersionedTransaction],
+}
+
+/// Returns the canonical wincode size of one reference-Solana entry.
+///
+/// This validates the same collection widths as the canonical encoder and
+/// uses checked arithmetic throughout.
+#[cfg(feature = "solana-types")]
+#[inline]
+pub fn canonical_solana_entry_serialized_size(entry: SolanaEntryRef<'_>) -> Result<usize> {
+    u64::try_from(entry.transactions.len()).map_err(|_| Error::IncorrectLength)?;
+    let mut size = size_of::<u64>()
+        .checked_add(entry.hash.as_bytes().len())
+        .and_then(|size| size.checked_add(size_of::<u64>()))
+        .ok_or(Error::IncorrectLength)?;
+    for transaction in entry.transactions {
+        checked_add_canonical_size(
+            &mut size,
+            canonical_solana_transaction_serialized_size(transaction)?,
+        )?;
+    }
+    Ok(size)
+}
+
+/// Returns the canonical wincode size of a reference-Solana entry batch.
+///
+/// The returned size includes the outer entry-count prefix.
+#[cfg(feature = "solana-types")]
+#[inline]
+pub fn canonical_solana_entry_batch_serialized_size<'a>(
+    entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
+) -> Result<usize> {
+    u64::try_from(entries.len()).map_err(|_| Error::IncorrectLength)?;
+    let mut size = size_of::<u64>();
+    for entry in entries {
+        checked_add_canonical_size(&mut size, canonical_solana_entry_serialized_size(entry)?)?;
+    }
+    Ok(size)
 }
 
 /// Limits and compression policy for canonical-LZ4 Solana entry batches.
@@ -656,6 +693,168 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
         }
         Ok(written as usize)
     }
+}
+
+#[cfg(feature = "solana-types")]
+fn canonical_solana_transaction_serialized_size(
+    transaction: &VersionedTransaction,
+) -> Result<usize> {
+    let signature_bytes = transaction
+        .signatures
+        .len()
+        .checked_mul(solana_signature::SIGNATURE_BYTES)
+        .ok_or(Error::IncorrectLength)?;
+    match &transaction.message {
+        VersionedMessage::Legacy(message) => {
+            let mut size = canonical_short_u16_serialized_size(transaction.signatures.len())?;
+            checked_add_canonical_size(&mut size, signature_bytes)?;
+            checked_add_canonical_size(
+                &mut size,
+                canonical_legacy_message_serialized_size(
+                    &message.account_keys,
+                    &message.instructions,
+                )?,
+            )?;
+            Ok(size)
+        }
+        VersionedMessage::V0(message) => {
+            let mut size = canonical_short_u16_serialized_size(transaction.signatures.len())?;
+            checked_add_canonical_size(&mut size, signature_bytes)?;
+            checked_add_canonical_size(&mut size, size_of::<u8>())?;
+            checked_add_canonical_size(
+                &mut size,
+                canonical_legacy_message_serialized_size(
+                    &message.account_keys,
+                    &message.instructions,
+                )?,
+            )?;
+            checked_add_canonical_size(
+                &mut size,
+                canonical_short_u16_serialized_size(message.address_table_lookups.len())?,
+            )?;
+            for lookup in &message.address_table_lookups {
+                checked_add_canonical_size(&mut size, solana_pubkey::PUBKEY_BYTES)?;
+                checked_add_canonical_size(
+                    &mut size,
+                    canonical_short_payload_serialized_size(&lookup.writable_indexes)?,
+                )?;
+                checked_add_canonical_size(
+                    &mut size,
+                    canonical_short_payload_serialized_size(&lookup.readonly_indexes)?,
+                )?;
+            }
+            Ok(size)
+        }
+        VersionedMessage::V1(message) => {
+            if usize::from(message.header.num_required_signatures) != transaction.signatures.len() {
+                return Err(Error::InvalidData);
+            }
+            u8::try_from(message.instructions.len()).map_err(|_| Error::IncorrectLength)?;
+            u8::try_from(message.account_keys.len()).map_err(|_| Error::IncorrectLength)?;
+
+            let mut size = size_of::<u8>()
+                .checked_add(3)
+                .and_then(|size| size.checked_add(size_of::<u32>()))
+                .and_then(|size| size.checked_add(solana_hash::HASH_BYTES))
+                .and_then(|size| size.checked_add(2 * size_of::<u8>()))
+                .ok_or(Error::IncorrectLength)?;
+            checked_add_canonical_items(
+                &mut size,
+                message.account_keys.len(),
+                solana_pubkey::PUBKEY_BYTES,
+            )?;
+            if message.config.priority_fee.is_some() {
+                checked_add_canonical_size(&mut size, size_of::<u64>())?;
+            }
+            if message.config.compute_unit_limit.is_some() {
+                checked_add_canonical_size(&mut size, size_of::<u32>())?;
+            }
+            if message.config.loaded_accounts_data_size_limit.is_some() {
+                checked_add_canonical_size(&mut size, size_of::<u32>())?;
+            }
+            if message.config.heap_size.is_some() {
+                checked_add_canonical_size(&mut size, size_of::<u32>())?;
+            }
+            checked_add_canonical_items(&mut size, message.instructions.len(), 4)?;
+            for instruction in &message.instructions {
+                u8::try_from(instruction.accounts.len()).map_err(|_| Error::IncorrectLength)?;
+                u16::try_from(instruction.data.len()).map_err(|_| Error::IncorrectLength)?;
+                checked_add_canonical_size(&mut size, instruction.accounts.len())?;
+                checked_add_canonical_size(&mut size, instruction.data.len())?;
+            }
+            checked_add_canonical_size(&mut size, signature_bytes)?;
+            Ok(size)
+        }
+    }
+}
+
+#[cfg(feature = "solana-types")]
+fn canonical_legacy_message_serialized_size(
+    account_keys: &[solana_pubkey::Pubkey],
+    instructions: &[solana_message::compiled_instruction::CompiledInstruction],
+) -> Result<usize> {
+    let mut size = 3usize;
+    checked_add_canonical_size(
+        &mut size,
+        canonical_short_u16_serialized_size(account_keys.len())?,
+    )?;
+    checked_add_canonical_items(&mut size, account_keys.len(), solana_pubkey::PUBKEY_BYTES)?;
+    checked_add_canonical_size(&mut size, solana_hash::HASH_BYTES)?;
+    checked_add_canonical_size(
+        &mut size,
+        canonical_instructions_serialized_size(instructions)?,
+    )?;
+    Ok(size)
+}
+
+#[cfg(feature = "solana-types")]
+fn canonical_instructions_serialized_size(
+    instructions: &[solana_message::compiled_instruction::CompiledInstruction],
+) -> Result<usize> {
+    let mut size = canonical_short_u16_serialized_size(instructions.len())?;
+    for instruction in instructions {
+        checked_add_canonical_size(&mut size, size_of::<u8>())?;
+        checked_add_canonical_size(
+            &mut size,
+            canonical_short_payload_serialized_size(&instruction.accounts)?,
+        )?;
+        checked_add_canonical_size(
+            &mut size,
+            canonical_short_payload_serialized_size(&instruction.data)?,
+        )?;
+    }
+    Ok(size)
+}
+
+#[cfg(feature = "solana-types")]
+fn canonical_short_payload_serialized_size(payload: &[u8]) -> Result<usize> {
+    canonical_short_u16_serialized_size(payload.len())?
+        .checked_add(payload.len())
+        .ok_or(Error::IncorrectLength)
+}
+
+#[cfg(feature = "solana-types")]
+fn canonical_short_u16_serialized_size(len: usize) -> Result<usize> {
+    let value = u16::try_from(len).map_err(|_| Error::IncorrectLength)?;
+    Ok(if value < 0x80 {
+        1
+    } else if value < 0x4000 {
+        2
+    } else {
+        3
+    })
+}
+
+#[cfg(feature = "solana-types")]
+fn checked_add_canonical_items(size: &mut usize, count: usize, item_size: usize) -> Result<()> {
+    let additional = count.checked_mul(item_size).ok_or(Error::IncorrectLength)?;
+    checked_add_canonical_size(size, additional)
+}
+
+#[cfg(feature = "solana-types")]
+fn checked_add_canonical_size(size: &mut usize, additional: usize) -> Result<()> {
+    *size = size.checked_add(additional).ok_or(Error::IncorrectLength)?;
+    Ok(())
 }
 
 #[cfg(feature = "solana-types")]
@@ -2222,7 +2421,34 @@ mod tests {
         expected.extend_from_slice(&3u64.to_le_bytes());
         for transaction in &transactions {
             expected.extend_from_slice(&wincode::serialize(transaction).unwrap());
+            assert_eq!(
+                canonical_solana_transaction_serialized_size(transaction).unwrap(),
+                usize::try_from(wincode::serialized_size(transaction).unwrap()).unwrap()
+            );
         }
+        assert_eq!(
+            canonical_solana_entry_serialized_size(entries[0]).unwrap(),
+            expected.len() - size_of::<u64>()
+        );
+        assert_eq!(
+            canonical_solana_entry_batch_serialized_size(entries.iter().copied()).unwrap(),
+            expected.len()
+        );
+        assert_eq!(
+            canonical_solana_entry_batch_serialized_size(core::iter::empty()).unwrap(),
+            size_of::<u64>()
+        );
+
+        let mut invalid_v1 = transactions[2].clone();
+        invalid_v1.signatures.clear();
+        assert!(matches!(
+            canonical_solana_transaction_serialized_size(&invalid_v1),
+            Err(Error::InvalidData)
+        ));
+        assert!(matches!(
+            canonical_short_u16_serialized_size(usize::from(u16::MAX) + 1),
+            Err(Error::IncorrectLength)
+        ));
 
         let config = SolanaCanonicalLz4Config::new(expected.len(), expected.len());
         let mut encoder = SolanaCanonicalLz4EntryBatchEncoder::new(config);
@@ -3113,6 +3339,11 @@ mod tests {
                     signatures: signatures.into_iter().map(Signature::from).collect(),
                     message,
                 };
+                #[cfg(feature = "solana-types")]
+                assert_eq!(
+                    canonical_solana_transaction_serialized_size(&expected).unwrap(),
+                    usize::try_from(wincode::serialized_size(&expected).unwrap()).unwrap()
+                );
                 let mut output = Vec::new();
                 SolanaTransactionTranscoder::with_frozen(frozen_decoder)
                     .transcode_exact(
