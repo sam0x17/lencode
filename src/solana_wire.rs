@@ -458,6 +458,65 @@ fn transcode_canonical_lz4_entry_batch_inner(
     Ok(written)
 }
 
+/// A validated canonical-LZ4 entry-batch frame ready to decompress.
+///
+/// This separates frame validation from output allocation so callers can
+/// decode directly into shared or otherwise caller-owned storage.
+#[cfg(feature = "solana-types")]
+#[derive(Clone, Copy, Debug)]
+pub struct SolanaCanonicalLz4EntryBatchDecoder<'a> {
+    compressed: &'a [u8],
+    canonical_len: usize,
+}
+
+#[cfg(feature = "solana-types")]
+impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
+    /// Validates the frame header and bounded canonical length.
+    #[inline]
+    pub fn new(input: &'a [u8], max_canonical_bytes: usize) -> Result<Self> {
+        if input.len() < SOLANA_CANONICAL_LZ4_HEADER_BYTES + 4
+            || input[..4] != SOLANA_ENTRY_BATCH_MAGIC
+            || input[4] != SOLANA_ENTRY_BATCH_VERSION
+            || input[5] != SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG
+        {
+            return Err(Error::InvalidData);
+        }
+        let compressed = &input[SOLANA_CANONICAL_LZ4_HEADER_BYTES..];
+        let canonical_len = usize::try_from(u32::from_le_bytes(
+            compressed[..4]
+                .try_into()
+                .expect("checked canonical LZ4 length prefix"),
+        ))
+        .map_err(|_| Error::IncorrectLength)?;
+        if canonical_len > max_canonical_bytes {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        Ok(Self {
+            compressed,
+            canonical_len,
+        })
+    }
+
+    /// Returns the exact output length required by [`Self::decompress_into`].
+    pub const fn canonical_len(&self) -> usize {
+        self.canonical_len
+    }
+
+    /// Decompresses into an initialized slice of exactly the advertised size.
+    #[inline]
+    pub fn decompress_into(&self, output: &mut [u8]) -> Result<usize> {
+        if output.len() != self.canonical_len {
+            return Err(Error::IncorrectLength);
+        }
+        let written = lz4_block::decompress_to_buffer(self.compressed, None, output)
+            .map_err(|_| Error::InvalidData)?;
+        if written != self.canonical_len {
+            return Err(Error::InvalidData);
+        }
+        Ok(written)
+    }
+}
+
 #[cfg(feature = "solana-types")]
 fn encode_canonical_entry_batch<'a>(
     entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
@@ -2067,6 +2126,19 @@ mod tests {
             transcode_canonical_lz4_entry_batch(&encoded, &mut canonical, expected.len()).unwrap();
         assert_eq!(decoded_len, expected.len());
         assert_eq!(canonical, expected);
+
+        let decoder = SolanaCanonicalLz4EntryBatchDecoder::new(&encoded, expected.len()).unwrap();
+        assert_eq!(decoder.canonical_len(), expected.len());
+        let mut direct = vec![0; decoder.canonical_len()];
+        assert_eq!(
+            decoder.decompress_into(&mut direct).unwrap(),
+            expected.len()
+        );
+        assert_eq!(direct, expected);
+        assert!(matches!(
+            decoder.decompress_into(&mut direct[..expected.len() - 1]),
+            Err(Error::IncorrectLength)
+        ));
 
         let fast_one_config = SolanaCanonicalLz4Config::new(expected.len(), expected.len() - 1);
         let mut fast_one_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(fast_one_config);

@@ -1,12 +1,12 @@
 {
-  "version": 79,
+  "version": 80,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T01:38:36Z",
+  "updated_at": "2026-08-23T02:14:56Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 34,
+    "version": 35,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -899,7 +899,73 @@
         "unsafe_code_added": false,
         "decision": "reverted because the larger EntryView layout and added cache traffic outweighed removing the common single-transaction allocation; both formats exceeded the 2% absolute regression ceiling"
       },
-      "conclusion": "the borrowed range scan plus framed-input allocation reuse cuts canonical Blockstore latency by 50.4% on Rust 1.98.0; with each codec's actual paced component boundaries, canonical completes 1.538% faster than legacy wincode while retaining the 59.211% Turbine wire reduction"
+      "shared_parser_storage_result": {
+        "change": "validate a canonical LZ4 frame in lencode before allocation, decompress it directly into an adaptively sized BytesMut segment, and give the byte-backed Agave parser an ownership slice without a canonical-byte copy; legacy payloads retain their existing input-allocation transfer",
+        "scope": "the decoder and caller-owned output API are lencode-specific; Agave changes are limited to the canonical-LZ4 replacement adapter and its Blockstore call site",
+        "protocol": "median of three paired independent processes on logical CPU 28, each with 31 alternating warmed trials per format",
+        "baseline": {
+          "description": "exact retained Rust 1.98.0 borrowed-range and framed-input-reuse binary",
+          "binary_sha256": "25c37a75b438ea1c68cba549ef0f3b1ce130bdb9da1541e9be37184308c169c3",
+          "wincode_validator": { "value": 27468146, "unit": "ns/100 Blockstore slots", "range": [27460356, 27525477] },
+          "lencode_validator": { "value": 29482824, "unit": "ns/100 Blockstore slots", "range": [29333194, 29532414] }
+        },
+        "candidate": {
+          "binary_sha256": "a4e3f853c9f22a07feac005c813584caef4aaa85e84be76d87da3eb153b531b9",
+          "wincode_validator": { "value": 27847618, "unit": "ns/100 Blockstore slots", "range": [27654548, 29972656] },
+          "lencode_validator": { "value": 29290283, "unit": "ns/100 Blockstore slots", "range": [29121943, 31235210] },
+          "lencode_absolute_improvement_pct": 0.653,
+          "wincode_control_regression_pct": 1.381,
+          "lencode_control_normalized_improvement_pct": 2.007,
+          "lencode_validator_throughput_vs_wincode": 0.950746,
+          "lencode_latency_over_wincode_pct": 5.181
+        },
+        "contention_event": {
+          "candidate_wincode_validator_ns": 29972656,
+          "candidate_lencode_validator_ns": 31235210,
+          "resolution": "both formats slowed in the same first candidate process; the predeclared median-of-three and paired wincode normalization retained the sample without letting it decide the result"
+        },
+        "end_to_end_safety": {
+          "protocol": "median of three paired CPU-28 processes with 31 alternating warmed trials per format over the production-batch fixture",
+          "baseline": {
+            "binary_sha256": "b04df5b259f10ff06257cbb3982e2a9dd7ac69fc8f507a10fc967dfa8d6c40dd",
+            "wincode_leader_ns": 452935618,
+            "wincode_validator_ns": 22244108,
+            "lencode_leader_ns": 264567094,
+            "lencode_validator_ns": 23545123
+          },
+          "candidate": {
+            "binary_sha256": "1c743c2b80dee55f13f035b0e7b428d714fc1f0e58e517efdc80469b1d990a02",
+            "wincode_leader_ns": 454648675,
+            "wincode_validator_ns": 22366289,
+            "lencode_leader_ns": 269113609,
+            "lencode_validator_ns": 23681793
+          },
+          "leader_absolute_regression_pct": 1.718,
+          "leader_control_normalized_regression_pct": 1.335,
+          "validator_absolute_regression_pct": 0.580,
+          "validator_control_normalized_regression_pct": 0.031,
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false
+        },
+        "source_sha256": {
+          "lencode_solana_wire": "4e8921b80b652478d8ddce08518c8ec7a2770c4cce1b24e6cb58039742656f65",
+          "blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+          "production_codec": "60140712c69d383cddc112c59780858c231d61669716dd980712bd7574d74f8b",
+          "frozen_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+          "frozen_end_to_end_benchmark": "e060d06cebd1535fb776b5e652570a1e4ff33c9684f971537740ca16ca071f81"
+        },
+        "validation": {
+          "lencode_tests": "214 passed",
+          "codec_tests": "11 passed, including contiguous shared parser storage and retained compressed input allocation",
+          "blockstore_integration_test": "canonical LZ4 explicit-format read passed",
+          "strict_clippy": "lencode all targets and features plus the Agave ledger library passed with warnings denied"
+        },
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false,
+        "public_api_change": "additive"
+      },
+      "conclusion": "lencode-specific framed-input reuse improved canonical Blockstore loading by 8.033%, and shared zero-copy parser storage adds a 2.007% control-normalized gain on the final Rust 1.98.0 binary; the broader borrowed RocksDB scan is excluded from lencode credit"
     },
     "history": [
       {
@@ -2224,6 +2290,14 @@
       {
         "optimization": "reuse liblz4 state and append canonical frames through spare capacity with lzzzz",
         "reason": "safe fast-reset compression alone regressed control-normalized leader time by 0.49%; adding direct raw-block decompression improved normalized validator time by only 0.69% while leader time regressed 0.98%, and the full retained-scratch form that removed destination zero-fill and the final frame move improved normalized leader time only 0.24% while validator time regressed 0.95%; exact payload and Turbine wire bytes were unchanged, so the dependency and thread-local scratch path were removed below the 1% gate"
+      },
+      {
+        "optimization": "decode canonical LZ4 frames with lz4rip-decode 0.10.3",
+        "reason": "a CPU-affined seven-trial production-fixture screen increased canonical validator time from the 23.495 ms exact baseline to 25.040 ms (6.58%) while payload and Turbine wire bytes remained exact; the lencode-only decoder substitution and dependency were removed before longer benchmarking"
+      },
+      {
+        "optimization": "decompress a Blockstore slot into one Vec-backed canonical arena and parse shared ranges after the RocksDB scan",
+        "reason": "a paired CPU-affined seven-trial repeat increased the canonical-to-wincode latency ratio from 1.059 to 1.092, a 3.09% control-normalized regression; deferring parsing outweighed the allocation reduction, so the additive lencode arena API and replacement-site changes were removed"
       }
     ],
     "full_resets": [
