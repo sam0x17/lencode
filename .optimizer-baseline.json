@@ -1,12 +1,12 @@
 {
-  "version": 105,
+  "version": 106,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T14:45:56Z",
+  "updated_at": "2026-08-23T14:59:45Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 59,
+    "version": 60,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1070,6 +1070,38 @@
         "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
       },
       "validation": "Rust 1.98.0 formatting passed; 217 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default all-target, std-only library, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, focused sizing benchmark, and turbine library Clippy passed"
+    },
+    "post_iteration_43_safe_sizing_frontier_screen": {
+      "status": "all candidates reverted",
+      "scope": "lencode-only canonical sizing over parsed reference Solana values; Agave sources and replacement call sites were unchanged",
+      "protocol": "logical CPU 28; exact Rust 1.98.0 binaries; focused sizing used 31 alternating warmed trials per sizer and three corpus repetitions per trial, with each candidate normalized to its own wincode control",
+      "baseline_binary_sha256": "cd8f6d69271585f78097e18f7178b299e85337a974045e3912f6b7f75b15c9c7",
+      "screens": [
+        {
+          "change": "accumulate per-entry transaction sizes in u128 and narrow once after the loop",
+          "candidate_binary_sha256": "4b580f1e3473da2a3b6ea61754d08ec13a3570a77a7ff5aa897c30bbf96df142",
+          "baseline_medians_ns": { "wincode": 35183785, "lencode": 24107246 },
+          "candidate_medians_ns": { "wincode": 35203685, "lencode": 25037679 },
+          "control_normalized_regression_pct": 3.801,
+          "decision": "reverted because wider arithmetic exceeded the 2% regression ceiling"
+        },
+        {
+          "change": "aggregate validated Legacy and V0 top-level fields in bounded u64 sums",
+          "candidate_binary_sha256": "5619990fea076f38a4931bc837fee0eda66a1ddab3aa4fc89ca0f44960534891",
+          "control_normalized_improvement_pct_by_pair": [0.491, 0.697],
+          "decision": "reverted because both exact pairs missed the 1% keep gate"
+        },
+        {
+          "change": "outline V0 address-table lookup sizing while preserving every checked length boundary",
+          "candidate_binary_sha256": "26773d55db59b2b429cb5a6a2cf6fde5b359a964d9867990ddc9c6db6b2c495c",
+          "baseline_medians_ns": { "wincode": 35369866, "lencode": 24266337 },
+          "candidate_medians_ns": { "wincode": 35376056, "lencode": 24625387 },
+          "control_normalized_regression_pct": 1.462,
+          "decision": "reverted after the first stable exact pair"
+        }
+      ],
+      "security": "all screened forms retained fallible collection-width validation, checked final conversions, and the existing wire layout. A delayed overflowing accumulator was not implemented because it would scan beyond the first cumulative overflow instead of failing immediately. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, wire behavior, or production source change remains.",
+      "restored_source_sha256": "9f7cb63942089ab281270ccf38efa119de4aa2cd1f7c6621c96e7125666a3513"
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
