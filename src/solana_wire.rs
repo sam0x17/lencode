@@ -92,6 +92,10 @@ const HC_RECOMPRESSION_LEVEL: i32 = 3;
 const MID_HC_RECOMPRESSION_WINDOW_DIVISOR: usize = 58;
 #[cfg(feature = "solana-types")]
 const MID_HC_RECOMPRESSION_LEVEL: i32 = 2;
+// The LZ4 block format's maximum achievable compression ratio is about 250.
+// Keep a little margin while rejecting impossible output sizes before allocation.
+#[cfg(feature = "solana-types")]
+const MAX_LZ4_BLOCK_COMPRESSION_RATIO: usize = 256;
 
 /// Canonical version byte for a v0 message.
 pub const V0_PREFIX: u8 = 0x80;
@@ -605,6 +609,13 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
             return Err(Error::DecodeLimitExceeded);
         }
         let compressed = &compressed[4..];
+        if canonical_len_usize
+            > compressed
+                .len()
+                .saturating_mul(MAX_LZ4_BLOCK_COMPRESSION_RATIO)
+        {
+            return Err(Error::InvalidData);
+        }
         let compressed_len = i32::try_from(compressed.len()).map_err(|_| Error::IncorrectLength)?;
         Ok(Self {
             compressed,
@@ -2929,6 +2940,58 @@ mod tests {
             wire_block_count(181, SolanaCanonicalLz4WireBlocks::new(0, 80)),
             None
         );
+    }
+
+    #[cfg(feature = "solana-types")]
+    #[test]
+    fn canonical_lz4_decoder_bounds_advertised_expansion() {
+        let mut impossible = SOLANA_ENTRY_BATCH_MAGIC.to_vec();
+        impossible.extend_from_slice(&[
+            SOLANA_ENTRY_BATCH_VERSION,
+            SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG,
+        ]);
+        impossible.extend_from_slice(
+            &u32::try_from(MAX_LZ4_BLOCK_COMPRESSION_RATIO + 1)
+                .unwrap()
+                .to_le_bytes(),
+        );
+        impossible.push(0);
+        assert!(matches!(
+            SolanaCanonicalLz4EntryBatchDecoder::new(
+                &impossible,
+                MAX_LZ4_BLOCK_COMPRESSION_RATIO + 1,
+            ),
+            Err(Error::InvalidData)
+        ));
+
+        let mut output = Vec::with_capacity(8);
+        output.push(1);
+        let original_capacity = output.capacity();
+        assert!(matches!(
+            transcode_canonical_lz4_entry_batch(
+                &impossible,
+                &mut output,
+                MAX_LZ4_BLOCK_COMPRESSION_RATIO + 1,
+            ),
+            Err(Error::InvalidData)
+        ));
+        assert!(output.is_empty());
+        assert_eq!(output.capacity(), original_capacity);
+
+        let canonical = vec![0; 1 << 20];
+        let compressed =
+            lz4_block::compress(&canonical, Some(CompressionMode::FAST(4)), true).unwrap();
+        let raw_compressed_len = compressed.len() - size_of::<u32>();
+        assert!(canonical.len() > raw_compressed_len * 250);
+        assert!(canonical.len() <= raw_compressed_len * MAX_LZ4_BLOCK_COMPRESSION_RATIO);
+        let mut frame = SOLANA_ENTRY_BATCH_MAGIC.to_vec();
+        frame.extend_from_slice(&[
+            SOLANA_ENTRY_BATCH_VERSION,
+            SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG,
+        ]);
+        frame.extend_from_slice(&compressed);
+        transcode_canonical_lz4_entry_batch(&frame, &mut output, canonical.len()).unwrap();
+        assert_eq!(output, canonical);
     }
 
     #[cfg(feature = "solana-types")]
