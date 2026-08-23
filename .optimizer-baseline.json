@@ -249,9 +249,11 @@
       "protocol": "three reverse-order exact-binary process pairs on logical CPU 28 with seven alternating warmed trials per format, one reverse-order 31-trial confirmation, and three 31-trial Blockstore pairs; every comparison is normalized to the same binary's wincode control",
       "binaries": {
         "end_to_end_baseline_sha256": "e445f6eb1c43783b623e86bc3d27fbb9d4ec95ff6e4dc8073a5e14b0be00759f",
-        "end_to_end_candidate_sha256": "50dfc6a891e8e4c5d0a54022e77ab172d27d11c22132e51ec7a965b8b1e1158f",
+        "end_to_end_screen_candidate_sha256": "5c548eca41d6dbdea67617465038088cb3970b76b82fc45b5becd64f024670d6",
+        "end_to_end_final_candidate_sha256": "50dfc6a891e8e4c5d0a54022e77ab172d27d11c22132e51ec7a965b8b1e1158f",
         "blockstore_baseline_sha256": "03f3faf8accec9efa0c60905d841321055ecc731629ed29c472dfc58ed5a48b2",
-        "blockstore_candidate_sha256": "c8db03992487b1d8e29f95557f3fb890cd16c8a3076fd799e412058cbfe1092f"
+        "blockstore_screen_candidate_sha256": "802c9ef1ded0a6cf1d22c00a17316e8c035601bfeb0d88e240d9aa3743f59928",
+        "blockstore_final_candidate_sha256": "c8db03992487b1d8e29f95557f3fb890cd16c8a3076fd799e412058cbfe1092f"
       },
       "paced_fixture": {
         "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
