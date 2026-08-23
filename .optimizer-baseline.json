@@ -1,12 +1,12 @@
 {
-  "version": 95,
+  "version": 96,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T09:23:06Z",
+  "updated_at": "2026-08-23T09:58:48Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 50,
+    "version": 51,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2915,6 +2915,49 @@
         "candidate_binary_sha256": "4bdb302bfaac7927d9c64f215addf5154a7a56ade131a33f9a6b6ef3f584b2b7",
         "payload_bytes_changed": false,
         "wire_bytes_changed": false,
+        "unsafe_code_added": false,
+        "restored_lencode_solana_wire_sha256": "a9d3f32a4b28b5368e25c6090b61c33de09d4b7b944231339ed3f2db42d85479",
+        "restored_agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      },
+      {
+        "optimization": "use HC(2) for the closest retained retries and HC(3) for the remaining retained retries",
+        "reason": "The 13 HC(2) and 3 HC(3) split kept wire bytes exact but increased payload by 7,197 bytes. Three paired runs moved normalized leader latency backward by 0.019%, 0.065%, and 2.096%, and validator latency also regressed, so HC(3) was restored for all retained retries.",
+        "candidate_binary_sha256": "dc50b502f40774b79bfa264fda828ac75d4a8e7a67a5dd84977d5b514e0527da",
+        "candidate_payload_bytes": 33438979,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "retry lz4_flex only on the 31 frames left above two wire blocks",
+        "reason": "The safe encoder removed one additional data and coding FEC set, reducing wire bytes by 0.064% and payload by 2,166 bytes. The dependency and residual branch were removed before paired timing because the deterministic gain was below the 1% gate.",
+        "candidate_binary_sha256": "e1077d4838113258958ef4b1971549f108d3da16850fd21c758c8e0d27fac122",
+        "candidate_payload_bytes": 33429616,
+        "candidate_wire_bytes": 121588896,
+        "wire_compatibility": "the candidate emitted a standard size-prefixed LZ4 block accepted by the retained decoder",
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "widen boundary retries and try HC(2) before escalating failed frames to HC(3)",
+        "reason": "The policy removed 16 additional FEC sets and 1.023% more wire, but two reverse-order pairs regressed normalized leader latency by 2.968% and 2.514%. The nested retry and wider windows were removed under the 2% ceiling.",
+        "candidate_binary_sha256": "0c6830ea85155925e84ba15209f8bac994c3739fded89d1ea3b7ee826437530a",
+        "candidate_wire_bytes": 120422016,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "combine wider boundary retries with lzzzz state reuse and target-sized HC output",
+        "reason": "State reuse brought three short normalized leader regressions to 1.963%, 1.413%, and 1.560%, but a 31-trial pair measured 2.019%. Capping safe HC output at the prior FEC boundary kept bytes unchanged and still produced a 2.084% short-pair regression. Splitting 17 retries to HC(2) and 13 to HC(3) later measured a 2.437% long-pair regression, so the dependency, target path, and wider windows were removed.",
+        "state_reuse_binary_sha256": "ba7df9380729a35715009e0a2c2d1632a24b79e96a5ba611fb7d5dcf8b313c65",
+        "target_output_binary_sha256": "8122a71da597ed4bb5cd7b97f86a432d9c8d0623671d51d863586a32baad544a",
+        "level_split_binary_sha256": "9ede189c31f2b494808f739c07e202c4f117d5b259ff054ad975a087c00ed23d",
+        "candidate_wire_bytes": 120422016,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "split wider native libLZ4 retries between HC(2) and HC(3)",
+        "reason": "The dependency-free 17 and 13 level split retained the full 1.023% wire reduction, but two reverse-order pairs regressed normalized leader latency by 2.148% and 1.669%. The first pair exceeded the ceiling, so the split and wider windows were removed.",
+        "candidate_binary_sha256": "a125d5126759c306d3eed50cfcec15c4bde6e1fd1f97fc6fc91256371a3550f6",
+        "candidate_payload_bytes": 33400461,
+        "candidate_wire_bytes": 120422016,
         "unsafe_code_added": false,
         "restored_lencode_solana_wire_sha256": "a9d3f32a4b28b5368e25c6090b61c33de09d4b7b944231339ed3f2db42d85479",
         "restored_agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
