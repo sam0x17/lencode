@@ -1,12 +1,12 @@
 {
-  "version": 91,
+  "version": 92,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T06:34:17Z",
+  "updated_at": "2026-08-23T07:04:28Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 46,
+    "version": 47,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -22,6 +22,27 @@
       "transactions": 124218,
       "trials_per_run": 31,
       "independent_runs": 3
+    },
+    "post_iteration_35_profile": {
+      "command": "perf record -F 999 -o /tmp/lencode-shred-spare-decode-perf.data -- env LENCODE_SHRED_RUNS=21 taskset -c 28 /tmp/lencode-unsafe-spare-decode-screen-rust-1.98.0 /tmp/agave-shred-broadcast-batches.bin",
+      "samples": 18195,
+      "lost_samples": 0,
+      "profiled_medians_ns": {
+        "wincode_leader": 457828572,
+        "wincode_validator": 22431316,
+        "canonical_lz4_leader": 269513264,
+        "canonical_lz4_validator": 23601219
+      },
+      "relevant_cycle_overhead_pct": {
+        "lz4_compress_fast_ext_state": 2.57,
+        "lz4_decompress_safe": 0.79,
+        "canonical_short_u16": 0.65,
+        "canonical_addresses": 0.60,
+        "canonical_instructions": 0.40,
+        "memset_all_paths": 0.40,
+        "memmove_all_paths": 1.93
+      },
+      "conclusion": "destination zeroing no longer appears in the retained Blockstore decoder profile; libLZ4 itself is the remaining qualifying decode hotspot, while the end-to-end profile justified screening canonical writer dispatch and encoder destination initialization"
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
@@ -2088,7 +2109,7 @@
       {
         "iteration": 35,
         "optimization": "decode canonical LZ4 frames into uninitialized caller spare capacity",
-        "commit": null,
+        "commit": "32df7e1c2a809ab453a405f747f7711b32ec2121",
         "kept": true,
         "integration": "lencode owns the audited FFI boundary and safe Vec and BytesMut APIs; Agave changes one canonical-lencode adapter call from resize-plus-decode to spare-capacity decode",
         "baseline_binary_sha256": {
@@ -2555,6 +2576,36 @@
         "payload_bytes_changed": false,
         "wire_bytes_changed": false,
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "inline the common canonical short-u16 write and copy non-overlapping compressed frames through disjoint slices",
+        "reason": "the short-length fast path improved control-normalized leader latency by 0.098% and 0.578% in two reverse-order seven-trial pairs; adding the disjoint frame-copy path changed leader latency by -0.017% in a third pair, so both safe lencode-only changes were removed below the 1% gate",
+        "baseline_binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "short_length_candidate_binary_sha256": "58e1d67e83a27878f001abefcd56482cf110442b57cd0f85433ce5dc9a886261",
+        "combined_candidate_binary_sha256": "89c4424771ea48bd56287e2b72427fadfa8f88fe172d7ce65ffc283dbd7f2ed7",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "encode ordinary canonical frames with lz4_flex 0.14.0's safe pure-Rust block compressor",
+        "reason": "one paired CPU-affined seven-trial screen reduced compressed payload by 2.700%, from 34,564,782 to 33,631,606 bytes, but removed no Turbine block and regressed control-normalized leader latency by 7.171%; the dependency and encoder branch were removed",
+        "baseline_binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "candidate_binary_sha256": "aaf906b865ae9320678a973e69fb48bb9896cc5d69340b054d4e13d615669333",
+        "baseline_payload_bytes": 34564782,
+        "candidate_payload_bytes": 33631606,
+        "turbine_wire_bytes": 158384512,
+        "wire_compatibility": "the candidate emitted standard size-prefixed LZ4 blocks accepted by the retained decoder",
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "compress canonical LZ4 frames directly into uninitialized Vec spare capacity",
+        "reason": "three alternating CPU-affined seven-trial pairs changed control-normalized leader latency by -0.176%, +0.696%, and +0.155%, for a 0.155% median improvement, while validator latency regressed by a 1.066% median from whole-binary layout; the second private libLZ4 boundary was removed below the 1% gate",
+        "baseline_binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "candidate_binary_sha256": "d6c24840a094126a81eb181844f64a98c51f68e13095c3b3767226f39581d28a",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": true
       }
     ],
     "full_resets": [
