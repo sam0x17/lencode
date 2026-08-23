@@ -82,6 +82,8 @@ pub const SOLANA_CANONICAL_LZ4_HEADER_BYTES: usize = SOLANA_ENTRY_BATCH_MAGIC.le
 #[cfg(feature = "solana-types")]
 const STRONG_RECOMPRESSION_WINDOW_DIVISOR: usize = 13;
 #[cfg(feature = "solana-types")]
+const EXTREME_OVERSIZED_FAST2_MULTIPLIER: usize = 11;
+#[cfg(feature = "solana-types")]
 const HC_RECOMPRESSION_WINDOW_DIVISOR: usize = 32;
 #[cfg(feature = "solana-types")]
 const HC_RECOMPRESSION_LEVEL: i32 = 3;
@@ -244,8 +246,9 @@ pub struct SolanaCanonicalLz4Config {
     pub max_canonical_bytes: usize,
     /// Largest canonical input eligible for FAST(4) boundary retries.
     ///
-    /// Larger inputs still use FAST(4) but do not retry with stronger modes.
-    /// This threshold does not affect decoder compatibility.
+    /// Inputs through eleven times this threshold still use FAST(4) without
+    /// retries. Larger inputs use FAST(2). This threshold does not affect
+    /// decoder compatibility.
     pub fast_acceleration_max_input: usize,
 }
 
@@ -379,6 +382,16 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
             .checked_add(SOLANA_CANONICAL_LZ4_HEADER_BYTES)
             .and_then(|len| len.checked_add(compressed_capacity))
             .ok_or(Error::IncorrectLength)?;
+        let acceleration = if canonical_len
+            <= self
+                .config
+                .fast_acceleration_max_input
+                .saturating_mul(EXTREME_OVERSIZED_FAST2_MULTIPLIER)
+        {
+            4
+        } else {
+            2
+        };
         output
             .try_reserve(arena_len - canonical_len)
             .map_err(|_| Error::DecodeLimitExceeded)?;
@@ -392,7 +405,7 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
             SOLANA_CANONICAL_LZ4_HEADER_BYTES
                 + lz4_block::compress_to_buffer(
                     canonical,
-                    Some(CompressionMode::FAST(4)),
+                    Some(CompressionMode::FAST(acceleration)),
                     true,
                     &mut frame[SOLANA_CANONICAL_LZ4_HEADER_BYTES..],
                 )
@@ -2849,6 +2862,21 @@ mod tests {
                 SolanaCanonicalLz4WireBlocks::new(1, 1),
             )
             .unwrap();
+        assert_eq!(encoded, expected_frame);
+
+        let extreme_config = SolanaCanonicalLz4Config::new(expected.len(), expected.len() / 12);
+        let mut extreme_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(extreme_config);
+        extreme_encoder
+            .encode_for_wire_blocks(
+                entries.iter().copied(),
+                &mut encoded,
+                SolanaCanonicalLz4WireBlocks::new(1, 1),
+            )
+            .unwrap();
+        let compressed =
+            lz4_block::compress(&expected, Some(CompressionMode::FAST(2)), true).unwrap();
+        expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
+        expected_frame.extend_from_slice(&compressed);
         assert_eq!(encoded, expected_frame);
 
         canonical.extend_from_slice(&[1, 2, 3]);
