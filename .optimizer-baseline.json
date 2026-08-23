@@ -1,7 +1,7 @@
 {
   "version": 79,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T01:12:59Z",
+  "updated_at": "2026-08-23T01:38:36Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -2212,6 +2212,18 @@
       {
         "optimization": "emit standard literal-only LZ4 blocks for one-block canonical frames and decode them through a lencode literal fast path",
         "reason": "the safe wire-compatible form retained exact 158,384,512-byte Turbine output but increased payload by 1.575% to 35,109,077 bytes; alternating production screens left normalized leader throughput slightly worse and validator throughput about 0.5% better, so the 112-line branch was removed below the 1% gate"
+      },
+      {
+        "optimization": "replace selective FAST(1) boundary retries with LZ4 HC(1)",
+        "reason": "a CPU-affined seven-trial production-fixture screen reduced Turbine wire bytes by only 0.246%, from 158,384,512 to 157,995,552, while regressing control-normalized leader time by 3.93%; the wire-compatible lencode-only mode change was restored before longer benchmarking"
+      },
+      {
+        "optimization": "encode normal canonical frames with lz4rip's safe Rust block compressor",
+        "reason": "the standard LZ4 output reduced compressed payload by 0.919% without removing a Turbine wire block, while a paired CPU-affined screen regressed control-normalized leader time by 1.90%; the two-crate dependency and encoder branch were removed below the 1% gate"
+      },
+      {
+        "optimization": "reuse liblz4 state and append canonical frames through spare capacity with lzzzz",
+        "reason": "safe fast-reset compression alone regressed control-normalized leader time by 0.49%; adding direct raw-block decompression improved normalized validator time by only 0.69% while leader time regressed 0.98%, and the full retained-scratch form that removed destination zero-fill and the final frame move improved normalized leader time only 0.24% while validator time regressed 0.95%; exact payload and Turbine wire bytes were unchanged, so the dependency and thread-local scratch path were removed below the 1% gate"
       }
     ],
     "full_resets": [
