@@ -1,12 +1,12 @@
 {
-  "version": 92,
+  "version": 93,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T07:04:28Z",
+  "updated_at": "2026-08-23T07:41:08Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 47,
+    "version": 48,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -43,6 +43,118 @@
         "memmove_all_paths": 1.93
       },
       "conclusion": "destination zeroing no longer appears in the retained Blockstore decoder profile; libLZ4 itself is the remaining qualifying decode hotspot, while the end-to-end profile justified screening canonical writer dispatch and encoder destination initialization"
+    },
+    "post_iteration_35_paced_confirmation": {
+      "purpose": "measure the retained spare-capacity decoder over the actual byte-paced legacy and 1.5-FEC canonical receiver outputs",
+      "protocol": "three reverse-order process pairs on logical CPU 28; Blockstore used 31 alternating warmed trials per format and end-to-end used seven",
+      "binary_sha256": {
+        "end_to_end": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "blockstore": "256f518e6ef0d74aa92c4df83c034c9c1f6fa175e36db2fcff9caf6267d2cf35"
+      },
+      "fixtures": {
+        "legacy_wincode": {
+          "components": 1974,
+          "sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72"
+        },
+        "canonical_lz4": {
+          "components": 1533,
+          "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837"
+        },
+        "component_reduction_pct": 22.340
+      },
+      "blockstore_actual_paced": {
+        "diagnostic_binary_sha256": "f240001302617652a412b633dde77f3df052a0415d0cffe3d2039e0f58ff0942",
+        "diagnostic_source_sha256": "ef06a6dc18242c8b431cc6514cdd6a4ef368aaf7853b26883836116d63261071",
+        "grouping": "partition each emitted fixture into exactly 100 balanced synthetic slots so both formats pay the same slot-level RocksDB scan count",
+        "legacy_wincode_validator": {
+          "value": 28361505,
+          "unit": "ns/100 balanced Blockstore slots",
+          "range": [28261494, 28448226]
+        },
+        "canonical_lz4_validator": {
+          "value": 26075235,
+          "unit": "ns/100 balanced Blockstore slots",
+          "range": [25976386, 26097626]
+        },
+        "canonical_lz4_latency_improvement_pct": 8.061,
+        "canonical_lz4_throughput_vs_wincode": 1.087680
+      },
+      "blockstore_original_harness_cross_fixture": {
+        "caveat": "the frozen 20-components-per-slot grouping creates 99 legacy and 77 canonical synthetic slots, so this comparison is retained only as a consistency check",
+        "legacy_wincode_validator_ns": 27391792,
+        "canonical_lz4_validator_ns": 25150165,
+        "canonical_lz4_latency_improvement_pct": 8.184
+      },
+      "blockstore_same_component_boundaries": {
+        "fixture": "canonical_lz4",
+        "wincode_validator_ns": 30643704,
+        "canonical_lz4_validator_ns": 25150165,
+        "canonical_lz4_latency_improvement_pct": 17.927,
+        "canonical_lz4_throughput_vs_wincode": 1.218430
+      },
+      "end_to_end_actual_paced": {
+        "legacy_wincode": {
+          "leader_ns": 464568612,
+          "leader_range_ns": [461554869, 465175011],
+          "validator_ns": 22312877,
+          "validator_range_ns": [22277757, 22561649],
+          "wire_bytes": 313346176
+        },
+        "canonical_lz4": {
+          "leader_ns": 219172673,
+          "leader_range_ns": [218133046, 220105463],
+          "validator_ns": 23229521,
+          "validator_range_ns": [23141411, 23283262],
+          "wire_bytes": 122911360
+        },
+        "leader_speedup_vs_wincode": 2.119647,
+        "validator_throughput_vs_wincode": 0.960540,
+        "validator_latency_regression_pct": 4.108,
+        "wire_reduction_vs_wincode_pct": 60.775
+      },
+      "end_to_end_same_component_boundaries": {
+        "fixture": "canonical_lz4",
+        "wincode_leader_ns": 354187368,
+        "wincode_validator_ns": 21557274,
+        "canonical_lz4_leader_ns": 219172673,
+        "canonical_lz4_validator_ns": 23229521,
+        "leader_speedup_vs_wincode": 1.616020,
+        "validator_throughput_vs_wincode": 0.928012,
+        "wire_reduction_vs_wincode_pct": 47.193
+      },
+      "coalesced_blockstore_profile": {
+        "data_sha256": "63ec19a521c34413407b813f9dd24fa2e82d14100d622525ac0c94526f80e62c",
+        "samples": 7820,
+        "lost_samples": 0,
+        "wincode_validator_ns": 30799054,
+        "canonical_lz4_validator_ns": 25561896,
+        "self_cycles_pct": {
+          "transaction_frame_parse": 9.35,
+          "lz4_decompress_safe": 8.31,
+          "rocksdb_iterator_next": 7.76,
+          "sha256_blocks": 6.84,
+          "memmove": 4.45,
+          "block_component_parse": 4.12
+        }
+      },
+      "coalesced_end_to_end_profile": {
+        "data_sha256": "a0e8bfec8c117e237a330e10411d91b3e7bcf13c42678315392333cf644c252d",
+        "samples": 14664,
+        "lost_samples": 0,
+        "self_cycles_pct": {
+          "sha256_blocks": 31.16,
+          "reed_solomon_mul_xor": 23.13,
+          "lz4_compress_fast_ext_state": 3.34,
+          "wincode_component_serialize": 2.55,
+          "memmove": 2.28,
+          "lz4_decompress_safe": 0.88,
+          "canonical_short_u16": 0.68,
+          "canonical_addresses": 0.60,
+          "canonical_instructions": 0.43
+        }
+      },
+      "security_boundary": "shred bytes and any proposed metadata remain hostile; official transaction views are constructed only by their checked public parser, and no sidecar offsets, private layouts, partial LZ4 decoder, or second unsafe boundary were admitted",
+      "model_limit": "entry arrival timing is synthetic because the source corpus has no BankingStage timestamps, and the balanced Blockstore diagnostic preserves 100 slot-level scans but not the original per-slot component boundaries"
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
@@ -2606,6 +2718,45 @@
         "payload_bytes_changed": false,
         "wire_bytes_changed": false,
         "unsafe_code_added": true
+      },
+      {
+        "optimization": "precompute each reference-Solana transaction's exact canonical length and reserve it behind one checked batch bound",
+        "reason": "three alternating CPU-affined seven-trial exact-binary pairs preserved exact payload and wire bytes but regressed control-normalized leader latency by 1.965%, 1.492%, and 1.896%; one absolute pair regressed 2.108%, so the extra sizing pass and writer abstraction were inverse-reverted",
+        "baseline_binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "candidate_binary_sha256": "eaecf05f293700aafd7e02323bdfba08f1c5aafd6d141dda1b915b9e433b0b40",
+        "median_control_normalized_leader_regression_pct": 1.896,
+        "median_absolute_validator_improvement_pct": 0.424,
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "retry LZ4 HIGHCOMPRESSION(1) on coalesced frames that remain just above a removable FEC boundary",
+        "reason": "the 1/128 window selected no different output, the 1/32 window reduced coalesced wire bytes only 0.190%, and retrying every already-near-boundary frame reduced wire bytes only 0.886% while a smoke run slowed the leader by roughly 2%; all variants remained below the 1% wire gate and were inverse-reverted before longer timing",
+        "baseline_binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "narrow_candidate_binary_sha256": "c052f08b4a1f4b1f3eea557b7f2f780c45b6f50d8db7bfc2d6b3a398de89cc5c",
+        "wide_candidate_binary_sha256": "0689dcb7087564393792348205e4a45ad899a8a602a7acd709532022cd892cf6",
+        "upper_bound_candidate_binary_sha256": "b5ec3502a97e8e7cca5413d55e6c255d7e21b380041b379a876ffdbfeffcac54",
+        "baseline_wire_bytes": 122911360,
+        "upper_bound_wire_bytes": 121822272,
+        "wire_compatibility": "all candidates emitted the existing standard LZ4 block frame and selected HC only when it removed a complete wire block",
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "widen selective FAST(1) recompression for coalesced multi-block frames",
+        "reason": "widening the boundary window from 1/18 to 1/12 reduced coalesced wire bytes only 0.127%; retrying every multi-block FAST(4) frame found no additional FEC-set removal, so the original 1/18 policy and exact source were restored",
+        "baseline_binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "wide_candidate_binary_sha256": "a503cf216ed532d33caf9473348086e4362162c918378ac2f83de8765a35e652",
+        "upper_bound_candidate_binary_sha256": "d37f0468d10cca74544730a845117c22235c802b0a8692e32b85f491a09ecb46",
+        "baseline_wire_bytes": 122911360,
+        "candidate_wire_bytes": 122755776,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "construct official transaction views from an indexed canonical-frame sidecar",
+        "reason": "the reference agave-transaction-view API exposes only checked constructors that parse and validate canonical bytes; there is no safe public constructor from supplied offsets, so the design was rejected before source changes rather than trusting hostile metadata or depending on private layout",
+        "source_changed": false,
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
