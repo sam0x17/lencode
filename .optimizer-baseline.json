@@ -1,12 +1,12 @@
 {
-  "version": 124,
+  "version": 125,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T21:39:57Z",
+  "updated_at": "2026-08-23T22:02:03Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 78,
+    "version": 79,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3258,6 +3258,103 @@
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       }
     },
+    "iteration_61_safe_canonical_writer_frontier": {
+      "status": "no production source change; three safe lencode-only writer candidates were inverse-reverted and the exact retained baseline was restored",
+      "scope": "reduce canonical reference-Solana serialization and arena initialization costs without changing the Agave replacement adapter, decoder, wire format, or hostile-input boundary",
+      "baseline": {
+        "binary_sha256": "8d9d08e0481fc29968f096ec7ce2b697712ea7e878e8cecba85e8294240a4534",
+        "fixture": "/tmp/agave-shred-paced-repartition-49_32.bin",
+        "fixture_sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+        "components": 1497,
+        "entries": 68392,
+        "transactions": 124218,
+        "payload_bytes": 33307398,
+        "wire_bytes": 118088256,
+        "protocol": "logical CPU 28 with alternating frozen baseline and candidate processes; short screens used seven warmed trials and the ambiguous VecWriter result was resolved with 31 trials"
+      },
+      "rejected_candidates": [
+        {
+          "optimization": "encode bounded canonical bytes through the existing VecWriter after making its growth fallible",
+          "candidate_binary_sha256": "9b33eb0d7befcc75061b03e73a75fcb5cb5ea6170f7706c5607c14575b8db8ad",
+          "short_pair_control_normalized_leader_improvement_pct": [1.376839, -0.891865],
+          "short_pair_control_normalized_validator_improvement_pct": [-2.826437, -0.769673],
+          "thirty_one_trial_baseline_ns": {
+            "wincode_leader": 350279678,
+            "canonical_lz4_leader": 224505562,
+            "wincode_validator": 21296152,
+            "canonical_lz4_validator": 23134629
+          },
+          "thirty_one_trial_candidate_ns": {
+            "wincode_leader": 348798355,
+            "canonical_lz4_leader": 222612996,
+            "wincode_validator": 21493753,
+            "canonical_lz4_validator": 23197699
+          },
+          "thirty_one_trial_absolute_leader_improvement_pct": 0.842993,
+          "thirty_one_trial_control_normalized_leader_improvement_pct": 0.421880,
+          "thirty_one_trial_control_normalized_validator_improvement_pct": 0.649226,
+          "decision": "the longer pair preserved exact output but missed the 1% gate; the ownership wrapper and fallible general-writer change were removed"
+        },
+        {
+          "optimization": "overwrite initialized encoder-arena bytes through a checked safe slice writer",
+          "candidate_binary_sha256": "44148452b869f4b0cbc5e59e854b656f88b603a212c2f98fb7e58cf3bee36509",
+          "candidate_ns": {
+            "wincode_leader": 347876359,
+            "canonical_lz4_leader": 240350185,
+            "wincode_validator": 21591495,
+            "canonical_lz4_validator": 23060310
+          },
+          "absolute_leader_regression_pct": 7.057564,
+          "control_normalized_leader_regression_pct": 7.797176,
+          "decision": "safe slice bounds and per-write position bookkeeping exceeded the 2% ceiling, so initialized-byte reuse and zero-fill avoidance were removed after one decisive screen"
+        },
+        {
+          "optimization": "mark canonical writer rejection branches with Rust 1.98 cold_path hints",
+          "candidate_binary_sha256": "ae118ffcc66caf19c7fd4716c2fe49c26f0d5cac0e8109b819d08d5cc1eddcc8",
+          "paired_baseline_ns": {
+            "wincode_leader": 349392445,
+            "canonical_lz4_leader": 222402650,
+            "wincode_validator": 21276355,
+            "canonical_lz4_validator": 23136621
+          },
+          "candidate_ns": {
+            "wincode_leader": 346969076,
+            "canonical_lz4_leader": 222079728,
+            "wincode_validator": 22493828,
+            "canonical_lz4_validator": 23134741
+          },
+          "absolute_leader_improvement_pct": 0.145197,
+          "control_normalized_leader_improvement_pct": -0.552228,
+          "contention_note": "the candidate wincode validator was a 5.7% high outlier and was excluded from the encoder decision",
+          "decision": "the paired leader result regressed after normalization, so the hints were removed"
+        }
+      ],
+      "full_reset": {
+        "reason": "three consecutive canonical writer candidates were reverted without a qualifying gain",
+        "fresh_baseline_ns": {
+          "wincode_leader": 349392445,
+          "canonical_lz4_leader": 222402650,
+          "wincode_validator": 21276355,
+          "canonical_lz4_validator": 23136621
+        },
+        "payload_bytes": 33307398,
+        "wire_bytes": 118088256,
+        "result": "the exact retained source and frozen all-final Rust 1.98 baseline were re-established"
+      },
+      "security": "all candidates kept checked canonical length limits before mutation, fallible output growth, clear-on-error behavior, official reference-Solana values, the unchanged exact-size decoder, and the existing audited libLZ4 boundary; no unsafe block, unchecked offset, dependency, parser shortcut, sidecar, private layout, partial output, or wire change was added",
+      "validation": "the focused canonical limit and exact-byte test passed for the two structural candidates; after restoration, 220 lencode unit tests, 8 integration tests, and 5 doctests passed with 1 ignored; strict all-feature all-target Clippy, no-default all-target check, std-only library check, and formatting passed",
+      "source_sha256": {
+        "lencode_io": "361d2e38ff7ad92e87e4f2c5b25bb27124b5e9f3a407ed4265c9efc3aff6ce2a",
+        "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_broadcast_utils": "918b777321308783debca913462229037aa5998b1f3e44f5e88f2ac335a77968",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
     "production_batch_benchmark": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
       "fixture": {
@@ -6021,6 +6118,24 @@
         "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block",
         "restored_lencode_solana_wire_sha256": "dc5579253ff3d44b81523050b8ab2a0624f5912dc0d114214865840559ce11d1",
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "encode bounded canonical bytes through the existing VecWriter after making its growth fallible",
+        "reason": "Two short pairs disagreed, and the resolving 31-trial pair improved control-normalized leader and validator latency by only 0.422% and 0.649%. Exact bytes were preserved, but the source was removed below the 1% gate.",
+        "candidate_binary_sha256": "9b33eb0d7befcc75061b03e73a75fcb5cb5ea6170f7706c5607c14575b8db8ad",
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "overwrite initialized encoder-arena bytes through a checked safe slice writer",
+        "reason": "The candidate regressed absolute and control-normalized leader latency by 7.058% and 7.797%. The safe in-place writer and zero-fill avoidance were removed above the 2% ceiling.",
+        "candidate_binary_sha256": "44148452b869f4b0cbc5e59e854b656f88b603a212c2f98fb7e58cf3bee36509",
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "mark canonical writer rejection branches with Rust 1.98 cold_path hints",
+        "reason": "The paired screen improved absolute leader latency by 0.145% but regressed 0.552% after normalization to its wincode control. The hint-only patch was removed.",
+        "candidate_binary_sha256": "ae118ffcc66caf19c7fd4716c2fe49c26f0d5cac0e8109b819d08d5cc1eddcc8",
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
@@ -6153,6 +6268,25 @@
         },
         "security_result": "the exact encoder source was restored; decoder bounds, the audited libLZ4 call, and wire-format checks did not change",
         "result": "the frozen Rust 1.98 baseline was re-established before leaving the native memory-table family"
+      },
+      {
+        "after": "fallible VecWriter canonical encoding, initialized-arena safe writes, and Rust 1.98 cold-path hint reverts",
+        "restored_lencode_io_sha256": "361d2e38ff7ad92e87e4f2c5b25bb27124b5e9f3a407ed4265c9efc3aff6ce2a",
+        "restored_lencode_solana_wire_sha256": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "restored_lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "restored_lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "restored_binary_sha256": "8d9d08e0481fc29968f096ec7ce2b697712ea7e878e8cecba85e8294240a4534",
+        "fresh_confirmation": {
+          "trials": 7,
+          "wincode_leader_ns": 349392445,
+          "wincode_validator_ns": 21276355,
+          "canonical_lz4_leader_ns": 222402650,
+          "canonical_lz4_validator_ns": 23136621,
+          "canonical_lz4_payload_bytes": 33307398,
+          "canonical_lz4_wire_bytes": 118088256
+        },
+        "security_result": "all candidate code was removed; bounded growth, clear-on-error behavior, hostile-frame checks, and the audited libLZ4 decoder boundary remain exact",
+        "result": "the protected lencode and Agave sources and the frozen Rust 1.98 all-final baseline were re-established"
       }
     ],
     "contention_events": [
@@ -6203,6 +6337,12 @@
         "reason": "an initial Blockstore comparison accidentally paired the retained jemalloc baseline with a system-allocator candidate and reported a false 3.5-4.2% normalized regression",
         "reruns": 4,
         "resolution": "identified the allocator mismatch from binary symbols, reproduced the retained baseline bit for bit with the jemalloc target, rebuilt the candidate with the same target, and used two reverse-order 31-trial pairs whose normalized changes were -0.346% and 0.882%"
+      },
+      {
+        "at_iteration": 61,
+        "reason": "the fallible VecWriter short pairs moved normalized leader latency from a 1.377% gain to a 0.892% regression, and the cold-path candidate's unchanged wincode validator ran 5.7% above its paired baseline",
+        "reruns": 2,
+        "resolution": "used a 31-trial VecWriter pair, which measured a sub-threshold 0.422% normalized leader gain; ignored the validator outlier for the encoder-only cold-path decision, whose paired normalized leader result regressed 0.552%"
       }
     ]
   },
