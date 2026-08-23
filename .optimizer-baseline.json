@@ -1,12 +1,12 @@
 {
-  "version": 96,
+  "version": 97,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T09:58:48Z",
+  "updated_at": "2026-08-23T10:36:26Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 51,
+    "version": 52,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2961,6 +2961,51 @@
         "unsafe_code_added": false,
         "restored_lencode_solana_wire_sha256": "a9d3f32a4b28b5368e25c6090b61c33de09d4b7b944231339ed3f2db42d85479",
         "restored_agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      },
+      {
+        "optimization": "move the uncommon multi-byte canonical short-u16 path into a cold non-inlined helper",
+        "reason": "The split reduced the common writer prologue from six saved registers to four, but two reverse-order pairs regressed normalized leader latency by 0.164% and 0.462%. Normalized validator latency regressed by 1.118% and 2.349%, so the helper was removed under the 2% ceiling.",
+        "candidate_binary_sha256": "9da30ec763ea8d2e2570a202688f909c7e6aeb07f52e268085941db262c9dea7",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "encode frames already within one wire block with LZ4 FAST(8), falling back to FAST(4) if the boundary was crossed",
+        "reason": "The standard LZ4 output kept wire bytes exact, but payload grew by 3.903% and the refreshed control-normalized screens regressed leader latency by 9.126% and Blockstore latency by 3.867%. The extra compression branch was removed.",
+        "candidate_binary_sha256": "937edf21c7a43f733566e2a56f9879c1e60fe2b9afbc01b311398a4012ef56a5",
+        "candidate_blockstore_binary_sha256": "6cbbc214cdc5584e7b6bcf47654074e97b100737af156d0cbdf2e5a20322a47d",
+        "candidate_payload_bytes": 34736757,
+        "candidate_wire_bytes": 121666688,
+        "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 frame and retained the exact Turbine wire count",
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "provide the audited safe LZ4 decoder with 64 bytes of invisible destination padding",
+        "reason": "Malformed-frame tests passed, visible output still required the exact canonical length, and no unsafe block was added. Two reverse-order Blockstore pairs nevertheless regressed normalized latency by 4.316% and 2.555%, so the padding was removed.",
+        "candidate_binary_sha256": "4846c5549844925c205ec3fe25d2695546a80e1a5117c32273d6b8188a087088",
+        "candidate_blockstore_binary_sha256": "1b44821411e99499064e2c98462595ae302f025824f4d4027d97ff580e624a6e",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "reserve the final Blockstore result vector from completed range count only for the lencode wire format",
+        "reason": "The one-line direct replacement-site change did not reproduce an earlier near-threshold screen. Two reverse-order 31-trial pairs regressed normalized Blockstore latency by 3.398% and 7.237%, so the capacity hint was removed.",
+        "candidate_blockstore_binary_sha256": "fcf904d3fea0814605ad2cd7a1fdc6e253c3b30c47bbe4f5ed4089a41df22908",
+        "source_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "append official Solana Pubkey and Signature slices through bytemuck cast_slice",
+        "reason": "The official bytemuck feature removed per-item append calls and preserved exact bytes, but two reverse-order pairs regressed normalized leader latency by 0.828% and 0.221%. The dependency, features, and batch writes were removed below the 1% gate.",
+        "candidate_binary_sha256": "35f2ffa789aed34d155db4169f38a477282be207f0407bc332b3d8c0b8d44c37",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false,
+        "restored_lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "restored_lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "restored_agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       }
     ],
     "full_resets": [
@@ -3041,6 +3086,39 @@
           "canonical_lz4_wire_bytes": 158384512
         },
         "result": "the exact lencode and direct replacement-site sources were restored; the next iteration switches away from allocation layout changes"
+      },
+      {
+        "after": "cold short-length splitting, single-block FAST(8), padded safe decode, lencode-only Blockstore capacity, and official bytemuck batch-write reverts",
+        "restored_lencode_solana_wire_sha256": "a9d3f32a4b28b5368e25c6090b61c33de09d4b7b944231339ed3f2db42d85479",
+        "restored_lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "restored_lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "restored_agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "restored_codec_sha256": "1a96c826d5b9bfcce246683951d0af637563032b026ad9eaee8db68c33a874b5",
+        "restored_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "retained_binary_sha256": "e445f6eb1c43783b623e86bc3d27fbb9d4ec95ff6e4dc8073a5e14b0be00759f",
+        "retained_blockstore_binary_sha256": "03f3faf8accec9efa0c60905d841321055ecc731629ed29c472dfc58ed5a48b2",
+        "fresh_profiles": {
+          "end_to_end": {
+            "command": "perf record -F 999 on logical CPU 28 with 31 alternating warmed trials",
+            "samples": 21099,
+            "lost_samples": 0,
+            "wincode_leader_ns": 358432171,
+            "wincode_validator_ns": 21702497,
+            "canonical_lz4_leader_ns": 225200409,
+            "canonical_lz4_validator_ns": 23252153,
+            "canonical_lz4_payload_bytes": 33431782,
+            "canonical_lz4_wire_bytes": 121666688
+          },
+          "blockstore": {
+            "command": "perf record -F 999 on logical CPU 28 with 101 alternating warmed trials",
+            "samples": 7887,
+            "lost_samples": 0,
+            "wincode_validator_ns": 31189991,
+            "canonical_lz4_validator_ns": 25783242
+          }
+        },
+        "security_result": "all candidate code was removed; hostile-frame bounds, exact decompressed-length checks, the existing audited libLZ4 boundary, and the standard wire format remain unchanged",
+        "result": "exact lencode sources and protected Agave files were restored before switching to a different optimization family"
       }
     ],
     "contention_events": [
