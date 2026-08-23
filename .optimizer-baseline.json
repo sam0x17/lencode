@@ -1,12 +1,12 @@
 {
-  "version": 121,
+  "version": 122,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T20:26:20Z",
+  "updated_at": "2026-08-23T20:48:34Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 75,
+    "version": 76,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2837,6 +2837,216 @@
         "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
         "agave_blockstore_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
+    "iteration_58_exact_slot_end_wire_capacity": {
+      "status": "retained in the direct canonical-lencode replacement adapter; lencode library source is unchanged",
+      "scope": "the canonical-lencode adapter and its Shredder call now select compression boundaries from trusted leader slot-end state; legacy wincode and general Agave paths are unchanged",
+      "issue": "the prior adapter subtracted 32 retransmitter signatures from every final wire block even though chained non-final components use the full typical FEC capacity; only the final component in each slot uses the reduced signed capacity",
+      "change": "pass is_last_in_slot into the canonical-lencode encoder adapter, model non-final components with uniform regular capacity, and retain the reduced signed final capacity for the 100 slot-ending components",
+      "profile": {
+        "command": "perf record -F 999 --call-graph dwarf,16384 on logical CPU 28 with 31 alternating warmed trials",
+        "data_sha256": "e9ba0c7068bcdafd489d5d3ec90c1add45048421607b5147e31c4e343c920555",
+        "samples": 20907,
+        "lost_samples": 0,
+        "flat_self_cycles_pct": {
+          "lz4_compress_fast_ext_state": 3.98,
+          "lz4_decompress_safe": 0.94,
+          "append_canonical_short_u16": 0.75,
+          "append_canonical_addresses": 0.67,
+          "append_canonical_instructions": 0.51
+        },
+        "scope_result": "hashing, erasure coding, and signing dominate the remaining total cycles but are excluded as general Agave work; the capacity mismatch was inside the canonical-lencode compression selector"
+      },
+      "chained_diagnostic": {
+        "fixture": {
+          "path": "/tmp/agave-shred-paced-repartition-49_32.bin",
+          "sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+          "source_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+          "slots": 100,
+          "components": 1497,
+          "entries": 68392,
+          "transactions": 124218
+        },
+        "slot_boundary_recovery": "recover each exact slot end from the nested source corpus tick target, require that no component crosses a target, and chain Merkle roots plus shred indexes across every component in the slot",
+        "source_sha256": "64b1d385c216515cde8706f41110cdbc6be1c5c8c4920fe28a8414c2eb755738",
+        "source_and_cargo_target_removed": true,
+        "binaries": {
+          "baseline_sha256": "19b7f9f491d570fa50e384155990dc198323733c267ab5748eaef69e813858d9",
+          "candidate_sha256": "34168544e0627842e4de0d4b7f5fd0b07841bd15a90c2dab99e59a96a0b67a86"
+        },
+        "protocol": "three reverse-order exact-binary process pairs on logical CPU 28 with 31 alternating warmed trials per format",
+        "pairs": [
+          {
+            "process_order": ["baseline", "candidate"],
+            "baseline": {
+              "wincode_leader_ns": 353540952,
+              "canonical_lz4_leader_ns": 230409149,
+              "wincode_validator_ns": 21001945,
+              "canonical_lz4_validator_ns": 22951553
+            },
+            "candidate": {
+              "wincode_leader_ns": 351410954,
+              "canonical_lz4_leader_ns": 215083303,
+              "wincode_validator_ns": 21158006,
+              "canonical_lz4_validator_ns": 22985932
+            }
+          },
+          {
+            "process_order": ["candidate", "baseline"],
+            "baseline": {
+              "wincode_leader_ns": 352976908,
+              "canonical_lz4_leader_ns": 229558625,
+              "wincode_validator_ns": 21484977,
+              "canonical_lz4_validator_ns": 23414414
+            },
+            "candidate": {
+              "wincode_leader_ns": 350769571,
+              "canonical_lz4_leader_ns": 215629335,
+              "wincode_validator_ns": 21111866,
+              "canonical_lz4_validator_ns": 22926202
+            }
+          },
+          {
+            "process_order": ["baseline", "candidate"],
+            "baseline": {
+              "wincode_leader_ns": 355086075,
+              "canonical_lz4_leader_ns": 229082583,
+              "wincode_validator_ns": 21083486,
+              "canonical_lz4_validator_ns": 22975423
+            },
+            "candidate": {
+              "wincode_leader_ns": 352044744,
+              "canonical_lz4_leader_ns": 215504093,
+              "wincode_validator_ns": 21205687,
+              "canonical_lz4_validator_ns": 23073033
+            }
+          }
+        ],
+        "canonical_lz4_leader_absolute_improvement_pct_by_pair": [6.651579, 6.067857, 5.927334],
+        "canonical_lz4_leader_control_normalized_improvement_pct_by_pair": [6.085768, 5.476757, 5.114636],
+        "median_canonical_lz4_leader_control_normalized_improvement_pct": 5.476757,
+        "canonical_lz4_validator_control_normalized_improvement_pct_by_pair": [0.588913, 0.354637, 0.153868],
+        "median_canonical_lz4_validator_control_normalized_improvement_pct": 0.354637,
+        "deterministic_output": {
+          "baseline_data_shreds": 48448,
+          "candidate_data_shreds": 47968,
+          "baseline_coding_shreds": 48448,
+          "candidate_coding_shreds": 47968,
+          "baseline_wire_bytes": 117777088,
+          "candidate_wire_bytes": 116610208,
+          "data_fec_sets_removed": 15,
+          "coding_fec_sets_removed": 15,
+          "wire_reduction_pct": 0.990753
+        }
+      },
+      "blockstore": {
+        "baseline_binary_sha256": "1263acaff8a54d31c993a939e0dbbd6d12439a7f023505d1cac9602b19574882",
+        "candidate_binary_sha256": "395b26903c70e9f4c0e969c1fb5da023b61e4b5ad7e2a36d2b8e713459a98141",
+        "protocol": "three reverse-order process pairs on logical CPU 28 with 31 alternating warmed trials per format and the 1497-component fixture grouped into 75 synthetic slots",
+        "pairs": [
+          {
+            "baseline": { "wincode_ns": 30279719, "canonical_lz4_ns": 24993329 },
+            "candidate": { "wincode_ns": 30035218, "canonical_lz4_ns": 25068090 },
+            "control_normalized_regression_pct": 1.115607
+          },
+          {
+            "baseline": { "wincode_ns": 29977707, "canonical_lz4_ns": 25032450 },
+            "candidate": { "wincode_ns": 30569740, "canonical_lz4_ns": 25726592 },
+            "control_normalized_regression_pct": 0.782602
+          },
+          {
+            "baseline": { "wincode_ns": 30033097, "canonical_lz4_ns": 25012590 },
+            "candidate": { "wincode_ns": 30060097, "canonical_lz4_ns": 25023559 },
+            "control_normalized_regression_pct": -0.046006
+          }
+        ],
+        "median_control_normalized_regression_pct": 0.782602,
+        "decision": "all three receive-path pairs remain inside the 2% ceiling"
+      },
+      "all_final_compatibility_control": {
+        "baseline_binary_sha256": "b29af02da8889f2ea70a929297770a1d914693bf8b285e6e935b38c097c5ec69",
+        "candidate_binary_sha256": "8d9d08e0481fc29968f096ec7ce2b697712ea7e878e8cecba85e8294240a4534",
+        "fixture_sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+        "baseline_and_candidate_output": {
+          "payload_bytes": 33307398,
+          "data_shreds": 48576,
+          "coding_shreds": 48576,
+          "wire_bytes": 118088256
+        },
+        "result": "when every component is explicitly final, the candidate retains exact prior compressed payload and shred totals"
+      },
+      "current_production_boundary_tradeoff": {
+        "binary_sha256": "34168544e0627842e4de0d4b7f5fd0b07841bd15a90c2dab99e59a96a0b67a86",
+        "protocol": "two reverse-order 31-trial fixture-process pairs using exact recovered 100-slot chains; compare legacy wincode on its paced receiver fixture with canonical lencode on its paced 49/32 fixture",
+        "legacy_fixture": {
+          "path": "/tmp/agave-shred-broadcast-receiver-legacy-400ms.bin",
+          "sha256": "1ebe6c8c9eee07cd68a3055a6df7da21310e72a01cd5c39a047685fb628dad72",
+          "components": 1974,
+          "wire_bytes": 179154976
+        },
+        "canonical_fixture": {
+          "path": "/tmp/agave-shred-paced-repartition-49_32.bin",
+          "sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+          "components": 1497,
+          "wire_bytes": 116610208
+        },
+        "pairs": [
+          {
+            "process_order": ["legacy_fixture", "canonical_fixture"],
+            "legacy_wincode_leader_ns": 282624071,
+            "legacy_wincode_validator_ns": 20399033,
+            "canonical_lz4_leader_ns": 216779916,
+            "canonical_lz4_validator_ns": 22942813,
+            "leader_speedup": 1.303737,
+            "validator_latency_regression_pct": 12.470101
+          },
+          {
+            "process_order": ["canonical_fixture", "legacy_fixture"],
+            "legacy_wincode_leader_ns": 282085039,
+            "legacy_wincode_validator_ns": 20361253,
+            "canonical_lz4_leader_ns": 215390660,
+            "canonical_lz4_validator_ns": 22999792,
+            "leader_speedup": 1.309644,
+            "validator_latency_regression_pct": 12.958628
+          }
+        ],
+        "wire_reduction_vs_legacy_pct": 34.910986,
+        "measurement_update": "this exact chained comparison replaces the older overall CPU and wire estimate whose harness treated every component as a fresh signed final slot; same-boundary controls remain valid for isolating codec changes"
+      },
+      "rejected_screens": [
+        {
+          "candidate": "raise the 49/32 target to 25/16, 51/32, or 13/8",
+          "candidate_wire_bytes": [117932672, 117777088, 117543712],
+          "additional_wire_reduction_pct_range": [0.132, 0.461],
+          "decision": "all neighboring targets missed the 1% wire gate and slowed the one-trial leader screen"
+        },
+        {
+          "candidate": "retry every eligible normal frame with FAST(1)",
+          "binary_sha256": "04d89411a78235983c03b58018b7d8659ee9a99e87c88f7afe80b30427b7149e",
+          "payload_bytes": 33307398,
+          "wire_bytes": 118088256,
+          "decision": "the all-frame upper bound produced exact retained output, proving that the existing 1/13 window already captures every remaining FAST(1) wire-block win on the fixture; the constant was inverse-reverted"
+        }
+      ],
+      "zero_copy": "the retained borrowed encoder arena and caller-owned decode arena are unchanged; no buffer, allocation, move, or copy was added",
+      "wire_compatibility": "selected compressed bytes may differ for non-final components, but every result remains a standard size-prefixed LZ4 block inside the existing LCSH version-1 flag-1 frame; old and new frames use the unchanged decoder",
+      "security": "is_last_in_slot is trusted leader state used only for encoder compression effort and wire-block selection; hostile shred bytes retain the same checked header, compression-ratio bound, exact decompressed-length check, audited libLZ4 boundary, and official Solana parser; no unsafe block, parser, decoder, unchecked offset, dependency, sidecar, private layout, or partial-output behavior changed",
+      "validation": "the focused slot-capacity test passed; 350 solana-ledger library tests passed with 3 ignored; all 48 solana-turbine library tests passed; repository formatting passed; strict Clippy passed for the ledger and turbine libraries plus the end-to-end and jemalloc Blockstore replacement benchmarks; the temporary chained diagnostic and Cargo target were removed",
+      "source_sha256": {
+        "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_ledger_manifest": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_blockstore_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_broadcast_utils": "918b777321308783debca913462229037aa5998b1f3e44f5e88f2ac335a77968",
+        "agave_standard_broadcast_run": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       }
