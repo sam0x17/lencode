@@ -1,7 +1,7 @@
 {
   "version": 79,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T00:07:42Z",
+  "updated_at": "2026-08-23T01:12:59Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
@@ -2196,6 +2196,22 @@
       {
         "optimization": "reuse the prior canonical LZ4 destination bound as front headroom",
         "reason": "three production-fixture pairs were flat after normalization, while two stable full-slot pairs regressed normalized leader time by about 1.0-1.2%; serializing behind the reusable destination changed cache behavior enough to cancel the removed final frame move, so the arena direction was restored"
+      },
+      {
+        "optimization": "raise LZ4 acceleration only for canonical frames that fit one final wire block",
+        "reason": "FAST(8) and FAST(16) kept Turbine wire bytes exact but increased compressed payload from 34,564,782 bytes to 34,617,402 and 34,653,419 bytes; controlled screens moved normalized leader throughput backward by about 1%, so FAST(4) was restored"
+      },
+      {
+        "optimization": "overwrite selective FAST(4) retries in place and retain FAST(1) even when no wire block is removed",
+        "reason": "the production payload fell to 34,551,305 bytes with exact Turbine wire bytes, but three alternating 11-trial pairs improved leader and validator time by only about 0.04% and 0.2%; the simpler arena did not clear the 1% gate"
+      },
+      {
+        "optimization": "use FAST(2), or a FAST(2)/FAST(1) distance hybrid, for selective canonical recompression",
+        "reason": "FAST(2) lost 9 of the 26 retained FEC-set removals and returned 0.442% wire bytes; a 1/64 hybrid lost 3 sets, while a 1/128 hybrid preserved wire output but moved controlled CPU results only a few tenths of a percent, so the exact FAST(1) policy was restored"
+      },
+      {
+        "optimization": "emit standard literal-only LZ4 blocks for one-block canonical frames and decode them through a lencode literal fast path",
+        "reason": "the safe wire-compatible form retained exact 158,384,512-byte Turbine output but increased payload by 1.575% to 35,109,077 bytes; alternating production screens left normalized leader throughput slightly worse and validator throughput about 0.5% better, so the 112-line branch was removed below the 1% gate"
       }
     ],
     "full_resets": [
