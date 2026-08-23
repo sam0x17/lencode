@@ -1,12 +1,12 @@
 {
-  "version": 113,
+  "version": 114,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T17:37:40Z",
+  "updated_at": "2026-08-23T17:52:09Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 67,
+    "version": 68,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1819,6 +1819,96 @@
       "decision": "the deterministic payload and Turbine wire regressions exceeded the 2% ceiling, so the candidate was rejected without an exact timing pair or dependency fork",
       "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block and used the unchanged decoder",
       "security": "no parser, decoder, unchecked offset, sidecar, wire flag, or unsafe block changed; hostile input handling remains inside the existing checked frame parser and audited exact-size libLZ4 decoder boundary",
+      "restored_source_sha256": {
+        "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_shredder": "08652377c89783b9e927edcfb953731fefecaee1486877066245e6e3779284e7",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_blockstore_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
+      }
+    },
+    "post_iteration_50_native_lz4_memory15_acceleration_screen": {
+      "status": "all candidates reverted",
+      "scope": "native libLZ4 compression-table tuning plus the lencode-owned oversized-frame acceleration policy; Agave sources and the hostile-input decoder were unchanged",
+      "benchmark_protocol": {
+        "rust_version": "1.98.0",
+        "cpu": 28,
+        "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "baseline_binary_sha256": "8612b28412ddbed6ef7a048b72958f6738917c33a67fec49bc92996e4ac3a8ac",
+        "baseline_payload_bytes": 30292964,
+        "baseline_data_shreds": 33152,
+        "baseline_coding_shreds": 33152,
+        "baseline_wire_bytes": 80592512,
+        "normalization": "each canonical latency was divided by the wincode control from the same binary before comparison"
+      },
+      "screens": [
+        {
+          "configuration": "LZ4_MEMORY_USAGE=15 with retained FAST(1) oversized frames",
+          "candidate_binary_sha256": "5daf95da7dda57ffa6f0478737dd000d6f04e51e7aa78d6aef46cd82b761b241",
+          "candidate_payload_bytes": 29389765,
+          "payload_improvement_pct": 2.982,
+          "candidate_data_shreds": 32416,
+          "candidate_coding_shreds": 32416,
+          "candidate_wire_bytes": 78803296,
+          "wire_improvement_pct": 2.220,
+          "control_normalized_leader_improvement_pct_by_pair": [-6.802, -6.849],
+          "control_normalized_validator_improvement_pct_by_pair": [-0.102, -0.340],
+          "decision": "rejected because both leader pairs exceeded the 2% latency ceiling"
+        },
+        {
+          "configuration": "LZ4_MEMORY_USAGE=15 with FAST(2) oversized frames and the existing retry predicate",
+          "candidate_binary_sha256": "8010600826c25e10bb36dd80d19e3b164c84020e6cac4d2fb36930729adae5a9",
+          "candidate_payload_bytes": 29162661,
+          "candidate_wire_bytes": 76469536,
+          "control_normalized_leader_improvement_pct": -89.934,
+          "diagnosis": "the predicate that accepts every acceleration except FAST(1) sent eligible FAST(2) frames through the FAST(1) and HC retry chain, causing two or three compression passes",
+          "decision": "rejected as an unintended policy interaction before longer timing"
+        },
+        {
+          "configuration": "LZ4_MEMORY_USAGE=15 with FAST(2) oversized frames and retries limited to FAST(4)",
+          "candidate_binary_sha256": "337fde368c37c4e867dfe9faf17d3db513a61d6964ea82d17f39b58d3f0e63a4",
+          "candidate_payload_bytes": 29769078,
+          "payload_improvement_pct": 1.729,
+          "candidate_data_shreds": 32704,
+          "candidate_coding_shreds": 32704,
+          "candidate_wire_bytes": 79503424,
+          "wire_improvement_pct": 1.351,
+          "control_normalized_leader_improvement_pct": -4.260,
+          "control_normalized_validator_improvement_pct": 0.760,
+          "decision": "rejected because the leader regression exceeded the 2% ceiling"
+        },
+        {
+          "configuration": "LZ4_MEMORY_USAGE=15 with FAST(3) oversized frames and retries limited to FAST(4)",
+          "candidate_binary_sha256": "d6f611b16c76e27d111615fd6510364b1e67952cde58bbf2dcc8ef0a98bdb184",
+          "candidate_payload_bytes": 30291769,
+          "payload_improvement_pct": 0.004,
+          "candidate_data_shreds": 33344,
+          "candidate_coding_shreds": 33344,
+          "candidate_wire_bytes": 81059264,
+          "wire_improvement_pct": -0.579,
+          "control_normalized_leader_improvement_pct": -2.928,
+          "control_normalized_validator_improvement_pct": -1.519,
+          "decision": "rejected because leader latency exceeded the ceiling and wire bytes increased"
+        }
+      ],
+      "integration_result": "lz4-sys provides no crate-scoped memory-table option; a retained table change would require a scoped dependency fork, and no measured configuration passed the performance gates",
+      "wire_compatibility": "every candidate emitted the existing size-prefixed standard LZ4 block and reconstructed the full corpus",
+      "security": "only trusted reference-type encoding and native compressor configuration were screened. No parser, decompressor, unchecked offset, sidecar, wire flag, or unsafe block changed.",
+      "fresh_baseline_confirmation": {
+        "trials": 11,
+        "wincode_leader_ns": 277079679,
+        "wincode_validator_ns": 22121859,
+        "canonical_lz4_leader_ns": 182090660,
+        "canonical_lz4_validator_ns": 24131978,
+        "canonical_lz4_payload_bytes": 30292964,
+        "canonical_lz4_wire_bytes": 80592512
+      },
       "restored_source_sha256": {
         "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
         "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
@@ -4609,6 +4699,19 @@
         "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block",
         "source_changed": false,
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "compile native libLZ4 with LZ4_MEMORY_USAGE=15 and interpolate oversized-frame acceleration",
+        "reason": "FAST(1) saved 2.220% wire but regressed normalized leader latency by 6.802% and 6.849%. FAST(2) without retries saved 1.351% wire but regressed leader latency by 4.260%. FAST(3) increased wire by 0.579% and regressed leader latency by 2.928%, so the table and both policy lines were restored.",
+        "candidate_binary_sha256_by_policy": {
+          "fast1": "5daf95da7dda57ffa6f0478737dd000d6f04e51e7aa78d6aef46cd82b761b241",
+          "fast2_with_retries": "8010600826c25e10bb36dd80d19e3b164c84020e6cac4d2fb36930729adae5a9",
+          "fast2_without_retries": "337fde368c37c4e867dfe9faf17d3db513a61d6964ea82d17f39b58d3f0e63a4",
+          "fast3_without_retries": "d6f611b16c76e27d111615fd6510364b1e67952cde58bbf2dcc8ef0a98bdb184"
+        },
+        "wire_compatibility": "all candidates emitted the existing size-prefixed standard LZ4 block",
+        "source_changed": false,
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
@@ -4722,6 +4825,25 @@
         },
         "security_result": "all candidate code was removed; hostile-frame bounds, exact decompressed-length checks, the existing audited libLZ4 boundary, and the standard wire format remain unchanged",
         "result": "exact lencode sources and protected Agave files were restored before switching to a different optimization family"
+      },
+      {
+        "after": "32 KiB libLZ4 FAST(1), FAST(2), and FAST(3) oversized-frame screens",
+        "restored_lencode_solana_wire_sha256": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
+        "restored_lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "restored_lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "restored_agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "restored_binary_sha256": "8612b28412ddbed6ef7a048b72958f6738917c33a67fec49bc92996e4ac3a8ac",
+        "fresh_confirmation": {
+          "trials": 11,
+          "wincode_leader_ns": 277079679,
+          "wincode_validator_ns": 22121859,
+          "canonical_lz4_leader_ns": 182090660,
+          "canonical_lz4_validator_ns": 24131978,
+          "canonical_lz4_payload_bytes": 30292964,
+          "canonical_lz4_wire_bytes": 80592512
+        },
+        "security_result": "the exact encoder source was restored; decoder bounds, the audited libLZ4 call, and wire-format checks did not change",
+        "result": "the frozen Rust 1.98 baseline was re-established before leaving the native memory-table family"
       }
     ],
     "contention_events": [
