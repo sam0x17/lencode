@@ -242,10 +242,10 @@ pub fn canonical_solana_entry_batch_serialized_size<'a>(
 pub struct SolanaCanonicalLz4Config {
     /// Maximum uncompressed canonical entry-batch size.
     pub max_canonical_bytes: usize,
-    /// Largest canonical input encoded with LZ4 FAST(4).
+    /// Largest canonical input eligible for FAST(4) boundary retries.
     ///
-    /// Larger inputs use FAST(2), which balances leader CPU against frame
-    /// size. This threshold does not affect decoder compatibility.
+    /// Larger inputs still use FAST(4) but do not retry with stronger modes.
+    /// This threshold does not affect decoder compatibility.
     pub fast_acceleration_max_input: usize,
 }
 
@@ -379,12 +379,6 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
             .checked_add(SOLANA_CANONICAL_LZ4_HEADER_BYTES)
             .and_then(|len| len.checked_add(compressed_capacity))
             .ok_or(Error::IncorrectLength)?;
-        let acceleration = if canonical_len <= self.config.fast_acceleration_max_input {
-            4
-        } else {
-            2
-        };
-
         output
             .try_reserve(arena_len - canonical_len)
             .map_err(|_| Error::DecodeLimitExceeded)?;
@@ -398,13 +392,13 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
             SOLANA_CANONICAL_LZ4_HEADER_BYTES
                 + lz4_block::compress_to_buffer(
                     canonical,
-                    Some(CompressionMode::FAST(acceleration)),
+                    Some(CompressionMode::FAST(4)),
                     true,
                     &mut frame[SOLANA_CANONICAL_LZ4_HEADER_BYTES..],
                 )
                 .map_err(|_| Error::InvalidData)?
         };
-        if acceleration == 4
+        if canonical_len <= self.config.fast_acceleration_max_input
             && wire_blocks.is_some_and(|blocks| should_recompress(frame_len, blocks))
         {
             let strong_offset = arena_len;
@@ -2838,17 +2832,17 @@ mod tests {
             Err(Error::IncorrectLength)
         ));
 
-        let fast_two_config = SolanaCanonicalLz4Config::new(expected.len(), expected.len() - 1);
-        let mut fast_two_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(fast_two_config);
-        fast_two_encoder
+        let oversized_config = SolanaCanonicalLz4Config::new(expected.len(), expected.len() - 1);
+        let mut oversized_encoder = SolanaCanonicalLz4EntryBatchEncoder::new(oversized_config);
+        oversized_encoder
             .encode(entries.iter().copied(), &mut encoded)
             .unwrap();
         let compressed =
-            lz4_block::compress(&expected, Some(CompressionMode::FAST(2)), true).unwrap();
+            lz4_block::compress(&expected, Some(CompressionMode::FAST(4)), true).unwrap();
         expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
         expected_frame.extend_from_slice(&compressed);
         assert_eq!(encoded, expected_frame);
-        fast_two_encoder
+        oversized_encoder
             .encode_for_wire_blocks(
                 entries.iter().copied(),
                 &mut encoded,
