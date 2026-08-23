@@ -835,14 +835,11 @@ fn canonical_short_payload_serialized_size(payload: &[u8]) -> Result<usize> {
 
 #[cfg(feature = "solana-types")]
 fn canonical_short_u16_serialized_size(len: usize) -> Result<usize> {
+    if len < 0x80 {
+        return Ok(1);
+    }
     let value = u16::try_from(len).map_err(|_| Error::IncorrectLength)?;
-    Ok(if value < 0x80 {
-        1
-    } else if value < 0x4000 {
-        2
-    } else {
-        3
-    })
+    Ok(if value < 0x4000 { 2 } else { 3 })
 }
 
 #[cfg(feature = "solana-types")]
@@ -2356,6 +2353,25 @@ mod tests {
 
     #[cfg(feature = "solana-types")]
     #[test]
+    fn canonical_short_u16_sizes_cover_wire_boundaries() {
+        for (len, expected) in [
+            (0, 1),
+            (0x7f, 1),
+            (0x80, 2),
+            (0x3fff, 2),
+            (0x4000, 3),
+            (usize::from(u16::MAX), 3),
+        ] {
+            assert_eq!(canonical_short_u16_serialized_size(len).unwrap(), expected);
+        }
+        assert!(matches!(
+            canonical_short_u16_serialized_size(usize::from(u16::MAX) + 1),
+            Err(Error::IncorrectLength)
+        ));
+    }
+
+    #[cfg(feature = "solana-types")]
+    #[test]
     fn canonical_lz4_matches_current_wincode_and_enforces_limits() {
         let header = MessageHeader {
             num_required_signatures: 1,
@@ -2444,10 +2460,6 @@ mod tests {
         assert!(matches!(
             canonical_solana_transaction_serialized_size(&invalid_v1),
             Err(Error::InvalidData)
-        ));
-        assert!(matches!(
-            canonical_short_u16_serialized_size(usize::from(u16::MAX) + 1),
-            Err(Error::IncorrectLength)
         ));
 
         let config = SolanaCanonicalLz4Config::new(expected.len(), expected.len());

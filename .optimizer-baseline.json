@@ -1,12 +1,12 @@
 {
-  "version": 100,
+  "version": 101,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T12:22:44Z",
+  "updated_at": "2026-08-23T12:43:15Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 54,
+    "version": 55,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -428,6 +428,126 @@
         "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
       },
       "validation": "Rust 1.98.0 formatting passed; 214 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, and all-feature checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, sizing benchmark, and turbine library Clippy passed"
+    },
+    "iteration_39_short_size_fast_path": {
+      "status": "retained",
+      "change": "return the one-byte canonical short-u16 size immediately for lengths below 128, before the fallible u16 conversion",
+      "scope": "lencode-only exact-size helper over already-parsed reference Solana values; Agave sources and call sites are unchanged",
+      "protocol": "logical CPU 28; three reverse-order exact-binary process pairs normalized to each binary's wincode control; focused sizing used 31 alternating warmed trials per sizer and three full-corpus repetitions per trial, while end-to-end and Blockstore guardrails used 31 alternating warmed trials per format",
+      "paced_fixture": {
+        "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218
+      },
+      "focused_sizing": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode": 35232456, "lencode": 31967764 },
+          { "wincode": 35263335, "lencode": 32015245 },
+          { "wincode": 35223155, "lencode": 31961454 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode": 35294186, "lencode": 26235384 },
+          { "wincode": 35364636, "lencode": 26302834 },
+          { "wincode": 35372826, "lencode": 26305844 }
+        ],
+        "control_normalized_improvement_pct_by_pair": [18.075, 18.078, 18.043],
+        "control_normalized_improvement_pct_median": 18.075,
+        "candidate_time_reduction_vs_wincode_pct_by_pair": [25.667, 25.624, 25.633],
+        "candidate_time_reduction_vs_wincode_pct_median": 25.633,
+        "candidate_speedup_vs_wincode_median": 1.3447,
+        "parity": "every complete and partial receiver boundary matched wincode's exact serialized size in every benchmark process"
+      },
+      "profiles": {
+        "baseline": {
+          "data_sha256": "a6c37660f5a956791436429ca6ae7752319ff5064d8f645e6c1fe1b83c392d59",
+          "samples": 2439,
+          "lost_samples": 0,
+          "approximate_cycles": 8704000000,
+          "wincode_median_ns": 35512286,
+          "lencode_median_ns": 32280494,
+          "self_cycles_pct": {
+            "wincode_entry_size_of": 45.36,
+            "lencode_transaction_size": 38.17,
+            "lencode_wrapper": 2.47
+          }
+        },
+        "candidate": {
+          "data_sha256": "e687ca457cca61ce11f54e976b02dd48a055c15dbbfb6ff8dae262014c541913",
+          "samples": 2222,
+          "lost_samples": 0,
+          "approximate_cycles": 7717000000,
+          "wincode_median_ns": 35531917,
+          "lencode_median_ns": 26499455,
+          "self_cycles_pct": {
+            "wincode_entry_size_of": 50.36,
+            "lencode_transaction_size": 31.65
+          }
+        }
+      },
+      "paced_end_to_end_guardrail": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode_leader": 356755522, "lencode_leader": 225989185, "wincode_validator": 21632337, "lencode_validator": 23445784 },
+          { "wincode_leader": 355617399, "lencode_leader": 225942046, "wincode_validator": 21400426, "lencode_validator": 23172273 },
+          { "wincode_leader": 356205301, "lencode_leader": 224908362, "wincode_validator": 21929318, "lencode_validator": 23898375 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode_leader": 356261471, "lencode_leader": 226262637, "wincode_validator": 21503806, "lencode_validator": 23203443 },
+          { "wincode_leader": 355185756, "lencode_leader": 226251937, "wincode_validator": 21459237, "lencode_validator": 23163352 },
+          { "wincode_leader": 359844064, "lencode_leader": 224833373, "wincode_validator": 21579747, "lencode_validator": 23183162 }
+        ],
+        "control_normalized_leader_regression_pct_by_pair": [0.260, 0.259, -1.044],
+        "control_normalized_leader_regression_pct_median": 0.259,
+        "control_normalized_validator_regression_pct_by_pair": [-0.442, -0.312, -1.421],
+        "control_normalized_validator_regression_pct_median": -0.442,
+        "payload_bytes": 33402585,
+        "data_shreds": 49536,
+        "coding_shreds": 49536,
+        "wire_bytes": 120422016
+      },
+      "same_boundary_blockstore_guardrail": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode": 30550869, "lencode": 25048070 },
+          { "wincode": 30357928, "lencode": 25154480 },
+          { "wincode": 30541489, "lencode": 25200010 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode": 31143631, "lencode": 25268310 },
+          { "wincode": 31019611, "lencode": 25237390 },
+          { "wincode": 31092751, "lencode": 25259350 }
+        ],
+        "control_normalized_regression_pct_by_pair": [-1.041, -1.811, -1.542],
+        "control_normalized_regression_pct_median": -1.542
+      },
+      "rejected_screen": {
+        "change": "share Legacy and V0 transaction sizing control flow",
+        "candidate_binary_sha256": "5070b4542690ccc5efe9374fff5944a00c8f6260fcdde2b9f0b37edca1b917f2",
+        "control_normalized_improvement_pct_by_pair": [0.826, 0.623, 0.746],
+        "control_normalized_improvement_pct_median": 0.746,
+        "decision": "inverse-reverted below the 1% keep gate despite reducing the transaction sizing function's machine code by about 24%"
+      },
+      "binaries": {
+        "focused_sizing_baseline_sha256": "c44ec1d1fa8fc1b2dedfb9cf54df05a4a4d323f5f064e24671f8f2c96d7a91d6",
+        "focused_sizing_candidate_sha256": "c5a9786734493ee514638f3902ee9c4944bddba9389d758c8dd6c7b4ddf16892",
+        "end_to_end_baseline_sha256": "e5f2198e89dde0fd7efdd903b393fed0ebfa1d8925b5c089a8ea808a1b7faf10",
+        "end_to_end_candidate_sha256": "cad085a93af7238e564579ced52ad522b03e043a56a12dfee6e4cfc073709778",
+        "blockstore_baseline_sha256": "42806dd4388b1dc8f3fbecf66360be17454685a97e3ce029a14f74bf1d132f3d",
+        "blockstore_candidate_sha256": "37767c8f6dea2032a82ec8baed1fb66c73e60b6174249cd95158ad061b6d01ec"
+      },
+      "security": "the fast return is valid only below 128, which is necessarily inside u16; every multi-byte case still passes through the fallible u16 conversion, and tests cover both wire cutovers, u16::MAX, and the first rejected length. The change operates only on already-parsed reference Solana values and adds no decoder, parser, unsafe block, unchecked arithmetic, offset, sidecar, dependency, or wire-format change.",
+      "source_sha256": {
+        "lencode_solana_wire": "44c6d085103069c8a221c0c7f6c83a173656c5c7fd123c033fe06baa6b677a86",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_shredder": "08652377c89783b9e927edcfb953731fefecaee1486877066245e6e3779284e7",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore_benchmark": "a128b60934b76779723fa503a6134714815f95419f385f2bd3dbd1034a659191",
+        "agave_blockstore_jemalloc_benchmark": "1819bc9fd022dba99b936a56b50d5c8168c0f68d13739483056971e96b5cbe68",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1"
+      },
+      "validation": "Rust 1.98.0 formatting passed; 215 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, focused sizing benchmark, and turbine library Clippy passed"
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
