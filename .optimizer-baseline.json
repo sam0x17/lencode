@@ -1,12 +1,12 @@
 {
-  "version": 112,
+  "version": 113,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T17:30:47Z",
+  "updated_at": "2026-08-23T17:37:40Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 66,
+    "version": 67,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1776,6 +1776,49 @@
         "decision": "no dependency or lockfile change"
       },
       "security": "all sizing candidates retained checked collection widths and overflow handling. Compression candidates used the existing standard LZ4 block encoder and bounded arenas. The frame-hardening candidate added no unsafe code but was reverted after measured receive regressions. No parser sidecar, private Agave layout, unchecked offset, dependency, wire flag, or unsafe block was retained.",
+      "restored_source_sha256": {
+        "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_shredder": "08652377c89783b9e927edcfb953731fefecaee1486877066245e6e3779284e7",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_blockstore_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
+      }
+    },
+    "post_iteration_49_native_lz4_memory_screen": {
+      "status": "candidate rejected before timing escalation",
+      "scope": "native libLZ4 compile-time tuning used by lencode's canonical frame encoder; no lencode or Agave source changed",
+      "audit": {
+        "lz4_sys_version": "1.11.1+lz4-1.10.0",
+        "baseline_configuration": "LZ4_MEMORY_USAGE=14, the upstream 16 KiB table default",
+        "candidate_configuration": "LZ4_MEMORY_USAGE=13, an 8 KiB table",
+        "build_scope": "the screen used Cargo CFLAGS because lz4-sys exposes no crate-scoped setting; retaining it would require a scoped dependency fork"
+      },
+      "benchmark": {
+        "command": "LENCODE_SHRED_RUNS=11 taskset -c 28 /tmp/lencode-lz4-memory13-screen-rust-1.98.0 /tmp/agave-shred-corpus.bin",
+        "rust_version": "1.98.0",
+        "candidate_binary_sha256": "c737b1b002f2b9f9c5ae15cb95785768b80a1329744f56754518ea2ba79c9b9b",
+        "wincode_leader_ns": 275746659,
+        "wincode_validator_ns": 22002899,
+        "candidate_leader_ns": 187990678,
+        "candidate_validator_ns": 24327907,
+        "baseline_payload_bytes": 30292964,
+        "candidate_payload_bytes": 32188956,
+        "payload_regression_pct": 6.259,
+        "baseline_wire_bytes": 80592512,
+        "candidate_wire_bytes": 85726784,
+        "wire_regression_pct": 6.371,
+        "candidate_leader_speedup_vs_wincode": 1.466810,
+        "candidate_validator_throughput_vs_wincode": 0.904430
+      },
+      "decision": "the deterministic payload and Turbine wire regressions exceeded the 2% ceiling, so the candidate was rejected without an exact timing pair or dependency fork",
+      "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block and used the unchanged decoder",
+      "security": "no parser, decoder, unchecked offset, sidecar, wire flag, or unsafe block changed; hostile input handling remains inside the existing checked frame parser and audited exact-size libLZ4 decoder boundary",
       "restored_source_sha256": {
         "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
         "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
@@ -4554,6 +4597,18 @@
         "restored_lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
         "restored_lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
         "restored_agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      },
+      {
+        "optimization": "compile native libLZ4 with LZ4_MEMORY_USAGE=13",
+        "reason": "The 8 KiB compression table increased payload by 6.259% and Turbine wire bytes by 6.371%. Both deterministic regressions exceeded the 2% ceiling, so no timing pair or dependency fork was justified.",
+        "candidate_binary_sha256": "c737b1b002f2b9f9c5ae15cb95785768b80a1329744f56754518ea2ba79c9b9b",
+        "candidate_payload_bytes": 32188956,
+        "candidate_wire_bytes": 85726784,
+        "payload_regression_pct": 6.259,
+        "wire_regression_pct": 6.371,
+        "wire_compatibility": "the candidate emitted the existing size-prefixed standard LZ4 block",
+        "source_changed": false,
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
