@@ -1,12 +1,12 @@
 {
-  "version": 93,
+  "version": 94,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T07:41:08Z",
+  "updated_at": "2026-08-23T08:29:53Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 48,
+    "version": 49,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -155,6 +155,92 @@
       },
       "security_boundary": "shred bytes and any proposed metadata remain hostile; official transaction views are constructed only by their checked public parser, and no sidecar offsets, private layouts, partial LZ4 decoder, or second unsafe boundary were admitted",
       "model_limit": "entry arrival timing is synthetic because the source corpus has no BankingStage timestamps, and the balanced Blockstore diagnostic preserves 100 slot-level scans but not the original per-slot component boundaries"
+    },
+    "iteration_36_hc3_boundary_retry": {
+      "change": "after a near-boundary FAST(4) frame has already retried with FAST(1), retry LZ4 HC(3) only when the FAST(1) frame remains within 1/44 of removing a complete wire block",
+      "status": "retained",
+      "scope": "lencode-only canonical-LZ4 encoder policy; Agave sources and the hostile-input decoder are unchanged",
+      "protocol": "three reverse-order exact-binary process pairs on logical CPU 28; end-to-end used seven alternating warmed trials per format and Blockstore used 31",
+      "binaries": {
+        "end_to_end_baseline_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "end_to_end_candidate_sha256": "e445f6eb1c43783b623e86bc3d27fbb9d4ec95ff6e4dc8073a5e14b0be00759f",
+        "blockstore_baseline_sha256": "256f518e6ef0d74aa92c4df83c034c9c1f6fa175e36db2fcff9caf6267d2cf35",
+        "blockstore_candidate_sha256": "03f3faf8accec9efa0c60905d841321055ecc731629ed29c472dfc58ed5a48b2"
+      },
+      "paced_fixture": {
+        "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218
+      },
+      "paced_end_to_end": {
+        "baseline_medians_ns": {
+          "wincode_leader": 353701921,
+          "canonical_lz4_leader": 218826268,
+          "wincode_validator": 21519799,
+          "canonical_lz4_validator": 23243285
+        },
+        "candidate_medians_ns": {
+          "wincode_leader": 357382974,
+          "canonical_lz4_leader": 223829987,
+          "wincode_validator": 21478008,
+          "canonical_lz4_validator": 23054773
+        },
+        "control_normalized_leader_regression_pct_by_pair": [1.312, 0.979, 1.841],
+        "control_normalized_leader_regression_pct_median": 1.312,
+        "canonical_lz4_absolute_leader_regression_pct": 2.287,
+        "control_normalized_validator_improvement_pct_by_pair": [0.638, 0.520, 2.650],
+        "control_normalized_validator_improvement_pct_median": 0.638,
+        "canonical_lz4_absolute_validator_improvement_pct": 0.811,
+        "baseline_payload_bytes": 33465264,
+        "candidate_payload_bytes": 33431782,
+        "baseline_data_shreds": 50560,
+        "candidate_data_shreds": 50048,
+        "baseline_coding_shreds": 50560,
+        "candidate_coding_shreds": 50048,
+        "baseline_wire_bytes": 122911360,
+        "candidate_wire_bytes": 121666688,
+        "additional_fec_sets_removed": 16,
+        "wire_reduction_pct": 1.013
+      },
+      "same_boundary_blockstore": {
+        "fixture": "the same 1.5-FEC paced fixture grouped into the frozen harness's 77 slots",
+        "baseline_medians_ns": {
+          "wincode_validator": 30581392,
+          "canonical_lz4_validator": 25252292
+        },
+        "candidate_medians_ns": {
+          "wincode_validator": 30982613,
+          "canonical_lz4_validator": 25513452
+        },
+        "control_normalized_improvement_pct_by_pair": [-0.245, 0.605, 0.540],
+        "control_normalized_improvement_pct_median": 0.540,
+        "canonical_lz4_absolute_regression_pct": 1.034
+      },
+      "window_calibration": {
+        "unfiltered_hc_wire_bytes": 121433312,
+        "unfiltered_hc_fec_sets_removed": 19,
+        "unfiltered_hc_smoke_leader_ns": 245015046,
+        "post_fast1_divisor_18_wire_bytes": 121433312,
+        "post_fast1_divisor_32_wire_bytes": 121511104,
+        "post_fast1_divisor_40_wire_bytes": 121511104,
+        "post_fast1_divisor_44_wire_bytes": 121666688,
+        "post_fast1_divisor_48_wire_bytes": 121744480,
+        "post_fast1_divisor_64_wire_bytes": 121900064,
+        "decision": "1/44 is the narrowest measured window that clears the 1% wire gate; 1/48 removed only 15 FEC sets and saved 0.949%"
+      },
+      "fixed_fixture_consistency": {
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "baseline_wire_bytes": 158384512,
+        "candidate_wire_bytes": 157451008,
+        "additional_fec_sets_removed": 12,
+        "wire_reduction_pct": 0.589
+      },
+      "wire_compatibility": "HC(3), FAST(1), and FAST(4) all emit standard size-prefixed LZ4 blocks inside the unchanged LCSH version-1 flag-1 frame; the decoder and feature gate are unchanged",
+      "security": "the new work is encoder-only over bounded reference-Solana values, uses lz4's safe compression API, adds no unsafe block, and remains nested under the normal-component FAST(4) size limit; hostile shred bytes retain the existing bounded LZ4_decompress_safe path",
+      "candidate_lencode_solana_wire_sha256": "a9d3f32a4b28b5368e25c6090b61c33de09d4b7b944231339ed3f2db42d85479",
+      "validation": "214 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 11 Agave codec tests and 2 canonical broadcast tests passed; strict Agave ledger and turbine library Clippy passed"
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
@@ -2756,6 +2842,38 @@
         "optimization": "construct official transaction views from an indexed canonical-frame sidecar",
         "reason": "the reference agave-transaction-view API exposes only checked constructors that parse and validate canonical bytes; there is no safe public constructor from supplied offsets, so the design was rejected before source changes rather than trusting hostile metadata or depending on private layout",
         "source_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "combine lz4_flex's safe encoder with 1.75-FEC and 2-FEC canonical coalescing",
+        "reason": "at 1.75 FEC the combination saved only 0.696% wire while regressing one-shot leader and validator latency by about 8.8% and 3.6%; at 2 FEC it regressed leader, validator, and wire by about 12.5%, 5.0%, and 3.0%, so no source change was made",
+        "encoder_binary_sha256": "aaf906b865ae9320678a973e69fb48bb9896cc5d69340b054d4e13d615669333",
+        "one_and_three_quarters_fixture_sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+        "two_fec_fixture_sha256": "2ef8626cc7eb3209640651fa2824ee752fa4876fca9281d5a0efa0138d6de0b9",
+        "wire_compatibility": "the safe Rust encoder emitted standard size-prefixed LZ4 blocks accepted by the retained decoder",
+        "source_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "raise current selective-recompression batching from 1.5 to 1.75 typical FEC inputs",
+        "reason": "the current encoder reduced component count by 14.155% with only 0.127% more wire, but exact end-to-end medians regressed leader and validator latency by 0.766% and 1.666%; the balanced Blockstore screen then regressed absolute and wincode-normalized latency by 4.514% and 7.847%, so the 1.5 target remained unchanged",
+        "binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+        "baseline_fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "candidate_fixture_sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+        "baseline_components": 1533,
+        "candidate_components": 1316,
+        "baseline_wire_bytes": 122911360,
+        "candidate_wire_bytes": 123066944,
+        "source_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "overwrite the unselected FAST frame with the bounded HC(3) retry instead of growing a third arena",
+        "reason": "three reverse-order seven-trial pairs preserved exact output but regressed control-normalized leader latency by about 0.3% relative to the retained third-arena form and perturbed validator layout; the overwrite form was removed before final validation",
+        "third_arena_binary_sha256": "f98b3b9aae8ebe8577da73ce561c15d62154cfa266a5a78f8517cbf1bf9e8200",
+        "reuse_binary_sha256": "a896286582182f84ecccb59491ec5e7e266619408ffc66c76dc789cbd2e35d8b",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
         "unsafe_code_added": false
       }
     ],

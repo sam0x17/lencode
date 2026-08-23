@@ -81,6 +81,10 @@ pub const SOLANA_CANONICAL_LZ4_HEADER_BYTES: usize = SOLANA_ENTRY_BATCH_MAGIC.le
 
 #[cfg(feature = "solana-types")]
 const STRONG_RECOMPRESSION_WINDOW_DIVISOR: usize = 18;
+#[cfg(feature = "solana-types")]
+const HC_RECOMPRESSION_WINDOW_DIVISOR: usize = 44;
+#[cfg(feature = "solana-types")]
+const HC_RECOMPRESSION_LEVEL: i32 = 3;
 
 /// Canonical version byte for a v0 message.
 pub const V0_PREFIX: u8 = 0x80;
@@ -264,6 +268,11 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
 
     /// Encodes one batch and selectively spends more compression work when it
     /// removes a complete wire block.
+    ///
+    /// Near a boundary, FAST(4) may retry with FAST(1). A narrower remaining
+    /// boundary window may retry with HC(3). Every result uses the same standard
+    /// LZ4 block format and the smallest mode is selected only at wire-block
+    /// granularity.
     pub fn encode_for_wire_blocks<'a>(
         &mut self,
         entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
@@ -363,6 +372,40 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
                 frame_offset = strong_offset;
                 frame_len = strong_len;
             }
+            if wire_blocks.is_some_and(|blocks| {
+                should_recompress_with_divisor(strong_len, blocks, HC_RECOMPRESSION_WINDOW_DIVISOR)
+            }) {
+                let hc_offset = strong_arena_len;
+                let hc_arena_len = hc_offset
+                    .checked_add(frame_capacity)
+                    .ok_or(Error::IncorrectLength)?;
+                output
+                    .try_reserve(frame_capacity)
+                    .map_err(|_| Error::DecodeLimitExceeded)?;
+                output.resize(hc_arena_len, 0);
+                let hc_len = {
+                    let (canonical, tail) = output.split_at_mut(canonical_len);
+                    let hc_start = hc_offset - canonical_len;
+                    let hc = &mut tail[hc_start..hc_start + frame_capacity];
+                    hc[..4].copy_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
+                    hc[4] = SOLANA_ENTRY_BATCH_VERSION;
+                    hc[5] = SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG;
+                    SOLANA_CANONICAL_LZ4_HEADER_BYTES
+                        + lz4_block::compress_to_buffer(
+                            canonical,
+                            Some(CompressionMode::HIGHCOMPRESSION(HC_RECOMPRESSION_LEVEL)),
+                            true,
+                            &mut hc[SOLANA_CANONICAL_LZ4_HEADER_BYTES..],
+                        )
+                        .map_err(|_| Error::InvalidData)?
+                };
+                if wire_blocks.is_some_and(|blocks| {
+                    wire_block_count(hc_len, blocks) < wire_block_count(frame_len, blocks)
+                }) {
+                    frame_offset = hc_offset;
+                    frame_len = hc_len;
+                }
+            }
         }
         output.copy_within(frame_offset..frame_offset + frame_len, 0);
         output.truncate(frame_len);
@@ -386,10 +429,21 @@ const fn wire_block_count(len: usize, blocks: SolanaCanonicalLz4WireBlocks) -> O
 
 #[cfg(feature = "solana-types")]
 fn should_recompress(len: usize, blocks: SolanaCanonicalLz4WireBlocks) -> bool {
+    // FAST(1) averaged 4.3% smaller than FAST(4) on production-sized
+    // components. A 1/18 window bounds second passes while covering that gain.
+    should_recompress_with_divisor(len, blocks, STRONG_RECOMPRESSION_WINDOW_DIVISOR)
+}
+
+#[cfg(feature = "solana-types")]
+fn should_recompress_with_divisor(
+    len: usize,
+    blocks: SolanaCanonicalLz4WireBlocks,
+    window_divisor: usize,
+) -> bool {
     let Some(block_count) = wire_block_count(len, blocks) else {
         return false;
     };
-    if block_count <= 1 {
+    if block_count <= 1 || window_divisor == 0 {
         return false;
     }
     let Some(previous_capacity) = (block_count - 2)
@@ -398,10 +452,8 @@ fn should_recompress(len: usize, blocks: SolanaCanonicalLz4WireBlocks) -> bool {
     else {
         return false;
     };
-    // FAST(1) averaged 4.3% smaller than FAST(4) on production-sized
-    // components. A 1/18 window bounds second passes while covering that gain.
     len.checked_sub(previous_capacity)
-        .is_some_and(|distance| distance <= len / STRONG_RECOMPRESSION_WINDOW_DIVISOR)
+        .is_some_and(|distance| distance <= len / window_divisor)
 }
 
 /// Reconstructs one exact canonical-LZ4 entry-batch frame.
@@ -2150,6 +2202,13 @@ mod tests {
         let stronger =
             lz4_block::compress(&expected, Some(CompressionMode::FAST(1)), true).unwrap();
         assert!(stronger.len() < compressed.len());
+        let strongest = lz4_block::compress(
+            &expected,
+            Some(CompressionMode::HIGHCOMPRESSION(HC_RECOMPRESSION_LEVEL)),
+            true,
+        )
+        .unwrap();
+        assert!(strongest.len() < stronger.len());
         encoder
             .encode_for_wire_blocks(
                 entries.iter().copied(),
@@ -2158,7 +2217,7 @@ mod tests {
             )
             .unwrap();
         expected_frame.truncate(SOLANA_CANONICAL_LZ4_HEADER_BYTES);
-        expected_frame.extend_from_slice(&stronger);
+        expected_frame.extend_from_slice(&strongest);
         assert_eq!(encoded, expected_frame);
 
         let mut canonical = Vec::new();
