@@ -1,12 +1,12 @@
 {
-  "version": 82,
+  "version": 83,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T02:31:32Z",
+  "updated_at": "2026-08-23T02:44:44Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 37,
+    "version": 38,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1011,6 +1011,24 @@
           "validator_control_normalized_regression_pct": 0.080,
           "payload_bytes_changed": false,
           "wire_bytes_changed": false
+        },
+        "retained_profile": {
+          "protocol": "perf record at 999 Hz on logical CPU 28 over the exact retained binary with 101 alternating warmed trials per format",
+          "data_sha256": "c8b8c37671b8ea03b79133be6c0a9a887b4598fe1ab13b183fe8e5dbb34a2e4f",
+          "samples": 7774,
+          "lost_samples": 0,
+          "wincode_validator_ns": 27946741,
+          "lencode_validator_ns": 29314176,
+          "self_cycles_pct": {
+            "transaction_frame_parse": 9.82,
+            "lz4_decompress_safe": 7.65,
+            "sha256_blocks": 7.41,
+            "memmove": 4.68,
+            "block_component_parse": 4.21,
+            "deshred_push": 2.03,
+            "memset": 1.22
+          },
+          "attribution": "LZ4 decompression and canonical output initialization are qualifying lencode targets; transaction parsing, hashing, RocksDB iteration, and general Agave parsing are excluded unless changed only inside the wincode-to-lencode replacement adapter"
         },
         "source_sha256": {
           "lencode_solana_wire": "7517ab2fa0d9f4d5ce11dac225b6f5a90ea08505f282a2a311bb720aa8eae460",
@@ -2367,6 +2385,14 @@
       {
         "optimization": "force-inline lencode's caller-storage frame validation and decompression methods",
         "reason": "three alternating CPU-affined seven-trial pairs moved normalized Blockstore latency between 0.2% better and 0.4% worse, with the median slightly negative; normal cross-crate inline hints were restored below the 1% gate"
+      },
+      {
+        "optimization": "reserve enough shared canonical output storage for two typical FEC batches per remaining component",
+        "reason": "the direct wincode-replacement adapter reduced output-arena growths but three alternating CPU-affined seven-trial pairs improved control-normalized Blockstore latency by only 0.426%, 0.445%, and 0.797%; the roughly doubled retained capacity was restored below the 1% gate"
+      },
+      {
+        "optimization": "decode caller-owned canonical output with lz4-pure-rs 0.1.2",
+        "reason": "two alternating CPU-affined seven-trial pairs regressed absolute lencode Blockstore time by 6.684% and 7.135%, or 6.524% and 7.360% after wincode-control normalization; the lencode-only decoder substitution and dependency were removed"
       }
     ],
     "full_resets": [
