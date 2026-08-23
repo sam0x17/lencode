@@ -1,12 +1,12 @@
 {
-  "version": 85,
+  "version": 86,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T02:55:34Z",
+  "updated_at": "2026-08-23T03:07:22Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 40,
+    "version": 41,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2401,6 +2401,10 @@
       {
         "optimization": "classify legacy bytes or canonical LZ4 frames once in lencode",
         "reason": "three alternating CPU-affined seven-trial pairs moved control-normalized Blockstore latency by +0.266%, -0.151%, and +0.026%; the median 0.026% improvement was noise, so the additive API and direct replacement-adapter change were removed below the 1% gate"
+      },
+      {
+        "optimization": "parse canonical entry headers in lencode and construct official zero-copy Agave transaction views",
+        "reason": "the initial three CPU-affined seven-trial pairs regressed control-normalized Blockstore latency by a median 1.210%; inlining the generic parser reduced the median regression to 0.413% but one pair still regressed absolute lencode time by 2.839%. The two optional dependencies, parser API, and direct replacement-adapter branch were removed"
       }
     ],
     "full_resets": [
