@@ -1,12 +1,12 @@
 {
-  "version": 125,
+  "version": 126,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T22:02:03Z",
+  "updated_at": "2026-08-23T22:20:31Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 79,
+    "version": 80,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3352,6 +3352,89 @@
         "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
         "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "agave_broadcast_utils": "918b777321308783debca913462229037aa5998b1f3e44f5e88f2ac335a77968",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
+    "iteration_62_security_bounded_receive_and_batching_frontier": {
+      "status": "no production source change; the duplicate extreme-frame encoder prototype was inverse-reverted and larger paced batching targets stayed below the 1% gate",
+      "scope": "audit the hostile-input canonical receive boundary, then screen only standard-LZ4 encoder policy and the direct canonical-lencode replacement batching site without changing general Agave code",
+      "receive_boundary_audit": {
+        "result": "the retained BytesMut split and freeze handoff is already zero-copy; frame identity, version, flag, signed length conversion, caller maximum, compression-ratio bound, exact decompressed length, and official entry-batch parsing remain checked before bytes are accepted",
+        "profile_basis": {
+          "samples": 3826,
+          "lost_samples": 0,
+          "reconstruction_child_cycles_pct": 5.71,
+          "lz4_decompress_safe_child_cycles_pct": 4.84,
+          "remaining_safe_framing_parsing_and_arena_pct": 0.87
+        },
+        "dependency_versions": {
+          "lz4": "1.28.1",
+          "lz4_sys": "1.11.1+lz4-1.10.0",
+          "bundled_liblz4": "1.10.0"
+        },
+        "decision": "no decoder shortcut was admitted because the only remaining qualifying receive hotspot is the existing audited exact-size libLZ4 call"
+      },
+      "duplicate_extreme_frame_screen": {
+        "optimization": "start extreme frames with FAST(4), retry retained FAST(2) near an exact wire-block boundary, and select FAST(2) only when it removes a block",
+        "baseline_binary_sha256": "8d9d08e0481fc29968f096ec7ce2b697712ea7e878e8cecba85e8294240a4534",
+        "candidate_binary_sha256": "68a266f1ad1d5b172dfe8f48ae0a1739231de27429acdd0cebb75ade41cd2ea7",
+        "fixture": "/tmp/agave-shred-paced-repartition-49_32.bin",
+        "fixture_sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+        "payload_bytes": 33307398,
+        "wire_bytes": 118088256,
+        "branch_activated": false,
+        "short_pair_control_normalized_leader_improvement_pct": 0.094248,
+        "short_pair_control_normalized_validator_improvement_pct": 1.425295,
+        "decision": "inverse-reverted because the paced fixture did not activate the branch, and the existing full-slot sweep of the same two-pass family already measured 2.252% to 2.989% normalized leader regressions for settings that saved at least 1% wire"
+      },
+      "paced_batching_census": {
+        "binary_sha256": "8d9d08e0481fc29968f096ec7ce2b697712ea7e878e8cecba85e8294240a4534",
+        "protocol": "one deterministic Rust 1.98 correctness and shred-accounting run per pre-generated 400 ms paced fixture on logical CPU 28; longer timing was skipped when every deterministic wire gain missed the 1% gate",
+        "retained_49_32": {
+          "fixture_sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+          "components": 1497,
+          "payload_bytes": 33307398,
+          "wire_bytes": 118088256
+        },
+        "candidate_25_16": {
+          "components": 1474,
+          "component_reduction_pct": 1.536406,
+          "payload_bytes": 33213771,
+          "payload_reduction_pct": 0.281100,
+          "wire_bytes": 117932672,
+          "wire_reduction_pct": 0.131752
+        },
+        "candidate_51_32": {
+          "components": 1448,
+          "component_reduction_pct": 3.273213,
+          "payload_bytes": 33164163,
+          "payload_reduction_pct": 0.430040,
+          "wire_bytes": 117777088,
+          "wire_reduction_pct": 0.263505
+        },
+        "candidate_13_8": {
+          "components": 1417,
+          "component_reduction_pct": 5.344021,
+          "payload_bytes": 33076904,
+          "payload_reduction_pct": 0.692020,
+          "wire_bytes": 117543712,
+          "wire_reduction_pct": 0.461133
+        },
+        "decision": "retain 49/32 because no larger target reached a 1% payload or wire gain, and the smoke latency direction worsened as batches grew"
+      },
+      "zero_copy": "the retained encoder still returns its selected frame borrowed from one caller-owned arena, and the retained validator still decompresses into disjoint caller-owned BytesMut segments that freeze without copying",
+      "wire_compatibility": "all executed frames used the unchanged LCSH version-1 flag-1 size-prefixed standard LZ4 representation; exact reconstruction checks and aggregate payload and wire accounting passed",
+      "security": "no decoder, parser, unsafe block, allocation bound, unchecked offset, dependency, sidecar, private layout, partial-output behavior, or Agave production source changed; the temporary encoder policy operated only on bounded official reference-Solana values and was removed",
+      "source_sha256": {
+        "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_ledger_manifest": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_broadcast_utils": "918b777321308783debca913462229037aa5998b1f3e44f5e88f2ac335a77968",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       }
     },
