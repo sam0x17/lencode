@@ -1,12 +1,12 @@
 {
-  "version": 98,
+  "version": 99,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T11:19:31Z",
+  "updated_at": "2026-08-23T11:41:21Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 53,
+    "version": 54,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -321,6 +321,57 @@
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       },
       "validation": "Rust 1.98.0 formatting passed; 214 lencode unit tests and 8 integration tests passed across all targets; 5 doctests passed with one ignored; no-default, std-only, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 11 Agave codec tests, 2 shredder replacement tests, and the canonical turbine test passed; strict Agave ledger library, benchmark, and turbine library Clippy passed"
+    },
+    "post_iteration_37_safe_frontier_screen": {
+      "status": "no production source change",
+      "profile": {
+        "command": "perf record -F 999 -o /tmp/lencode-iteration37-retained-perf.data -- env LENCODE_SHRED_RUNS=31 taskset -c 28 /tmp/lencode-wide-hc2-fallback-borrowed-tail-final-rust-1.98.0 /tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "data_sha256": "6c229ff4f0c6aefa42b9ee8ccc71871e58694fb836d8890a275d43eea0ac0b92",
+        "samples": 21291,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_leader": 360964691,
+          "canonical_lz4_leader": 228675365,
+          "wincode_validator": 22436001,
+          "canonical_lz4_validator": 23259654
+        },
+        "self_cycles_pct": {
+          "sha256_blocks": 30.28,
+          "reed_solomon_mul_xor": 23.52,
+          "lz4_compress_fast_ext_state": 3.62,
+          "wincode_component_serialize": 2.34,
+          "memmove_all_paths": 2.06,
+          "malloc_all_paths": 1.76,
+          "lz4_decompress_safe": 0.86,
+          "canonical_short_u16": 0.83,
+          "canonical_addresses": 0.74,
+          "lz4_mid_compress": 0.58,
+          "memset_all_paths": 0.46,
+          "lz4_hc_compress": 0.33,
+          "canonical_append": 0.23
+        }
+      },
+      "safe_compression_census": {
+        "fixture_components": 1533,
+        "fast4_boundary_candidates": 101,
+        "fast1_wire_block_wins": 65,
+        "fast4_selections_after_retry": 36,
+        "predictor_screen_minimum_true_candidates": 20,
+        "best_simple_count_predictor_true_candidates": 20,
+        "best_simple_count_predictor_false_candidates": 36,
+        "best_simple_count_predictor_precision_pct": 35.71,
+        "decision": "canonical length plus existing entry and transaction counts cannot predict the retry set precisely enough to start in FAST(1); a content scan or cross-component predictor would add work and state without a credible 1% gain"
+      },
+      "rejected_routes": [
+        "An encoder-owned initialized arena already measured a 0.24% normalized leader gain and a 0.95% validator regression after removing destination zero-fill and the final frame move.",
+        "The safe lz4 block wrapper does not expose reusable independent-block state. Calling libLZ4 state functions directly would add an encoder-side FFI and unsafe boundary, while the previously screened safe lzzzz state path stayed below 1%.",
+        "The remaining canonical writer symbols account for about 2% of total cycles, and prior checked batching, pre-sizing, and inlining variants all stayed below 1% or regressed."
+      ],
+      "security": "No decoder, parser, or production encoder code changed. Shred bytes and derived lengths remain hostile, and the retained path still uses the exact-size LZ4_decompress_safe boundary followed by Agave's checked public parser. No sidecar, private layout dependency, unchecked offset, dependency, or unsafe block was added.",
+      "source_sha256": {
+        "lencode_solana_wire": "a95e2855792b2da4ad554a7a938cd19bc2b5b83c273c4c45180b85ecd2d6573b",
+        "retained_end_to_end_binary": "50dfc6a891e8e4c5d0a54022e77ab172d27d11c22132e51ec7a965b8b1e1158f"
+      }
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
