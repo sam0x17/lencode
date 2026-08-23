@@ -1,12 +1,12 @@
 {
-  "version": 119,
+  "version": 120,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T19:48:33Z",
+  "updated_at": "2026-08-23T20:01:43Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 73,
+    "version": 74,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2576,6 +2576,73 @@
         "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
         "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
         "agave_codec": "f367fdb239b3949fa40151493a31834eb4e9d4a8c8cd60ebd9ee672a95d6a69d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
+    "post_iteration_56_validator_frontier_refresh": {
+      "status": "all candidates inverse-reverted; no production source change",
+      "scope": "lencode-owned canonical LZ4 reconstruction and encoding; Agave production sources and replacement sites are unchanged",
+      "blockstore_callgraph": {
+        "command": "perf record -F 999 --call-graph dwarf,16384 -o /tmp/lencode-expansion-bound-blockstore-callgraph.data -- taskset -c 28 env LENCODE_BLOCKSTORE_RUNS=31 /tmp/lencode-expansion-bound-blockstore-rust-1.98.0 /tmp/agave-shred-broadcast-batches.bin",
+        "data_sha256": "8f847a17a51e9fc95aaaadcfb6b8640ec67f356de4f95ff3aad824db9bdca328",
+        "samples": 3826,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_validator": 27822982,
+          "canonical_lz4_validator": 28076442
+        },
+        "reconstruction_child_cycles_pct": 5.71,
+        "lz4_decompress_safe_child_cycles_pct": 4.84,
+        "remaining_reconstruction_children_pct": 0.87,
+        "conclusion": "the retained caller-owned BytesMut arena and borrowed frame handoff leave less than 1% of total cycles in checked framing, parsing, validation, and arena management; libLZ4 is the only remaining qualifying decoder hotspot, and replacing or bypassing its audited hostile-input boundary is excluded"
+      },
+      "safe_encoder_screen": {
+        "change": "use lz4_flex's safe-encode path for the initial ordinary acceleration-4 block while retaining libLZ4 for extreme frames, boundary retries, and decoding",
+        "safety": "the selected encoder feature forbids unsafe code, output storage used the larger checked capacity requirement, the outer frame and exact-size libLZ4 decoder were unchanged, and no unchecked offset or hostile-input metadata was introduced",
+        "fixture": {
+          "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+          "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+          "components": 1533,
+          "trials_per_binary": 15,
+          "cpu": 28
+        },
+        "binaries": {
+          "retained_sha256": "b29af02da8889f2ea70a929297770a1d914693bf8b285e6e935b38c097c5ec69",
+          "candidate_sha256": "016f9f3e20b1168196dd97f05f0eab67cc48e5ef3caaa3e8603b2e153f387305"
+        },
+        "retained_medians_ns": {
+          "wincode_leader": 354415764,
+          "canonical_lz4_leader": 225451543,
+          "wincode_validator": 21381988,
+          "canonical_lz4_validator": 23313446
+        },
+        "candidate_medians_ns": {
+          "wincode_leader": 355632087,
+          "canonical_lz4_leader": 244544562,
+          "wincode_validator": 21454848,
+          "canonical_lz4_validator": 23740567
+        },
+        "control_normalized_leader_regression_pct": 8.098,
+        "control_normalized_validator_regression_pct": 1.486,
+        "retained_payload_bytes": 33402585,
+        "candidate_payload_bytes": 32627281,
+        "payload_reduction_pct": 2.321,
+        "retained_wire_bytes": 120422016,
+        "candidate_wire_bytes": 120188640,
+        "wire_reduction_pct": 0.194,
+        "wire_compatibility": "the candidate emitted standard size-prefixed LZ4 blocks inside the unchanged LCSH version-1 flag-1 frame",
+        "decision": "inverse-reverted because the 8.098% normalized leader regression exceeded the 2% ceiling while the 0.194% Turbine wire reduction remained below the 1% gate; the optional dependency and all lockfile changes were removed"
+      },
+      "security": "No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, allocation policy, or wire behavior was retained. The existing exact-size libLZ4 unsafe decoder boundary was not broadened.",
+      "restored_source_sha256": {
+        "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "f367fdb239b3949fa40151493a31834eb4e9d4a8c8cd60ebd9ee672a95d6a69d",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
         "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
         "agave_blockstore_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
