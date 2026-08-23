@@ -1,12 +1,12 @@
 {
-  "version": 123,
+  "version": 124,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T21:17:57Z",
+  "updated_at": "2026-08-23T21:39:57Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 77,
+    "version": 78,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3157,6 +3157,100 @@
         "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
         "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
         "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_broadcast_utils": "918b777321308783debca913462229037aa5998b1f3e44f5e88f2ac335a77968",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
+    "iteration_60_zero_copy_raw_canonical_fallback": {
+      "status": "no production source change; the additive raw-canonical arena API and direct replacement-site prototype were inverse-reverted",
+      "scope": "return borrowed canonical wincode bytes when LZ4 cannot remove a wire block, allowing the existing mixed-format validator fallback to skip decompression; legacy wincode production code and hostile-frame decoding remain unchanged",
+      "opportunity_census": {
+        "binary_sha256": "ccf4fb130770a78da00164eaa87feb237505da249022f029e4ea963f0dfcb29f",
+        "fixture": "/tmp/agave-shred-paced-repartition-49_32.bin",
+        "fixture_sha256": "97d12de036ccb6ec7ba90e00791333dcb7d5edd18d45dd73ae0ca4c1d27c5245",
+        "non_final": {
+          "components": 1497,
+          "equal_wire_block_components": 69,
+          "eligible_canonical_bytes": 977039,
+          "eligible_compressed_bytes": 590921,
+          "eligible_canonical_bytes_pct": 1.467049
+        },
+        "all_final_upper_bound": {
+          "equal_wire_block_components": 86,
+          "eligible_canonical_bytes": 1821763,
+          "eligible_compressed_bytes": 1167313,
+          "eligible_canonical_bytes_pct": 2.735424
+        },
+        "chunked_blockstore_mix": {
+          "slots": 75,
+          "equal_wire_block_components": 68,
+          "eligible_canonical_bytes": 947526,
+          "eligible_compressed_bytes": 572507,
+          "eligible_canonical_bytes_pct": 1.422735,
+          "eligible_counts_below_4k_4k_to_8k_8k_to_16k_16k_to_32k_32k_and_up": [17, 7, 16, 27, 1]
+        },
+        "result": "every opportunity had equal raw and compressed wire-block counts; no component used fewer blocks in raw form"
+      },
+      "prototype": {
+        "lencode": "add a borrowed raw-or-LZ4 arena method that retains canonical bytes at the arena front and selects them only at equal wire-block count",
+        "agave": "call the additive method only from the canonical-lencode replacement adapter and route the replacement benchmark through its existing mixed-format reconstruction path",
+        "zero_copy": "leaders borrow either the canonical prefix or compressed tail without compaction; validators transfer raw Vec ownership into Bytes without copying",
+        "wire_compatibility": "each selected payload is either the existing canonical wincode representation or the existing LCSH version-1 flag-1 LZ4 frame, both already accepted after feature activation"
+      },
+      "rejected_candidates": [
+        {
+          "optimization": "use raw canonical bytes for every equal-block component",
+          "all_final_end_to_end_binary_sha256": "9f5d8a08ea8a3f6933f935e83257c479329ed74fa0a29aa468ab2be515247b49",
+          "blockstore_binary_sha256": "7368054b869970b56d3b9aba138959a782d04cf9dd18d1149c14468df8ff6bc3",
+          "all_final_payload_bytes": 33961848,
+          "all_final_wire_bytes": 118088256,
+          "end_to_end_normalized_leader_improvement_pct_by_pair": [0.236556, 0.608331],
+          "end_to_end_normalized_validator_improvement_pct_by_pair": [0.055696, 0.455860],
+          "blockstore_normalized_validator_improvement_pct_by_pair": [-0.101958, -0.724827],
+          "decision": "wire stayed exact, but transferring raw input ownership discarded the reusable deshred allocation and regressed Blockstore latency"
+        },
+        {
+          "optimization": "restrict raw fallback to canonical components of at least 16 KiB",
+          "binary_sha256": "a69bb1c37ca7d66f024a7a7e8fe7790397aedeba905e7a8541993118766ba223",
+          "exact_layout_control_binary_sha256": "41f60400e4c12730afd9dfc5bfa77a7c5279a45bc18a132c86def19adafc40eb",
+          "short_pair_normalized_validator_improvement_pct": [0.947635, 1.031884],
+          "thirty_one_trial_control_ns": {
+            "wincode": 30672351,
+            "canonical_lz4": 25414212
+          },
+          "thirty_one_trial_candidate_ns": {
+            "wincode": 31837976,
+            "canonical_lz4": 25952304
+          },
+          "thirty_one_trial_normalized_validator_improvement_pct": 1.621344,
+          "thirty_one_trial_absolute_canonical_lz4_regression_pct": 2.117288,
+          "decision": "the normalized gain cleared 1%, but absolute canonical-lz4 Blockstore latency exceeded the 2% regression ceiling"
+        },
+        {
+          "optimization": "raise the raw fallback threshold to 20 KiB",
+          "binary_sha256": "bb1c8cc13b96c2de15753cbb1fd113e92931fbececcbc088cfcfb5442bd0c464",
+          "normalized_validator_improvement_pct_by_pair": [0.451049, 0.681125],
+          "absolute_canonical_lz4_regression_pct_by_pair": [1.334430, 1.342002],
+          "decision": "absolute latency stayed within the ceiling, but both normalized gains missed the 1% gate"
+        },
+        {
+          "optimization": "set the raw fallback threshold to 18 KiB",
+          "binary_sha256": "f522194923091c5aec7478731b2fbf77de196094121cae6721e1875476ca17f1",
+          "normalized_validator_improvement_pct_by_pair": [-1.409071, -0.782271],
+          "absolute_canonical_lz4_regression_pct_by_pair": [1.037244, 0.887468],
+          "decision": "absolute latency stayed within the ceiling, but normalized Blockstore latency regressed in both pairs"
+        }
+      ],
+      "security": "the prototype changed only encoder selection over bounded reference-Solana values and reused the existing legacy fallback plus official parser; the checked frame header, compression-ratio bound, exact decompressed-length check, and audited libLZ4 boundary were unchanged; no unsafe block, dependency, parser shortcut, unchecked offset, sidecar, or partial-output behavior was added",
+      "validation": "all candidates compiled with Rust 1.98.0, reconstructed every selected representation to canonical bytes, and preserved exact modeled wire-block counts; final formatting and strict all-target lencode Clippy passed; the diagnostic target was removed and all lencode and Agave production files were restored to their protected hashes",
+      "source_sha256": {
+        "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_ledger_manifest": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
         "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
         "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
         "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
