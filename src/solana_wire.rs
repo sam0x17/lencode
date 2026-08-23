@@ -732,27 +732,34 @@ fn canonical_solana_transaction_serialized_size(
                 &mut size,
                 canonical_short_u16_serialized_size(message.address_table_lookups.len())?,
             )?;
+            let mut lookup_payload_size = 0u64;
             for lookup in &message.address_table_lookups {
                 let writable_len = lookup.writable_indexes.len();
                 let readonly_len = lookup.readonly_indexes.len();
-                if (writable_len | readonly_len) < 0x80 {
-                    let lookup_size = writable_len
+                let lookup_size = if (writable_len | readonly_len) < 0x80 {
+                    writable_len
                         .checked_add(readonly_len)
                         .and_then(|size| size.checked_add(solana_pubkey::PUBKEY_BYTES + 2))
-                        .ok_or(Error::IncorrectLength)?;
-                    checked_add_canonical_size(&mut size, lookup_size)?;
-                    continue;
-                }
-                checked_add_canonical_size(&mut size, solana_pubkey::PUBKEY_BYTES)?;
-                checked_add_canonical_size(
-                    &mut size,
-                    canonical_short_payload_serialized_size(&lookup.writable_indexes)?,
-                )?;
-                checked_add_canonical_size(
-                    &mut size,
-                    canonical_short_payload_serialized_size(&lookup.readonly_indexes)?,
-                )?;
+                        .ok_or(Error::IncorrectLength)?
+                } else {
+                    let writable_size =
+                        canonical_short_payload_serialized_size(&lookup.writable_indexes)?;
+                    let readonly_size =
+                        canonical_short_payload_serialized_size(&lookup.readonly_indexes)?;
+                    solana_pubkey::PUBKEY_BYTES
+                        .checked_add(writable_size)
+                        .and_then(|size| size.checked_add(readonly_size))
+                        .ok_or(Error::IncorrectLength)?
+                };
+                let lookup_size = u32::try_from(lookup_size).map_err(|_| Error::IncorrectLength)?;
+                // The validated u16 lookup count and u32 per-lookup size make
+                // overflow of this u64 subtotal impossible.
+                lookup_payload_size += u64::from(lookup_size);
             }
+            checked_add_canonical_size(
+                &mut size,
+                usize::try_from(lookup_payload_size).map_err(|_| Error::IncorrectLength)?,
+            )?;
             Ok(size)
         }
         VersionedMessage::V1(message) => {
@@ -2507,6 +2514,42 @@ mod tests {
                 usize::try_from(wincode::serialized_size(&transaction).unwrap()).unwrap()
             );
         }
+
+        let mut maximal_count = VersionedTransaction {
+            signatures: Vec::new(),
+            message: VersionedMessage::V0(V0Message {
+                header,
+                account_keys: Vec::new(),
+                recent_blockhash: Hash::new_from_array([4u8; 32]),
+                instructions: Vec::new(),
+                address_table_lookups: vec![
+                    MessageAddressTableLookup {
+                        account_key,
+                        writable_indexes: Vec::new(),
+                        readonly_indexes: Vec::new(),
+                    };
+                    usize::from(u16::MAX)
+                ],
+            }),
+        };
+        assert_eq!(
+            canonical_solana_transaction_serialized_size(&maximal_count).unwrap(),
+            usize::try_from(wincode::serialized_size(&maximal_count).unwrap()).unwrap()
+        );
+        let VersionedMessage::V0(message) = &mut maximal_count.message else {
+            unreachable!();
+        };
+        message
+            .address_table_lookups
+            .push(MessageAddressTableLookup {
+                account_key,
+                writable_indexes: Vec::new(),
+                readonly_indexes: Vec::new(),
+            });
+        assert!(matches!(
+            canonical_solana_transaction_serialized_size(&maximal_count),
+            Err(Error::IncorrectLength)
+        ));
 
         let oversized = VersionedTransaction {
             signatures: Vec::new(),
