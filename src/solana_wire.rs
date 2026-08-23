@@ -466,7 +466,7 @@ fn transcode_canonical_lz4_entry_batch_inner(
 #[derive(Clone, Copy, Debug)]
 pub struct SolanaCanonicalLz4EntryBatchDecoder<'a> {
     compressed: &'a [u8],
-    canonical_len: usize,
+    canonical_len: i32,
 }
 
 #[cfg(feature = "solana-types")]
@@ -482,35 +482,37 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
             return Err(Error::InvalidData);
         }
         let compressed = &input[SOLANA_CANONICAL_LZ4_HEADER_BYTES..];
-        let canonical_len = usize::try_from(u32::from_le_bytes(
+        let canonical_len = i32::from_le_bytes(
             compressed[..4]
                 .try_into()
                 .expect("checked canonical LZ4 length prefix"),
-        ))
-        .map_err(|_| Error::IncorrectLength)?;
-        if canonical_len > max_canonical_bytes {
+        );
+        let canonical_len_usize =
+            usize::try_from(canonical_len).map_err(|_| Error::IncorrectLength)?;
+        if canonical_len_usize > max_canonical_bytes {
             return Err(Error::DecodeLimitExceeded);
         }
         Ok(Self {
-            compressed,
+            compressed: &compressed[4..],
             canonical_len,
         })
     }
 
     /// Returns the exact output length required by [`Self::decompress_into`].
     pub const fn canonical_len(&self) -> usize {
-        self.canonical_len
+        self.canonical_len as usize
     }
 
     /// Decompresses into an initialized slice of exactly the advertised size.
     #[inline]
     pub fn decompress_into(&self, output: &mut [u8]) -> Result<usize> {
-        if output.len() != self.canonical_len {
+        if output.len() != self.canonical_len() {
             return Err(Error::IncorrectLength);
         }
-        let written = lz4_block::decompress_to_buffer(self.compressed, None, output)
-            .map_err(|_| Error::InvalidData)?;
-        if written != self.canonical_len {
+        let written =
+            lz4_block::decompress_to_buffer(self.compressed, Some(self.canonical_len), output)
+                .map_err(|_| Error::InvalidData)?;
+        if written != self.canonical_len() {
             return Err(Error::InvalidData);
         }
         Ok(written)
@@ -2137,6 +2139,13 @@ mod tests {
         assert_eq!(direct, expected);
         assert!(matches!(
             decoder.decompress_into(&mut direct[..expected.len() - 1]),
+            Err(Error::IncorrectLength)
+        ));
+        let mut negative_size = encoded.clone();
+        negative_size[SOLANA_CANONICAL_LZ4_HEADER_BYTES..SOLANA_CANONICAL_LZ4_HEADER_BYTES + 4]
+            .copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(matches!(
+            SolanaCanonicalLz4EntryBatchDecoder::new(&negative_size, usize::MAX),
             Err(Error::IncorrectLength)
         ));
 
