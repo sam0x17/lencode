@@ -1,12 +1,12 @@
 {
-  "version": 110,
+  "version": 111,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T16:41:58Z",
+  "updated_at": "2026-08-23T16:58:38Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 64,
+    "version": 65,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1592,6 +1592,104 @@
         "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
       },
       "validation": "Rust 1.98.0 formatting passed; 219 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default all-target, std-only library, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, focused sizing, end-to-end, Blockstore, and turbine library Clippy passed"
+    },
+    "post_iteration_47_safe_frontier_screen": {
+      "status": "all candidates reverted",
+      "scope": "lencode-only canonical sizing and writer code; Agave production sources and replacement call sites were unchanged",
+      "retained_focused_profile": {
+        "data_sha256": "ee3e867f89d9f5ae618900b0d996c154d06f7c93f6a38a2ea40eaa2490de0b6c",
+        "samples": 6056,
+        "lost_samples": 0,
+        "trials": 101,
+        "wincode_median_ns": 35670287,
+        "lencode_median_ns": 22818751,
+        "speedup_vs_wincode": 1.5632,
+        "time_reduction_vs_wincode_pct": 36.029,
+        "self_cycles_pct": {
+          "wincode_entry_size_of": 61.39,
+          "lencode_transaction_size": 26.96
+        }
+      },
+      "retained_end_to_end_profile": {
+        "data_sha256": "5e9803ce5025747e6624e57736b6eab57fe126a7adcd69618dbe53c7fcca4c60",
+        "samples": 21057,
+        "lost_samples": 0,
+        "trials": 31,
+        "wincode_leader_ns": 356540581,
+        "lencode_leader_ns": 226417333,
+        "wincode_validator_ns": 21600988,
+        "lencode_validator_ns": 23309714,
+        "payload_bytes": 33402585,
+        "wire_bytes": 120422016,
+        "self_cycles_pct": {
+          "sha256_blocks": 30.26,
+          "reed_solomon_encode": 23.47,
+          "lz4_compress_fast_ext_state": 3.48,
+          "memmove": 2.25,
+          "lz4_decompress_safe": 0.94,
+          "canonical_addresses": 0.81,
+          "canonical_short_u16": 0.75,
+          "canonical_instructions": 0.41
+        }
+      },
+      "screens": [
+        {
+          "change": "compute the checked prefixed signature size once before dispatching Legacy, V0, and V1 messages",
+          "candidate_binary_sha256": "0a55eb919906538de2252c3333173bbebb89f8969028a070cbe2ac338a26d129",
+          "baseline_medians_ns": { "wincode": 35197076, "lencode": 22554761 },
+          "candidate_medians_ns": { "wincode": 35298956, "lencode": 23186853 },
+          "control_normalized_regression_pct": 2.506,
+          "decision": "inverse-reverted above the 2% ceiling; moving signature work before message dispatch damaged the hot branch schedule"
+        },
+        {
+          "change": "return directly for one instruction when both payloads use one-byte canonical prefixes",
+          "candidate_binary_sha256": "1aa686291c9d56d305b75cdc6c2fbf591c9514341d5e59aadfd1165347714209",
+          "baseline_medians_ns": { "wincode": 35197076, "lencode": 22554761 },
+          "candidate_medians_ns": { "wincode": 35352426, "lencode": 23030202 },
+          "control_normalized_regression_pct": 1.659,
+          "decision": "inverse-reverted because duplicating the instruction body cost more than the loop work it removed"
+        },
+        {
+          "change": "validate and reserve a one-signature canonical section once before safe prefix and signature writes",
+          "candidate_binary_sha256": "d2332ab92fae02cc9f31c60b858cd1f8570952ed45bbb0b6c4459f15307c4fe3",
+          "control_normalized_leader_improvement_pct_by_pair": [-1.365, -0.223],
+          "control_normalized_validator_improvement_pct_by_pair": [0.054, 0.352],
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false,
+          "decision": "inverse-reverted because neither reverse-order pair reached the 1% gate"
+        },
+        {
+          "change": "handle one and two signatures inline before an outlined checked fallback used by the remaining 1.78% of transactions",
+          "candidate_binary_sha256": "156c0b513d071e4813e0703793f0ec11a348ce452d04fc9d9c0682f65ef87624",
+          "baseline_medians_ns": { "wincode": 35197076, "lencode": 22554761 },
+          "candidate_medians_ns": { "wincode": 35396348, "lencode": 23054103 },
+          "control_normalized_regression_pct": 1.638,
+          "decision": "inverse-reverted because the outlined fallback still harmed the transaction function layout"
+        },
+        {
+          "change": "encode one-byte and two-byte canonical short-u16 values before the fallible conversion",
+          "candidate_binary_sha256": "b1db8b2d56512d0d838d1fa69c5cffdfb99e99c4b9b081a8a77aa9e4b033eebc",
+          "control_normalized_leader_improvement_pct_by_pair": [-0.650, -1.036],
+          "control_normalized_validator_improvement_pct_by_pair": [-0.605, -0.244],
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false,
+          "decision": "inverse-reverted because both reverse-order pairs regressed leader latency"
+        }
+      ],
+      "security": "all candidates retained checked bounds before output mutation or entered fast paths whose lengths were intrinsically below the canonical limits. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, or wire behavior was added. Every source patch was inverse-reverted.",
+      "restored_source_sha256": {
+        "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_shredder": "08652377c89783b9e927edcfb953731fefecaee1486877066245e6e3779284e7",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_blockstore_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
+      }
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
