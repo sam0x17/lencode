@@ -859,8 +859,11 @@ fn canonical_short_u16_serialized_size(len: usize) -> Result<usize> {
     if len < 0x80 {
         return Ok(1);
     }
-    let value = u16::try_from(len).map_err(|_| Error::IncorrectLength)?;
-    Ok(if value < 0x4000 { 2 } else { 3 })
+    if len < 0x4000 {
+        return Ok(2);
+    }
+    u16::try_from(len).map_err(|_| Error::IncorrectLength)?;
+    Ok(3)
 }
 
 #[cfg(feature = "solana-types")]
