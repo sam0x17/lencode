@@ -1,12 +1,12 @@
 {
-  "version": 107,
+  "version": 108,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T15:32:15Z",
+  "updated_at": "2026-08-23T15:57:58Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 61,
+    "version": 62,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1262,6 +1262,87 @@
         }
       ],
       "security": "the compression census was read-only and its temporary source was removed. Both code candidates retained checked lengths and exact wire output, and both were fully reverted. Cargo manifests, the lockfile, reference type features, parser behavior, unsafe code, and Agave production sources match the retained baseline."
+    },
+    "post_iteration_45_sizing_and_decoder_screen": {
+      "status": "all candidates reverted",
+      "scope": "lencode-only canonical sizing and writer code; Agave production sources and replacement call sites were unchanged",
+      "same_boundary_blockstore_profile": {
+        "data_sha256": "a2e32d5d66915de248da1d33bebdd422f2f4b45bf961c8edef1a3e9d0e53621f",
+        "samples": 7814,
+        "lost_samples": 0,
+        "trials": 101,
+        "wincode_validator_ns": 30662783,
+        "lencode_validator_ns": 25513483,
+        "lencode_throughput_vs_wincode": 1.2018,
+        "self_cycles_pct": {
+          "transaction_frame_parse": 9.92,
+          "rocksdb_iterator_next": 7.76,
+          "lz4_decompress_safe": 7.42,
+          "sha256_blocks": 6.64,
+          "block_component_parse": 4.25,
+          "memmove": 4.02
+        }
+      },
+      "callgraph_screen": {
+        "data_sha256": "5215edc0686fbea609b9e40464d895340b71c44f88ca5cbf582241ccf69e4e2a",
+        "samples": 1986,
+        "lost_samples": 0,
+        "conclusion": "memcpy and memmove samples were dominated by fixture loading, wincode decoding, and RocksDB setup outside the timed lencode reconstruction loop. The remaining direct lencode decoder cost is standard LZ4_decompress_safe; the larger transaction-frame parse belongs to Agave's checked public parser and is excluded from lencode-specific changes."
+      },
+      "read_only_corpus_census": {
+        "transactions_by_instruction_count_0_1_2_3_4plus": [0, 77015, 1199, 11287, 34717],
+        "instructions": 304976,
+        "short_instructions": 224925,
+        "v0_transactions_by_lookup_count_0_1_2_3_4plus": [14809, 5339, 7854, 5417, 4473],
+        "diagnostic_source_removed": true,
+        "restored_benchmark_sha256": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d"
+      },
+      "screens": [
+        {
+          "change": "move V1 transaction sizing into a non-inlined helper after bounded message aggregation",
+          "candidate_binary_sha256": "9cc9eaf7d3415d07e5350a10d628bd69e72893607b3ef0d4769e6a8c93960b27",
+          "baseline_medians_ns_by_pair": [
+            { "wincode": 35443653, "lencode": 23818440 },
+            { "wincode": 35320503, "lencode": 23674269 }
+          ],
+          "candidate_medians_ns_by_pair": [
+            { "wincode": 35450923, "lencode": 24078780 },
+            { "wincode": 35471034, "lencode": 24036031 }
+          ],
+          "control_normalized_regression_pct_by_pair": [1.072, 1.097],
+          "decision": "reverted because both reverse-order focused pairs regressed"
+        },
+        {
+          "change": "reserve each fixed-width signature and address collection once before safe per-value copies",
+          "candidate_binary_sha256": "771c26753d57856e82d0c633e332e63b9b8430553e26cf220e4a458c8cf7d33c",
+          "control_normalized_leader_regression_pct_by_pair": [0.105, 0.164],
+          "control_normalized_validator_regression_pct_by_pair": [1.185, 1.952],
+          "decision": "reverted because leader work was flat and the second validator pair approached the 2% ceiling"
+        },
+        {
+          "change": "preflight each common short instruction once before safe Vec writes",
+          "candidate_binary_sha256": "d3c8181f16492f2a138795c48cb0b78164b4cd5d502143d668aa3a24af9fb799",
+          "control_normalized_leader_improvement_pct": 0.521,
+          "control_normalized_validator_regression_pct": 2.178,
+          "decision": "reverted after the first exact pair crossed the validator ceiling"
+        },
+        {
+          "change": "size adjacent short instructions in pairs after a full-corpus count census",
+          "candidate_binary_sha256": "44b4d99b0f8e5d204370376bade59291975242b42a05bb6c4791edeed4078071",
+          "forced_message_inline_binary_sha256": "02a4d5d479ed143471c1ac7d6c54b32829d5d6ddb51d88b3258c4ccd8ad3d895",
+          "control_normalized_regression_pct": 9.098,
+          "forced_message_inline_regression_pct": 8.156,
+          "decision": "reverted because both compiler layouts regressed the focused sizing walk"
+        }
+      ],
+      "security": "all screened code retained fallible width checks and exact canonical bytes. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, or wire behavior was added. Every candidate was inverse-reverted, and the temporary census branch was removed before timed candidate builds.",
+      "restored_source_sha256": {
+        "lencode_solana_wire": "79b6e331d3db51eead48e906faece7bb01fed20bb2d922fe700a8a96ccd0097f",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d"
+      }
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
