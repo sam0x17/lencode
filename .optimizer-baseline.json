@@ -1,12 +1,12 @@
 {
-  "version": 78,
+  "version": 79,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-22T22:57:22Z",
+  "updated_at": "2026-08-23T00:07:42Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 33,
+    "version": 34,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -75,13 +75,14 @@
     },
     "lencode_canonical_lz4_path": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
-      "benchmark_source_sha256": "b97b1112c4fa8095e87d4255643b0ba5d3fafe5595e0186d44ae4959aa5d300b",
+      "baseline_benchmark_source_sha256": "b97b1112c4fa8095e87d4255643b0ba5d3fafe5595e0186d44ae4959aa5d300b",
+      "benchmark_source_sha256": "e060d06cebd1535fb776b5e652570a1e4ff33c9684f971537740ca16ca071f81",
       "corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
       "rust_version": "1.98.0",
       "former_agave_binary_sha256": "e50fb3af974c6efe8c5680671f18f5fce601fc90822ad3d5557e9e7355cbff55",
-      "prior_lencode_binary_sha256": "6f0277746726d3f741b73a928a932bdadda904bb0fd22dcc6a45e6bbcb13de62",
-      "lencode_binary_sha256": "9f57bdff6e2b7811feae82ce5977dca0bed694dda94bae2a0a2e26df360c27c2",
-      "lencode_solana_wire_sha256": "477dafee58b98399b67104811ed9994079c72919077a12f85cb7426d948fe2ec",
+      "prior_lencode_binary_sha256": "9f57bdff6e2b7811feae82ce5977dca0bed694dda94bae2a0a2e26df360c27c2",
+      "lencode_binary_sha256": "b04df5b259f10ff06257cbb3982e2a9dd7ac69fc8f507a10fc967dfa8d6c40dd",
+      "lencode_solana_wire_sha256": "0e5bc3280e1b9e2c7efcbee6dae6764375169bd13eb62e4b27370be8a97406db",
       "lencode_cargo_toml_sha256": "54e1453c5c73727ccdbc6a7475510d0a0f0c2d346416ff877cf53841ae301543",
       "lencode_cargo_lock_sha256": "afa5978e217cc619b99b48bb9cee5d59b49f35b2cd19404e7a679032444a6dc6",
       "former_agave_owned_medians_ns": {
@@ -97,19 +98,19 @@
         "canonical_lz4_validator": 24870689
       },
       "lencode_owned_medians_ns": {
-        "wincode_leader": 275617378,
-        "wincode_validator": 22002199,
-        "canonical_lz4_leader": 182986637,
-        "canonical_lz4_validator": 24278417
+        "wincode_leader": 274659262,
+        "wincode_validator": 22017099,
+        "canonical_lz4_leader": 182600553,
+        "canonical_lz4_validator": 24213836
       },
-      "leader_speedup_vs_wincode": 1.506215877,
-      "validator_throughput_vs_wincode": 0.906245205,
+      "leader_speedup_vs_wincode": 1.504153506,
+      "validator_throughput_vs_wincode": 0.909277613,
       "payload_bytes": 30292964,
       "wire_bytes": 80592512,
       "payload_reduction_vs_wincode_pct": 54.507,
       "wire_reduction_vs_wincode_pct": 53.396,
-      "leader_improvement_vs_native_lencode_pct": 5.901,
-      "validator_improvement_vs_native_lencode_pct": 30.276,
+      "leader_improvement_vs_native_lencode_pct": 6.099,
+      "validator_improvement_vs_native_lencode_pct": 30.462,
       "wire_reduction_vs_native_lencode_pct": 26.939,
       "ownership_transition": {
         "leader_absolute_regression_pct": 0.024,
@@ -127,11 +128,44 @@
         "production_fixture_validator_control_normalized_improvement_pct": 2.553,
         "wire_bytes_changed": false
       },
-      "frame": "existing LCSH version 1 canonical-LZ4 flag 1; output is byte-for-byte identical to the former Agave-owned encoder and native flags 2, 4, and 8 remain unchanged",
-      "scope_status": "qualifying lencode-owned codec; Agave only supplies reference entries at the replacement call site and selects the feature-gated format"
+      "selective_wire_recompression": {
+        "production_fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "baseline_medians_ns": {
+          "wincode_leader": 455085176,
+          "wincode_validator": 22244680,
+          "canonical_lz4_leader": 267169854,
+          "canonical_lz4_validator": 23534284
+        },
+        "candidate_medians_ns": {
+          "wincode_leader": 452281946,
+          "wincode_validator": 22160149,
+          "canonical_lz4_leader": 264650246,
+          "canonical_lz4_validator": 23462024
+        },
+        "leader_absolute_improvement_pct": 0.943,
+        "leader_control_normalized_improvement_pct": 0.329,
+        "validator_absolute_improvement_pct": 0.307,
+        "validator_control_normalized_regression_pct": 0.073,
+        "payload_bytes_before": 34593294,
+        "payload_bytes_after": 34564782,
+        "data_shreds_before": 65984,
+        "data_shreds_after": 65152,
+        "coding_shreds_before": 65984,
+        "coding_shreds_after": 65152,
+        "wire_bytes_before": 160407104,
+        "wire_bytes_after": 158384512,
+        "fec_sets_removed": 26,
+        "payload_reduction_pct": 0.082,
+        "wire_reduction_pct": 1.261,
+        "recompression_window": "within 1/18 of the prior configured wire-block boundary",
+        "window_calibration": "1/6, 1/10, 1/16, and 1/18 each removed 26 FEC sets; 1/19 removed 25 and 1/20 removed 24, so 1/18 is the narrowest full-benefit window",
+        "wire_compatibility": "selected frames use FAST(1) inside the existing LCSH version-1 flag-1 LZ4 format; FAST(4), prior FAST(1), and native flags 2, 4, and 8 remain decodable"
+      },
+      "frame": "existing LCSH version 1 canonical-LZ4 flag 1; normal frames use FAST(4) unless optional wire-block-aware FAST(1) recompression removes a complete block, and native flags 2, 4, and 8 remain unchanged",
+      "scope_status": "qualifying lencode-owned codec; Agave only supplies borrowed reference entries and Turbine capacities at the feature-gated wincode replacement site, with no general Agave optimization credited"
     },
     "production_batch_benchmark": {
-      "benchmark_command": "LENCODE_SHRED_RUNS=11 cargo bench --offline -p solana-ledger --bench lencode_shreds_canonical_lz4 -- /tmp/agave-shred-broadcast-batches.bin",
+      "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
       "fixture": {
         "source_path": "/tmp/agave-shred-corpus.bin",
         "source_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
@@ -144,7 +178,7 @@
         "entries": 68392,
         "transactions": 124218,
         "component_bytes": { "min": 56, "median": 29793, "p95": 60502, "max": 61620 },
-        "trials_per_run": 11,
+        "trials_per_run": 31,
         "independent_runs": 3
       },
       "original_baseline": {
@@ -166,22 +200,22 @@
         "codec": "LZ4 FAST(1) for every component"
       },
       "current_baseline": {
-        "wincode_leader": { "value": 455658053, "unit": "ns/1982 components", "range": [454213047, 455759413] },
-        "wincode_validator": { "value": 19545178, "unit": "ns/1982 components", "range": [19449218, 19616908] },
-        "lencode_leader": { "value": 267159448, "unit": "ns/1982 components", "range": [266952277, 267877810] },
-        "lencode_validator": { "value": 22970090, "unit": "ns/1982 components", "range": [22925000, 23068320] },
+        "wincode_leader": { "value": 452281946, "unit": "ns/1982 components", "range": [452169536, 453804803] },
+        "wincode_validator": { "value": 22160149, "unit": "ns/1982 components", "range": [22124829, 22208789] },
+        "lencode_leader": { "value": 264650246, "unit": "ns/1982 components", "range": [264097874, 264727026] },
+        "lencode_validator": { "value": 23462024, "unit": "ns/1982 components", "range": [23436123, 23472544] },
         "wincode_payload_bytes": 66602807,
-        "lencode_payload_bytes": 34593294,
+        "lencode_payload_bytes": 34564782,
         "wincode_data_shreds": 125472,
         "wincode_coding_shreds": 125472,
-        "lencode_data_shreds": 65984,
-        "lencode_coding_shreds": 65984,
+        "lencode_data_shreds": 65152,
+        "lencode_coding_shreds": 65152,
         "wincode_wire_bytes": 305022432,
-        "lencode_wire_bytes": 160407104,
-        "wire_reduction_vs_wincode_pct": 47.411,
-        "lencode_leader_speedup": 1.706,
-        "lencode_validator_throughput": 0.851,
-        "codec": "LZ4 FAST(4) through the normal two-FEC input limit and FAST(1) above it"
+        "lencode_wire_bytes": 158384512,
+        "wire_reduction_vs_wincode_pct": 48.074,
+        "lencode_leader_speedup": 1.709,
+        "lencode_validator_throughput": 0.945,
+        "codec": "FAST(4) for normal components, selective FAST(1) within 1/18 of a removable wire-block boundary, and FAST(1) for oversized components"
       },
       "canonical_coalescing_trial": {
         "change": "for canonical LZ4 only, do not exit at a tightly packed FEC boundary until the existing two-typical-FEC target is reached; legacy wincode keeps the exact prior boundary behavior",
@@ -1781,6 +1815,64 @@
         "wire_bytes_changed": false,
         "unsafe_code_added": false,
         "validation": "three alternating CPU-affined 31-trial final-binary pairs reconstructed exact canonical bytes for 100 blocks, 68,392 entries, and 124,218 transactions; focused tests cover reuse from both longer and shorter initialized outputs and error clearing; 213 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, all-feature all-target checks, formatting, lencode strict Clippy, and Agave replacement-benchmark strict Clippy passed"
+      },
+      {
+        "iteration": 34,
+        "optimization": "selectively recompress canonical LZ4 frames near configured wire-block boundaries",
+        "kept": true,
+        "integration": "lencode SolanaCanonicalLz4EntryBatchEncoder owns the selection and second pass; the Agave replacement site only supplies regular and final Turbine capacities",
+        "baseline_binary_sha256": "9f57bdff6e2b7811feae82ce5977dca0bed694dda94bae2a0a2e26df360c27c2",
+        "candidate_binary_sha256": "b04df5b259f10ff06257cbb3982e2a9dd7ac69fc8f507a10fc967dfa8d6c40dd",
+        "baseline_benchmark_source_sha256": "b97b1112c4fa8095e87d4255643b0ba5d3fafe5595e0186d44ae4959aa5d300b",
+        "candidate_benchmark_source_sha256": "e060d06cebd1535fb776b5e652570a1e4ff33c9684f971537740ca16ca071f81",
+        "primary_fixture_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "primary_baseline_medians_ns": {
+          "wincode_leader": 274995763,
+          "wincode_validator": 22000719,
+          "canonical_lz4_leader": 182932594,
+          "canonical_lz4_validator": 24282416
+        },
+        "primary_candidate_medians_ns": {
+          "wincode_leader": 274659262,
+          "wincode_validator": 22017099,
+          "canonical_lz4_leader": 182600553,
+          "canonical_lz4_validator": 24213836
+        },
+        "primary_leader_absolute_improvement_pct": 0.182,
+        "primary_leader_control_normalized_improvement_pct": 0.059,
+        "primary_validator_absolute_improvement_pct": 0.282,
+        "primary_validator_control_normalized_improvement_pct": 0.357,
+        "primary_payload_bytes": 30292964,
+        "primary_turbine_wire_bytes": 80592512,
+        "production_fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "production_baseline_medians_ns": {
+          "wincode_leader": 455085176,
+          "wincode_validator": 22244680,
+          "canonical_lz4_leader": 267169854,
+          "canonical_lz4_validator": 23534284
+        },
+        "production_candidate_medians_ns": {
+          "wincode_leader": 452281946,
+          "wincode_validator": 22160149,
+          "canonical_lz4_leader": 264650246,
+          "canonical_lz4_validator": 23462024
+        },
+        "production_leader_absolute_improvement_pct": 0.943,
+        "production_leader_control_normalized_improvement_pct": 0.329,
+        "production_validator_absolute_improvement_pct": 0.307,
+        "production_validator_control_normalized_regression_pct": 0.073,
+        "production_payload_bytes_before": 34593294,
+        "production_payload_bytes_after": 34564782,
+        "production_turbine_wire_bytes_before": 160407104,
+        "production_turbine_wire_bytes_after": 158384512,
+        "production_fec_sets_removed": 26,
+        "production_wire_reduction_pct": 1.261,
+        "window_calibration": "1/6, 1/10, 1/16, and 1/18 each removed 26 FEC sets; 1/19 removed 25 and 1/20 removed 24, so 1/18 is the narrowest full-benefit window",
+        "wire_compatibility": "the selected FAST(1) output uses the existing LCSH version-1 flag-1 format and the decoder is unchanged; ordinary FAST(4), oversized FAST(1), and native flags 2, 4, and 8 remain accepted",
+        "copy_effect": "the optional second compression pass shares the caller-owned canonical and output arena; no per-entry or per-transaction buffer is added",
+        "scope_effect": "the compression policy and block-count decision are lencode-owned; Agave has no credited general hot-path optimization",
+        "unsafe_code_added": false,
+        "validation": "three alternating CPU-affined 31-trial exact-final-binary pairs on both fixtures reconstructed exact canonical bytes; the production fixture removed 26 data and 26 coding FEC sets while the full-slot fixture retained exact output; 214 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, all-feature all-target checks, formatting, lencode strict Clippy, and Agave replacement-benchmark strict Clippy passed"
       }
     ],
     "failed_attempts": [
@@ -2096,6 +2188,14 @@
       {
         "optimization": "emit common one-byte-length canonical Solana instructions in one checked append",
         "reason": "three alternating CPU-affined seven-trial primary-corpus pairs improved median control-normalized leader and validator time by only 0.07% and 0.16%, with one leader pair regressing 1.43%; the common-case branch was removed below the 1% gate"
+      },
+      {
+        "optimization": "lower normal canonical LZ4 acceleration from FAST(4) to FAST(3)",
+        "reason": "three alternating CPU-affined seven-trial production-fixture pairs reduced compressed payload by 1.38% but Turbine wire by only 0.48%, while median control-normalized leader and validator latency regressed 1.23% and 2.64%; FAST(4) was restored"
+      },
+      {
+        "optimization": "reuse the prior canonical LZ4 destination bound as front headroom",
+        "reason": "three production-fixture pairs were flat after normalization, while two stable full-slot pairs regressed normalized leader time by about 1.0-1.2%; serializing behind the reusable destination changed cache behavior enough to cancel the removed final frame move, so the arena direction was restored"
       }
     ],
     "full_resets": [
@@ -2185,6 +2285,12 @@
         "reason": "one candidate process reported 42.787 ms validator latency while the surrounding candidate range was 40.489-40.596 ms and the encoder-only patch cannot affect the measured validator path",
         "reruns": 1,
         "resolution": "discarded the isolated outlier and replaced it with a clean 31-trial candidate process before taking three-pair medians"
+      },
+      {
+        "at_iteration": 34,
+        "reason": "two production pairs contained separate 275.351 ms canonical and 465.303 ms wincode leader outliers, and one full-slot pair contained a 22.602 ms wincode validator outlier",
+        "reruns": 6,
+        "resolution": "discarded all three contaminated pairs and replaced each in the same process order before calculating the final three-pair medians"
       }
     ]
   },
