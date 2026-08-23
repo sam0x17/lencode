@@ -1,12 +1,12 @@
 {
-  "version": 90,
+  "version": 91,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T03:47:47Z",
+  "updated_at": "2026-08-23T06:34:17Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 45,
+    "version": 46,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -200,10 +200,10 @@
         "codec": "LZ4 FAST(1) for every component"
       },
       "current_baseline": {
-        "wincode_leader": { "value": 452281946, "unit": "ns/1982 components", "range": [452169536, 453804803] },
-        "wincode_validator": { "value": 22160149, "unit": "ns/1982 components", "range": [22124829, 22208789] },
-        "lencode_leader": { "value": 264650246, "unit": "ns/1982 components", "range": [264097874, 264727026] },
-        "lencode_validator": { "value": 23462024, "unit": "ns/1982 components", "range": [23436123, 23472544] },
+        "wincode_leader": { "value": 453560030, "unit": "ns/1982 components", "range": [451150069, 454528483] },
+        "wincode_validator": { "value": 22233117, "unit": "ns/1982 components", "range": [22207468, 22267048] },
+        "lencode_leader": { "value": 265937430, "unit": "ns/1982 components", "range": [264301970, 267585029] },
+        "lencode_validator": { "value": 23403971, "unit": "ns/1982 components", "range": [23360702, 23447452] },
         "wincode_payload_bytes": 66602807,
         "lencode_payload_bytes": 34564782,
         "wincode_data_shreds": 125472,
@@ -213,8 +213,8 @@
         "wincode_wire_bytes": 305022432,
         "lencode_wire_bytes": 158384512,
         "wire_reduction_vs_wincode_pct": 48.074,
-        "lencode_leader_speedup": 1.709,
-        "lencode_validator_throughput": 0.945,
+        "lencode_leader_speedup": 1.706,
+        "lencode_validator_throughput": 0.950,
         "codec": "FAST(4) for normal components, selective FAST(1) within 1/18 of a removable wire-block boundary, and FAST(1) for oversized components"
       },
       "canonical_coalescing_trial": {
@@ -1044,7 +1044,73 @@
         "wire_bytes_changed": false,
         "unsafe_code_added": false
       },
-      "conclusion": "lencode-specific framed-input reuse improved canonical Blockstore loading by 8.033%, shared zero-copy parser storage added 2.007% after control normalization, and known-size raw-block decode adds another 1.315%; the broader borrowed RocksDB scan is excluded from lencode credit"
+      "uninitialized_spare_capacity_decode_result": {
+        "change": "decompress canonical LZ4 bytes directly into caller-owned Vec and BytesMut spare capacity, then expose them only after exact decompression success",
+        "scope": "lencode owns frame validation, the audited LZ4 FFI call, and safe container-length updates; Agave replaces resize-plus-decode only inside the canonical-lencode adapter",
+        "protocol": "median of three paired independent processes on logical CPU 28, each with 31 alternating warmed trials per format and normalized to its wincode control",
+        "baseline": {
+          "binary_sha256": "f29b3ff6c88fc39480858c027577d572bc6f616ceb5c339d20b783331fcd0521",
+          "wincode_validator": { "value": 27654877, "unit": "ns/100 Blockstore slots", "range": [27605646, 27795737] },
+          "lencode_validator": { "value": 28771980, "unit": "ns/100 Blockstore slots", "range": [28758480, 29016301] }
+        },
+        "candidate": {
+          "binary_sha256": "256f518e6ef0d74aa92c4df83c034c9c1f6fa175e36db2fcff9caf6267d2cf35",
+          "wincode_validator": { "value": 27474466, "unit": "ns/100 Blockstore slots", "range": [27466486, 27516145] },
+          "lencode_validator": { "value": 27974527, "unit": "ns/100 Blockstore slots", "range": [27863737, 27979087] },
+          "lencode_absolute_improvement_pct": 2.772,
+          "paired_control_normalized_improvement_pct": [2.666, 2.220, 2.463],
+          "median_control_normalized_improvement_pct": 2.463,
+          "paired_latency_over_wincode_pct": [1.446, 1.682, 1.820],
+          "median_latency_over_wincode_pct": 1.682,
+          "median_throughput_vs_wincode": 0.983454
+        },
+        "end_to_end_safety": {
+          "baseline_binary_sha256": "f0e2ff70e38624a32ffee6859ecfb70a510fcb1750c2f2de2406c817c880d267",
+          "candidate_binary_sha256": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+          "baseline_medians_ns": {
+            "wincode_leader": 453627113,
+            "wincode_validator": 22240918,
+            "lencode_leader": 265533447,
+            "lencode_validator": 23599782
+          },
+          "candidate_medians_ns": {
+            "wincode_leader": 453560030,
+            "wincode_validator": 22233117,
+            "lencode_leader": 265937430,
+            "lencode_validator": 23403971
+          },
+          "paired_leader_control_normalized_improvement_pct": [-0.769, -0.745, 0.651],
+          "median_leader_control_normalized_regression_pct": 0.745,
+          "paired_validator_control_normalized_improvement_pct": [1.015, 0.504, 0.840],
+          "median_validator_control_normalized_improvement_pct": 0.840,
+          "payload_bytes": 34564782,
+          "wire_bytes": 158384512,
+          "wire_bytes_changed": false
+        },
+        "safety": {
+          "boundary": "one private lencode helper calls LZ4_decompress_safe with source and destination pointers derived from Rust borrows",
+          "lengths": "construction rejects negative canonical lengths, canonical lengths above the caller limit, and compressed lengths that do not fit i32; every destination slice has exactly the advertised canonical length",
+          "aliasing": "safe callers hold the frame immutably and the destination mutably, preventing overlap",
+          "initialization": "the destination remains MaybeUninit and outside the visible container length until LZ4 returns the exact canonical length; errors retain the prior visible bytes"
+        },
+        "copy_effect": "Vec transcoding and the shared BytesMut parser arena skip output zero-fill; the Blockstore path still splits reference-counted parser storage without copying canonical bytes",
+        "wire_compatibility": "encoding and frame parsing are unchanged, and all runs retained exact payload, shred, and Turbine wire totals",
+        "source_sha256": {
+          "lencode_solana_wire": "47db374b91ec81dfa3a965cd3c4cacb7954e0e84d773c564f540736b5b909c9e",
+          "lencode_cargo_toml": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+          "lencode_cargo_lock": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+          "blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+          "production_codec": "1a96c826d5b9bfcce246683951d0af637563032b026ad9eaee8db68c33a874b5",
+          "frozen_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+          "frozen_end_to_end_benchmark": "e060d06cebd1535fb776b5e652570a1e4ff33c9684f971537740ca16ca071f81"
+        },
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "dependencies": "optional bytes 1 and direct lz4-sys 1.11.1 dependencies are enabled only by solana-types",
+        "public_api_change": "additive safe Vec and BytesMut append methods",
+        "unsafe_code_added": true,
+        "validation": "214 lencode unit tests, 8 integration tests, and 5 doctests passed with one ignored; no-default and std-only checks, formatting, and all-feature all-target strict Clippy passed; 348 Agave ledger tests passed with 3 ignored, and strict Clippy passed for the ledger library and both frozen benchmarks"
+      },
+      "conclusion": "lencode-specific framed-input reuse improved canonical Blockstore loading by 8.033%, shared parser storage added 2.007%, known-size raw-block decode added 1.315%, and uninitialized spare-capacity decode added 2.463% after control normalization; canonical decode is now 1.682% slower than wincode at the same Blockstore boundary"
     },
     "history": [
       {
@@ -2018,6 +2084,42 @@
         "scope_effect": "the compression policy and block-count decision are lencode-owned; Agave has no credited general hot-path optimization",
         "unsafe_code_added": false,
         "validation": "three alternating CPU-affined 31-trial exact-final-binary pairs on both fixtures reconstructed exact canonical bytes; the production fixture removed 26 data and 26 coding FEC sets while the full-slot fixture retained exact output; 214 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, all-feature all-target checks, formatting, lencode strict Clippy, and Agave replacement-benchmark strict Clippy passed"
+      },
+      {
+        "iteration": 35,
+        "optimization": "decode canonical LZ4 frames into uninitialized caller spare capacity",
+        "commit": null,
+        "kept": true,
+        "integration": "lencode owns the audited FFI boundary and safe Vec and BytesMut APIs; Agave changes one canonical-lencode adapter call from resize-plus-decode to spare-capacity decode",
+        "baseline_binary_sha256": {
+          "end_to_end": "f0e2ff70e38624a32ffee6859ecfb70a510fcb1750c2f2de2406c817c880d267",
+          "blockstore": "f29b3ff6c88fc39480858c027577d572bc6f616ceb5c339d20b783331fcd0521"
+        },
+        "candidate_binary_sha256": {
+          "end_to_end": "2e27d706787d552626c9e1286ea6fa0382f8e22b9dad6db6af8fc3e53a6d8c27",
+          "blockstore": "256f518e6ef0d74aa92c4df83c034c9c1f6fa175e36db2fcff9caf6267d2cf35"
+        },
+        "benchmark_source_sha256": {
+          "end_to_end": "e060d06cebd1535fb776b5e652570a1e4ff33c9684f971537740ca16ca071f81",
+          "blockstore": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d"
+        },
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "blockstore_control_normalized_improvement_pct": [2.666, 2.220, 2.463],
+        "blockstore_median_control_normalized_improvement_pct": 2.463,
+        "blockstore_current_latency_over_wincode_pct": 1.682,
+        "end_to_end_leader_control_normalized_improvement_pct": [-0.769, -0.745, 0.651],
+        "end_to_end_validator_control_normalized_improvement_pct": [1.015, 0.504, 0.840],
+        "end_to_end_median_validator_control_normalized_improvement_pct": 0.840,
+        "current_leader_speedup_vs_wincode": 1.706,
+        "current_validator_throughput_vs_wincode": 0.950,
+        "payload_bytes": 34564782,
+        "turbine_wire_bytes": 158384512,
+        "copy_effect": "lencode writes decompressed bytes directly into Vec or BytesMut spare capacity and marks them initialized only on exact success; the retained BytesMut arena still hands parser views reference-counted segments without a canonical-byte copy",
+        "safety": "the private LZ4_decompress_safe boundary receives checked i32 lengths and disjoint borrowed regions of exact size; malformed input cannot expose partial output because container lengths advance only after an exact return",
+        "wire_compatibility": "encoder output and decoder framing are unchanged; every paired process retained exact payload, data-shred, coding-shred, and Turbine wire totals",
+        "scope_effect": "all decoding logic and unsafe operations are in lencode; the single Agave source change is inside the canonical-lencode replacement adapter",
+        "unsafe_code_added": true,
+        "validation": "three alternating CPU-affined 31-trial exact-binary pairs for both production end-to-end and Blockstore boundaries; 214 lencode unit tests, 8 integration tests, and 5 doctests passed with one ignored; no-default and std-only checks, formatting, and all-feature all-target strict Clippy passed; 348 Agave ledger tests passed with 3 ignored, and strict Clippy passed for the ledger library and both benchmark targets"
       }
     ],
     "failed_attempts": [

@@ -33,6 +33,9 @@
 
 use std::{sync::Arc, vec::Vec};
 
+#[cfg(feature = "solana-types")]
+use std::mem::MaybeUninit;
+
 use crate::{
     Decode, Lencode, Result,
     bytes::{zstd_content_size, zstd_decompress_into},
@@ -412,50 +415,13 @@ pub fn transcode_canonical_lz4_entry_batch(
     output: &mut Vec<u8>,
     max_canonical_bytes: usize,
 ) -> Result<usize> {
-    let result = transcode_canonical_lz4_entry_batch_inner(input, output, max_canonical_bytes);
+    output.clear();
+    let result = SolanaCanonicalLz4EntryBatchDecoder::new(input, max_canonical_bytes)
+        .and_then(|decoder| decoder.decompress_append_to_vec(output));
     if result.is_err() {
         output.clear();
     }
     result
-}
-
-#[cfg(feature = "solana-types")]
-fn transcode_canonical_lz4_entry_batch_inner(
-    input: &[u8],
-    output: &mut Vec<u8>,
-    max_canonical_bytes: usize,
-) -> Result<usize> {
-    if input.len() < SOLANA_CANONICAL_LZ4_HEADER_BYTES + 4
-        || input[..4] != SOLANA_ENTRY_BATCH_MAGIC
-        || input[4] != SOLANA_ENTRY_BATCH_VERSION
-        || input[5] != SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG
-    {
-        return Err(Error::InvalidData);
-    }
-    let compressed = &input[SOLANA_CANONICAL_LZ4_HEADER_BYTES..];
-    let original_len = usize::try_from(u32::from_le_bytes(
-        compressed[..4]
-            .try_into()
-            .expect("checked canonical LZ4 length prefix"),
-    ))
-    .map_err(|_| Error::IncorrectLength)?;
-    if original_len > max_canonical_bytes {
-        return Err(Error::DecodeLimitExceeded);
-    }
-    output
-        .try_reserve(original_len.saturating_sub(output.len()))
-        .map_err(|_| Error::DecodeLimitExceeded)?;
-    if output.len() < original_len {
-        output.resize(original_len, 0);
-    } else {
-        output.truncate(original_len);
-    }
-    let written = lz4_block::decompress_to_buffer(compressed, None, output)
-        .map_err(|_| Error::InvalidData)?;
-    if written != original_len {
-        return Err(Error::InvalidData);
-    }
-    Ok(written)
 }
 
 /// A validated canonical-LZ4 entry-batch frame ready to decompress.
@@ -466,6 +432,7 @@ fn transcode_canonical_lz4_entry_batch_inner(
 #[derive(Clone, Copy, Debug)]
 pub struct SolanaCanonicalLz4EntryBatchDecoder<'a> {
     compressed: &'a [u8],
+    compressed_len: i32,
     canonical_len: i32,
 }
 
@@ -492,8 +459,11 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
         if canonical_len_usize > max_canonical_bytes {
             return Err(Error::DecodeLimitExceeded);
         }
+        let compressed = &compressed[4..];
+        let compressed_len = i32::try_from(compressed.len()).map_err(|_| Error::IncorrectLength)?;
         Ok(Self {
-            compressed: &compressed[4..],
+            compressed,
+            compressed_len,
             canonical_len,
         })
     }
@@ -516,6 +486,74 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
             return Err(Error::InvalidData);
         }
         Ok(written)
+    }
+
+    /// Appends the decompressed bytes without initializing spare capacity first.
+    ///
+    /// Existing bytes are retained. On error, the vector length and its existing
+    /// bytes are unchanged.
+    #[inline]
+    pub fn decompress_append_to_vec(&self, output: &mut Vec<u8>) -> Result<usize> {
+        let canonical_len = self.canonical_len();
+        let new_len = output
+            .len()
+            .checked_add(canonical_len)
+            .ok_or(Error::DecodeLimitExceeded)?;
+        output
+            .try_reserve(canonical_len)
+            .map_err(|_| Error::DecodeLimitExceeded)?;
+        self.decompress_into_uninit(&mut output.spare_capacity_mut()[..canonical_len])?;
+        // SAFETY: exact decompression success initialized every byte between the
+        // old length and `new_len`, which is within the reserved capacity.
+        unsafe { output.set_len(new_len) };
+        Ok(canonical_len)
+    }
+
+    /// Appends into already reserved [`bytes::BytesMut`] spare capacity.
+    ///
+    /// Returns [`Error::WriterOutOfSpace`] without changing `output` when its
+    /// spare capacity is shorter than [`Self::canonical_len`]. Decompression
+    /// errors also leave the visible length and existing bytes unchanged.
+    #[inline]
+    pub fn decompress_append_to_bytes_mut(&self, output: &mut bytes::BytesMut) -> Result<usize> {
+        let canonical_len = self.canonical_len();
+        let new_len = output
+            .len()
+            .checked_add(canonical_len)
+            .ok_or(Error::DecodeLimitExceeded)?;
+        if output.capacity() - output.len() < canonical_len {
+            return Err(Error::WriterOutOfSpace);
+        }
+        self.decompress_into_uninit(&mut output.spare_capacity_mut()[..canonical_len])?;
+        // SAFETY: exact decompression success initialized every byte between the
+        // old length and `new_len`, and the capacity check bounds `new_len`.
+        unsafe { output.set_len(new_len) };
+        Ok(canonical_len)
+    }
+
+    #[inline]
+    fn decompress_into_uninit(&self, output: &mut [MaybeUninit<u8>]) -> Result<usize> {
+        if output.len() != self.canonical_len() {
+            return Err(Error::IncorrectLength);
+        }
+        // SAFETY: `new` checked that both lengths fit the signed C parameters.
+        // The immutable frame borrow and mutable destination borrow cannot
+        // overlap in safe Rust. `output` provides exactly `canonical_len`
+        // writable bytes, and LZ4_decompress_safe bounds all reads and writes
+        // by the supplied lengths, including for malformed input. Callers expose
+        // the destination only after the return value equals `canonical_len`.
+        let written = unsafe {
+            lz4_sys::LZ4_decompress_safe(
+                self.compressed.as_ptr().cast(),
+                output.as_mut_ptr().cast(),
+                self.compressed_len,
+                self.canonical_len,
+            )
+        };
+        if written != self.canonical_len {
+            return Err(Error::InvalidData);
+        }
+        Ok(written as usize)
     }
 }
 
@@ -2137,6 +2175,42 @@ mod tests {
             expected.len()
         );
         assert_eq!(direct, expected);
+
+        let mut appended = vec![17, 18];
+        assert_eq!(
+            decoder.decompress_append_to_vec(&mut appended).unwrap(),
+            expected.len()
+        );
+        assert_eq!(&appended[..2], &[17, 18]);
+        assert_eq!(&appended[2..], expected);
+
+        let mut shared = bytes::BytesMut::with_capacity(expected.len() + 2);
+        shared.extend_from_slice(&[17, 18]);
+        assert_eq!(
+            decoder.decompress_append_to_bytes_mut(&mut shared).unwrap(),
+            expected.len()
+        );
+        assert_eq!(&shared[..2], &[17, 18]);
+        assert_eq!(&shared[2..], expected);
+
+        let mut no_spare_capacity = bytes::BytesMut::new();
+        assert!(matches!(
+            decoder.decompress_append_to_bytes_mut(&mut no_spare_capacity),
+            Err(Error::WriterOutOfSpace)
+        ));
+        assert!(no_spare_capacity.is_empty());
+
+        let truncated = &encoded[..encoded.len() - 1];
+        let truncated_decoder =
+            SolanaCanonicalLz4EntryBatchDecoder::new(truncated, expected.len()).unwrap();
+        let mut unchanged = bytes::BytesMut::with_capacity(expected.len() + 2);
+        unchanged.extend_from_slice(&[17, 18]);
+        assert!(matches!(
+            truncated_decoder.decompress_append_to_bytes_mut(&mut unchanged),
+            Err(Error::InvalidData)
+        ));
+        assert_eq!(&unchanged[..], &[17, 18]);
+
         assert!(matches!(
             decoder.decompress_into(&mut direct[..expected.len() - 1]),
             Err(Error::IncorrectLength)
