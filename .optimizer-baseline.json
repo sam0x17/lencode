@@ -1,12 +1,12 @@
 {
-  "version": 106,
+  "version": 107,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T14:59:45Z",
+  "updated_at": "2026-08-23T15:32:15Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 60,
+    "version": 61,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1102,6 +1102,166 @@
       ],
       "security": "all screened forms retained fallible collection-width validation, checked final conversions, and the existing wire layout. A delayed overflowing accumulator was not implemented because it would scan beyond the first cumulative overflow instead of failing immediately. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, wire behavior, or production source change remains.",
       "restored_source_sha256": "9f7cb63942089ab281270ccf38efa119de4aa2cd1f7c6621c96e7125666a3513"
+    },
+    "iteration_44_bounded_message_totals": {
+      "status": "retained",
+      "change": "carry validated Legacy and V0 canonical message totals in u64 through account, instruction, and lookup sizing, then perform one fallible usize conversion per transaction",
+      "scope": "lencode-only exact sizing over parsed reference Solana transactions; Agave sources and replacement call sites are unchanged",
+      "protocol": "logical CPU 28; three reverse-order exact-binary process pairs normalized to each binary's wincode control; focused sizing used 31 alternating warmed trials per sizer and three corpus repetitions per trial, while end-to-end and Blockstore guardrails used 31 alternating warmed trials per format",
+      "paced_fixture": {
+        "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218
+      },
+      "focused_sizing": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode": 35264365, "lencode": 24059566 },
+          { "wincode": 35251126, "lencode": 24073535 },
+          { "wincode": 35305725, "lencode": 24093166 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode": 35227985, "lencode": 23701214 },
+          { "wincode": 35427316, "lencode": 23725054 },
+          { "wincode": 35370836, "lencode": 23681045 }
+        ],
+        "control_normalized_improvement_pct_by_pair": [1.388, 1.938, 1.891],
+        "control_normalized_improvement_pct_median": 1.891,
+        "candidate_time_reduction_vs_wincode_pct_by_pair": [32.720, 33.032, 33.049],
+        "candidate_time_reduction_vs_wincode_pct_median": 33.032,
+        "candidate_speedup_vs_wincode_median": 1.4932,
+        "parity": "every complete and partial receiver boundary matched wincode's exact serialized size in each process"
+      },
+      "focused_profile": {
+        "data_sha256": "52055f4b812c2d194b578034677a23e1f93ecc89e23d7128ec4c71feb0f47e75",
+        "samples": 3275,
+        "lost_samples": 0,
+        "approximate_cycles": 11097054376,
+        "wincode_median_ns": 35655277,
+        "lencode_median_ns": 23904875,
+        "speedup_vs_wincode": 1.4915,
+        "time_reduction_vs_wincode_pct": 32.956,
+        "self_cycles_pct": {
+          "wincode_entry_size_of": 57.26,
+          "lencode_transaction_size": 27.13
+        }
+      },
+      "paced_end_to_end_guardrail": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode_leader": 354279379, "lencode_leader": 224557448, "wincode_validator": 21329766, "lencode_validator": 23034332 },
+          { "wincode_leader": 357384291, "lencode_leader": 225685162, "wincode_validator": 21391016, "lencode_validator": 23172553 },
+          { "wincode_leader": 354301639, "lencode_leader": 224455228, "wincode_validator": 21298476, "lencode_validator": 23076682 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode_leader": 362797200, "lencode_leader": 224025186, "wincode_validator": 21670667, "lencode_validator": 23223992 },
+          { "wincode_leader": 358924876, "lencode_leader": 224767319, "wincode_validator": 21701178, "lencode_validator": 23182643 },
+          { "wincode_leader": 354171009, "lencode_leader": 226039334, "wincode_validator": 21654217, "lencode_validator": 23309093 }
+        ],
+        "control_normalized_leader_improvement_pct_by_pair": [2.579, 0.834, -0.743],
+        "control_normalized_leader_improvement_pct_median": 0.834,
+        "control_normalized_validator_improvement_pct_by_pair": [0.763, 1.386, 0.652],
+        "control_normalized_validator_improvement_pct_median": 0.763,
+        "candidate_leader_speedup_vs_wincode_median": 1.5969,
+        "candidate_validator_throughput_vs_wincode_median": 0.9331,
+        "wincode_payload_bytes": 66599215,
+        "payload_bytes": 33402585,
+        "data_shreds": 49536,
+        "coding_shreds": 49536,
+        "wire_bytes": 120422016,
+        "wire_reduction_vs_wincode_pct": 48.262
+      },
+      "same_boundary_blockstore_guardrail": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode": 30704359, "lencode": 25462071 },
+          { "wincode": 30937281, "lencode": 25512591 },
+          { "wincode": 30773589, "lencode": 25388351 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode": 30490989, "lencode": 25331520 },
+          { "wincode": 30472798, "lencode": 25417580 },
+          { "wincode": 31133421, "lencode": 26178963 }
+        ],
+        "control_normalized_regression_pct_by_pair": [0.183, 1.146, 1.922],
+        "control_normalized_regression_pct_median": 1.146,
+        "candidate_throughput_vs_wincode_median": 1.1989,
+        "interpretation": "the changed sizing function is outside the timed Blockstore read path; this neutral guardrail remains within the 2% ceiling"
+      },
+      "binaries": {
+        "focused_sizing_baseline_sha256": "cd8f6d69271585f78097e18f7178b299e85337a974045e3912f6b7f75b15c9c7",
+        "focused_sizing_candidate_sha256": "0df7b801c543951c09adb145419a434b8412f50d861c4d9c5786fdf19dcb4bd2",
+        "end_to_end_baseline_sha256": "920e8c6ec2e8ca4f0f0ecfcca317d9f12f819b40e07599ced9f028bf9894ab59",
+        "end_to_end_candidate_sha256": "6462e2700514085dde8174d2bf1b0f42d36887365fd233a47db64f6fffc61a29",
+        "blockstore_baseline_sha256": "815904bf2708fde5b5a6dff0a6cc2f9adc60570cbd3b20cc94ac86135dc744ea",
+        "blockstore_candidate_sha256": "94ae1662656a430415c8d02f6caa254d24c1a1f4921f449ed8def96bbcc3fe5a"
+      },
+      "security": "all collection counts first pass canonical short-u16 validation. Signature and account multipliers are bounded by u16::MAX; instruction and lookup subtotals use validated u16 counts and fallible u32 item sizes, so each final u64 sum is bounded. One fallible usize conversion remains at the transaction boundary, preserving 32-bit rejection. A new test cross-checks exact wincode size at u16::MAX account keys and rejects the next count. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, or wire behavior was added.",
+      "source_sha256": {
+        "lencode_solana_wire": "79b6e331d3db51eead48e906faece7bb01fed20bb2d922fe700a8a96ccd0097f",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_shredder": "08652377c89783b9e927edcfb953731fefecaee1486877066245e6e3779284e7",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_blockstore_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
+      },
+      "validation": "Rust 1.98.0 formatting passed; 218 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default all-target, std-only library, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, focused sizing benchmark, and turbine library Clippy passed"
+    },
+    "post_iteration_44_safe_frontier_screen": {
+      "status": "all candidates reverted",
+      "scope": "lencode-only canonical serialization, sizing, and compression policy; Agave production sources and replacement call sites were unchanged",
+      "retained_end_to_end_profile": {
+        "data_sha256": "18b9b7b121ffe3ed343a72637a94d7de0349b1cf31cca96c5d8db6fbf071eedb",
+        "samples": 33558,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_leader": 357154210,
+          "wincode_validator": 21476246,
+          "lencode_leader": 226178344,
+          "lencode_validator": 23211082
+        },
+        "self_cycles_pct": {
+          "sha256_blocks": 29.94,
+          "reed_solomon_encode": 23.65,
+          "lz4_compress_fast_ext_state": 3.47,
+          "wincode_serialize": 2.32,
+          "memmove": 2.06,
+          "lz4_decompress_safe": 0.98,
+          "canonical_short_u16": 0.79,
+          "canonical_addresses": 0.65,
+          "canonical_instructions": 0.51
+        }
+      },
+      "compression_census": {
+        "fast_1_boundary_candidates": 101,
+        "fast_1_wins": 65,
+        "fast_1_losses": 36,
+        "hc_retries_after_fast_1_loss": 30,
+        "hc_retries_removing_a_wire_block": 30,
+        "true_losing_recompressions": 6,
+        "decision": "the current retry policy is useful for 95 of 101 selected boundaries; no canonical length, count, or ratio predicate retained every FAST(1) win while excluding enough false positives, so the diagnostic was removed"
+      },
+      "screens": [
+        {
+          "change": "borrow contiguous signature and address bytes through optional bytemuck support and reference-Solana Pod features",
+          "candidate_binary_sha256": "04aab350388decc22dc96c0b97d9f5832378842a52b458c6979c7a4d7878e2a8",
+          "baseline_medians_ns": { "wincode_leader": 353992728, "lencode_leader": 224425727, "wincode_validator": 21353456, "lencode_validator": 22968572 },
+          "candidate_medians_ns": { "wincode_leader": 355878805, "lencode_leader": 225593802, "wincode_validator": 21418316, "lencode_validator": 23078562 },
+          "control_normalized_leader_improvement_pct": 0.012,
+          "decision": "reverted below the 1% gate; the optional dependency also broadened Agave's lockfile resolution"
+        },
+        {
+          "change": "outline the multi-byte canonical short-u16 writer to shrink the common-path prologue",
+          "candidate_binary_sha256": "f7b47e073cbabacac41e3a15be8a777564683ad2c26bee0a4b90bce84df572e6",
+          "baseline_medians_ns": { "wincode_leader": 354754501, "lencode_leader": 224129506, "wincode_validator": 21430036, "lencode_validator": 23122302 },
+          "candidate_medians_ns": { "wincode_leader": 355584164, "lencode_leader": 224672999, "wincode_validator": 21451887, "lencode_validator": 23134572 },
+          "control_normalized_leader_improvement_pct": -0.009,
+          "decision": "reverted after the exact pair showed no useful movement"
+        }
+      ],
+      "security": "the compression census was read-only and its temporary source was removed. Both code candidates retained checked lengths and exact wire output, and both were fully reverted. Cargo manifests, the lockfile, reference type features, parser behavior, unsafe code, and Agave production sources match the retained baseline."
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },
