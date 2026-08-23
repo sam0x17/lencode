@@ -1,12 +1,12 @@
 {
-  "version": 83,
+  "version": 84,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T02:44:44Z",
+  "updated_at": "2026-08-23T02:51:27Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 38,
+    "version": 39,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2393,6 +2393,10 @@
       {
         "optimization": "decode caller-owned canonical output with lz4-pure-rs 0.1.2",
         "reason": "two alternating CPU-affined seven-trial pairs regressed absolute lencode Blockstore time by 6.684% and 7.135%, or 6.524% and 7.360% after wincode-control normalization; the lencode-only decoder substitution and dependency were removed"
+      },
+      {
+        "optimization": "decode caller-owned canonical output with lz4_flex 0.14.0's optimized checked decoder",
+        "reason": "two alternating CPU-affined seven-trial pairs regressed absolute lencode Blockstore time by 7.603% and 6.991%, or 5.333% and 6.811% after wincode-control normalization; the dependency was removed, and its unchecked mode was excluded because shred bytes are untrusted input"
       }
     ],
     "full_resets": [
