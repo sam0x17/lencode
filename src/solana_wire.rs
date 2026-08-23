@@ -813,6 +813,16 @@ fn canonical_instructions_serialized_size(
 ) -> Result<usize> {
     let mut size = canonical_short_u16_serialized_size(instructions.len())?;
     for instruction in instructions {
+        let accounts_len = instruction.accounts.len();
+        let data_len = instruction.data.len();
+        if (accounts_len | data_len) < 0x80 {
+            let instruction_size = accounts_len
+                .checked_add(data_len)
+                .and_then(|size| size.checked_add(3))
+                .ok_or(Error::IncorrectLength)?;
+            checked_add_canonical_size(&mut size, instruction_size)?;
+            continue;
+        }
         checked_add_canonical_size(&mut size, size_of::<u8>())?;
         checked_add_canonical_size(
             &mut size,
@@ -2366,6 +2376,53 @@ mod tests {
         }
         assert!(matches!(
             canonical_short_u16_serialized_size(usize::from(u16::MAX) + 1),
+            Err(Error::IncorrectLength)
+        ));
+    }
+
+    #[cfg(feature = "solana-types")]
+    #[test]
+    fn canonical_instruction_sizes_cover_short_payload_boundaries() {
+        for (accounts_len, data_len) in [
+            (0, 0),
+            (0x7f, 0x7f),
+            (0x80, 0x7f),
+            (0x7f, 0x80),
+            (0x80, 0x80),
+        ] {
+            let instruction = CompiledInstruction {
+                program_id_index: 0,
+                accounts: vec![0; accounts_len],
+                data: vec![0; data_len],
+            };
+            let expected = canonical_short_u16_serialized_size(1)
+                .unwrap()
+                .checked_add(1)
+                .and_then(|size| {
+                    size.checked_add(
+                        canonical_short_payload_serialized_size(&instruction.accounts).unwrap(),
+                    )
+                })
+                .and_then(|size| {
+                    size.checked_add(
+                        canonical_short_payload_serialized_size(&instruction.data).unwrap(),
+                    )
+                })
+                .unwrap();
+            assert_eq!(
+                canonical_instructions_serialized_size(core::slice::from_ref(&instruction))
+                    .unwrap(),
+                expected
+            );
+        }
+
+        let oversized = CompiledInstruction {
+            program_id_index: 0,
+            accounts: vec![0; usize::from(u16::MAX) + 1],
+            data: Vec::new(),
+        };
+        assert!(matches!(
+            canonical_instructions_serialized_size(core::slice::from_ref(&oversized)),
             Err(Error::IncorrectLength)
         ));
     }
