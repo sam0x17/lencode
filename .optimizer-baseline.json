@@ -1,12 +1,12 @@
 {
-  "version": 109,
+  "version": 110,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T16:17:33Z",
+  "updated_at": "2026-08-23T16:41:58Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 63,
+    "version": 64,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1466,6 +1466,132 @@
         "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
       },
       "validation": "Rust 1.98.0 formatting passed; 218 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default all-target, std-only library, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, focused sizing, end-to-end, Blockstore, and turbine library Clippy passed"
+    },
+    "iteration_47_one_signature_size": {
+      "status": "retained",
+      "change": "return the exact 65-byte canonical signature section for one-signature Legacy and V0 transactions before the checked general-count path",
+      "scope": "lencode-only exact sizing over parsed reference Solana transactions; Agave production sources and replacement call sites are unchanged",
+      "protocol": "logical CPU 28; three reverse-order exact-binary focused and Blockstore pairs normalized to each binary's wincode control; the end-to-end guardrail used three stable 31-trial pairs after discarding one non-reproducing candidate leader outlier",
+      "paced_fixture": {
+        "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218
+      },
+      "read_only_signature_census": {
+        "counts_0_1_2_3_4plus": [0, 118177, 3829, 160, 2052],
+        "one_signature_pct": 95.137,
+        "diagnostic_removed": true,
+        "restored_benchmark_sha256": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d"
+      },
+      "focused_sizing": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode": 35493131, "lencode": 23436516 },
+          { "wincode": 35276179, "lencode": 23315585 },
+          { "wincode": 35347800, "lencode": 23353546 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode": 35492300, "lencode": 22693313 },
+          { "wincode": 35245739, "lencode": 22561862 },
+          { "wincode": 35154889, "lencode": 22513963 }
+        ],
+        "control_normalized_improvement_pct_by_pair": [3.169, 3.149, 3.066],
+        "control_normalized_improvement_pct_median": 3.149,
+        "candidate_speedup_vs_wincode_median": 1.5622,
+        "candidate_time_reduction_vs_wincode_pct_median": 35.987,
+        "cumulative_control_normalized_improvement_vs_initial_exact_sizer_pct": 29.444,
+        "parity": "every complete and partial receiver boundary matched wincode's exact serialized size in each process"
+      },
+      "paced_end_to_end_guardrail": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode_leader": 354616196, "lencode_leader": 225591115, "wincode_validator": 21538879, "lencode_validator": 23137534 },
+          { "wincode_leader": 354723166, "lencode_leader": 225243993, "wincode_validator": 21590149, "lencode_validator": 23129794 },
+          { "wincode_leader": 354616575, "lencode_leader": 224379840, "wincode_validator": 21566389, "lencode_validator": 23085374 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode_leader": 355172038, "lencode_leader": 225290844, "wincode_validator": 21423269, "lencode_validator": 23157675 },
+          { "wincode_leader": 354606576, "lencode_leader": 224963382, "wincode_validator": 21522009, "lencode_validator": 23110854 },
+          { "wincode_leader": 354548335, "lencode_leader": 224653770, "wincode_validator": 21514479, "lencode_validator": 23198544 }
+        ],
+        "control_normalized_leader_improvement_pct_by_pair": [0.289, 0.092, -0.141],
+        "control_normalized_leader_improvement_pct_median": 0.092,
+        "control_normalized_validator_improvement_pct_by_pair": [-0.627, -0.234, -0.733],
+        "control_normalized_validator_regression_pct_median": 0.627,
+        "candidate_leader_speedup_vs_wincode_median": 1.5765,
+        "candidate_validator_throughput_vs_wincode_median": 0.9274,
+        "wincode_payload_bytes": 66599215,
+        "payload_bytes": 33402585,
+        "data_shreds": 49536,
+        "coding_shreds": 49536,
+        "wire_bytes": 120422016,
+        "wire_reduction_vs_wincode_pct": 48.262
+      },
+      "contention_event": {
+        "discarded_pair_control_normalized_leader_improvement_pct": -1.924,
+        "discarded_pair_control_normalized_validator_improvement_pct": -0.390,
+        "reason": "one candidate process put lencode leader time at 229.666 ms while its unchanged wincode control moved only 0.023%; the next three reverse-order candidate processes converged between 224.654 and 225.291 ms, so the isolated leader sample was excluded"
+      },
+      "same_boundary_blockstore_guardrail": {
+        "baseline_medians_ns_by_pair": [
+          { "wincode": 30720593, "lencode": 25178142 },
+          { "wincode": 30693502, "lencode": 25174602 },
+          { "wincode": 30819282, "lencode": 25152272 }
+        ],
+        "candidate_medians_ns_by_pair": [
+          { "wincode": 32455048, "lencode": 26263556 },
+          { "wincode": 32376318, "lencode": 26264235 },
+          { "wincode": 32458589, "lencode": 26398226 }
+        ],
+        "control_normalized_improvement_pct_by_pair": [1.264, 1.094, 0.347],
+        "control_normalized_improvement_pct_median": 1.094,
+        "candidate_throughput_vs_wincode_median": 1.2327,
+        "absolute_lencode_regression_pct_by_pair": [4.311, 4.328, 4.954],
+        "wincode_control_regression_pct_by_pair": [5.646, 5.483, 5.319],
+        "interpretation": "the sizing helper is outside the timed Blockstore read; both codecs shifted with whole-binary layout, and the required within-binary wincode normalization leaves no lencode-specific regression"
+      },
+      "refinement": {
+        "change": "move the checked signature-byte multiplication behind the one-signature return and share the helper between Legacy and V0",
+        "initial_binary_sha256": "fcb3c79dad5404db764b5650871db5d557291c55be23ad43faee1f3d1a062688",
+        "final_binary_sha256": "30cca2db2d0407920eddd89f412ffe29fd610f19f00669f51654598646f998b9",
+        "control_normalized_improvement_pct_by_pair": [0.504, 0.450]
+      },
+      "rejected_screens": [
+        {
+          "change": "specialize complete short payload sizing for one-byte and two-byte canonical prefixes",
+          "candidate_binary_sha256": "9a91fe28588973adcd83bd3a184d176bc7a908ab62de5c57acb796000228c6ca",
+          "decision": "inverse-reverted because LLVM emitted a byte-identical binary to the retained baseline"
+        },
+        {
+          "change": "outline the checked non-one-signature fallback as cold and non-inlined",
+          "candidate_binary_sha256": "fc40cd4d451f233a89317f1f73db4fcf355e2e97b510c581130cac55cb505f12",
+          "control_normalized_regression_pct": 1.045,
+          "decision": "inverse-reverted because the call cost outweighed the smaller common body"
+        }
+      ],
+      "binaries": {
+        "focused_sizing_baseline_sha256": "9a91fe28588973adcd83bd3a184d176bc7a908ab62de5c57acb796000228c6ca",
+        "focused_sizing_candidate_sha256": "30cca2db2d0407920eddd89f412ffe29fd610f19f00669f51654598646f998b9",
+        "end_to_end_baseline_sha256": "6a180223462d39dc08fca8fef6d3b6e2e0d8887371ee430b52d737168c6d892c",
+        "end_to_end_candidate_sha256": "8612b28412ddbed6ef7a048b72958f6738917c33a67fec49bc92996e4ac3a8ac",
+        "blockstore_baseline_sha256": "adde1ba78804e7f52a2fac13cd4f8be675218b9c409e54218ac071337bb3a2cb",
+        "blockstore_candidate_sha256": "3cad5b27cc02f0f36c80f586239d7c444c23abf46f14f1fe7156ddd9124fefb3"
+      },
+      "security": "the fast return is entered only for exactly one signature and returns the canonical one-byte count prefix plus one 64-byte signature. Every other Legacy and V0 count retains checked multiplication, canonical short-u16 validation, and checked addition; V1 retains its checked signature-byte multiplication. Tests cover counts 0, 1, 2, 127, 128, 16,383, 16,384, 65,535, and rejection at 65,536. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, or wire behavior changed.",
+      "source_sha256": {
+        "lencode_solana_wire": "f8bd8c4bdf6c24ddf58edcd70328fab7b2f696d35e7ed7079298081ffdb0e15b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_shredder": "08652377c89783b9e927edcfb953731fefecaee1486877066245e6e3779284e7",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_blockstore_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_codec": "b6f66514b1cb63cad664f62f71802e0d55893aece66249150c9f3ee4f9a8dd83",
+        "agave_broadcast_utils": "90c2a995e6a86e1a93b7d248841bcf3e27d5c4a47f2e4a6176da42708bd87b1a"
+      },
+      "validation": "Rust 1.98.0 formatting passed; 219 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default all-target, std-only library, and all-feature all-target checks passed; strict lencode all-target Clippy passed; 12 Agave codec tests and 12 broadcast tests passed; strict Agave ledger library, focused sizing, end-to-end, Blockstore, and turbine library Clippy passed"
     },
     "original_baseline": {
       "wincode_leader": { "value": 278151809, "unit": "ns/100 blocks", "range": [278011170, 279734537] },

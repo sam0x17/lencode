@@ -699,18 +699,11 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
 fn canonical_solana_transaction_serialized_size(
     transaction: &VersionedTransaction,
 ) -> Result<usize> {
-    let signature_bytes = transaction
-        .signatures
-        .len()
-        .checked_mul(solana_signature::SIGNATURE_BYTES)
-        .ok_or(Error::IncorrectLength)?;
     match &transaction.message {
         VersionedMessage::Legacy(message) => {
-            let signature_prefix =
-                canonical_short_u16_serialized_size(transaction.signatures.len())?;
-            let size = u64::try_from(signature_prefix)
-                .and_then(|prefix| u64::try_from(signature_bytes).map(|bytes| prefix + bytes))
-                .map_err(|_| Error::IncorrectLength)?
+            let signature_size =
+                canonical_prefixed_signatures_serialized_size(transaction.signatures.len())?;
+            let size = u64::try_from(signature_size).map_err(|_| Error::IncorrectLength)?
                 + canonical_legacy_message_serialized_size(
                     &message.account_keys,
                     &message.instructions,
@@ -718,8 +711,8 @@ fn canonical_solana_transaction_serialized_size(
             usize::try_from(size).map_err(|_| Error::IncorrectLength)
         }
         VersionedMessage::V0(message) => {
-            let signature_prefix =
-                canonical_short_u16_serialized_size(transaction.signatures.len())?;
+            let signature_size =
+                canonical_prefixed_signatures_serialized_size(transaction.signatures.len())?;
             let lookup_prefix =
                 canonical_short_u16_serialized_size(message.address_table_lookups.len())?;
             let mut lookup_payload_size = 0u64;
@@ -746,8 +739,7 @@ fn canonical_solana_transaction_serialized_size(
                 // overflow of this u64 subtotal impossible.
                 lookup_payload_size += u64::from(lookup_size);
             }
-            let size = u64::try_from(signature_prefix)
-                .and_then(|prefix| u64::try_from(signature_bytes).map(|bytes| prefix + bytes))
+            let size = u64::try_from(signature_size)
                 .and_then(|size| u64::try_from(lookup_prefix).map(|prefix| size + prefix))
                 .map_err(|_| Error::IncorrectLength)?
                 + 1
@@ -759,6 +751,11 @@ fn canonical_solana_transaction_serialized_size(
             usize::try_from(size).map_err(|_| Error::IncorrectLength)
         }
         VersionedMessage::V1(message) => {
+            let signature_bytes = transaction
+                .signatures
+                .len()
+                .checked_mul(solana_signature::SIGNATURE_BYTES)
+                .ok_or(Error::IncorrectLength)?;
             if usize::from(message.header.num_required_signatures) != transaction.signatures.len() {
                 return Err(Error::InvalidData);
             }
@@ -799,6 +796,19 @@ fn canonical_solana_transaction_serialized_size(
             Ok(size)
         }
     }
+}
+
+#[cfg(feature = "solana-types")]
+fn canonical_prefixed_signatures_serialized_size(len: usize) -> Result<usize> {
+    if len == 1 {
+        return Ok(1 + solana_signature::SIGNATURE_BYTES);
+    }
+    let signature_bytes = len
+        .checked_mul(solana_signature::SIGNATURE_BYTES)
+        .ok_or(Error::IncorrectLength)?;
+    canonical_short_u16_serialized_size(len)?
+        .checked_add(signature_bytes)
+        .ok_or(Error::IncorrectLength)
 }
 
 #[cfg(feature = "solana-types")]
@@ -2390,6 +2400,30 @@ mod tests {
         }
         assert!(matches!(
             canonical_short_u16_serialized_size(usize::from(u16::MAX) + 1),
+            Err(Error::IncorrectLength)
+        ));
+    }
+
+    #[cfg(feature = "solana-types")]
+    #[test]
+    fn canonical_prefixed_signature_sizes_cover_wire_boundaries() {
+        for (len, prefix_size) in [
+            (0, 1),
+            (1, 1),
+            (2, 1),
+            (0x7f, 1),
+            (0x80, 2),
+            (0x3fff, 2),
+            (0x4000, 3),
+            (usize::from(u16::MAX), 3),
+        ] {
+            assert_eq!(
+                canonical_prefixed_signatures_serialized_size(len).unwrap(),
+                prefix_size + len * solana_signature::SIGNATURE_BYTES
+            );
+        }
+        assert!(matches!(
+            canonical_prefixed_signatures_serialized_size(usize::from(u16::MAX) + 1),
             Err(Error::IncorrectLength)
         ));
     }
