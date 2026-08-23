@@ -1,12 +1,12 @@
 {
-  "version": 118,
+  "version": 119,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T19:31:17Z",
+  "updated_at": "2026-08-23T19:48:33Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 72,
+    "version": 73,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2513,6 +2513,74 @@
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       },
       "validation": "220 lencode unit tests, 8 integration tests, and 5 doctests passed with one doctest ignored; no-default, std-only, formatting, and all-feature all-target strict Clippy passed; 349 Agave ledger tests passed with 3 ignored, and strict Clippy passed for the ledger library and both benchmark targets"
+    },
+    "post_iteration_55_current_frontier_screen": {
+      "status": "all candidates reverted",
+      "scope": "lencode-owned canonical sizing and compression policy; Agave production sources and replacement sites are unchanged",
+      "focused_sizing_profile": {
+        "data_sha256": "d34834456283459d69f85be92ff5094ff69ba6aa70f56f4ec3ade2263ff8ac73",
+        "samples": 6032,
+        "lost_samples": 0,
+        "trials": 101,
+        "repeats": 3,
+        "cpu": 28,
+        "wincode_median_ns": 35571239,
+        "lencode_median_ns": 22771932,
+        "speedup_vs_wincode": 1.5621,
+        "time_reduction_vs_wincode_pct": 35.982,
+        "self_cycles_pct": {
+          "wincode_entry_size_of": 60.56,
+          "lencode_transaction_size": 27.18
+        },
+        "binary_sha256": "d02d24d7bd35e4015e83e939d59ac3e9bc6cd381851fc23aa4a2d597e79009a2"
+      },
+      "compression_censuses": {
+        "hc2_to_hc3": {
+          "hc2_attempts": 22,
+          "hc3_escalations": 1,
+          "decision": "the fallback is too sparse for avoiding it to reach the 1% gate"
+        },
+        "fast4_to_fast1": {
+          "attempts": 101,
+          "wire_block_wins": 65,
+          "misses": 36,
+          "win_fast4_to_canonical_ratio_range": [0.622936, 0.672602],
+          "miss_fast4_to_canonical_ratio_range": [0.632872, 0.682322],
+          "win_fast1_shrink_range": [0.010786, 0.117906],
+          "miss_fast1_shrink_range": [0.000480, 0.065307],
+          "decision": "the precompression feature ranges overlap, so no cheap predicate separates retained wire wins from enough misses"
+        },
+        "diagnostic_source_removed": true
+      },
+      "rejected_sizing_screen": {
+        "change": "move the complete V0 transaction size walk behind a non-inlined helper and keep the more common Legacy walk local",
+        "baseline_binary_sha256": "d02d24d7bd35e4015e83e939d59ac3e9bc6cd381851fc23aa4a2d597e79009a2",
+        "candidate_binary_sha256": "9bb891192e7658512edf6690ada22b78f0b5b8c927ebadd3e4b9d9f99f96560e",
+        "exact_pairs": [
+          {
+            "baseline": { "wincode_ns": 35237418, "lencode_ns": 22587102 },
+            "candidate": { "wincode_ns": 35325008, "lencode_ns": 23421595 },
+            "control_normalized_regression_pct": 3.437
+          },
+          {
+            "baseline": { "wincode_ns": 35306718, "lencode_ns": 22626052 },
+            "candidate": { "wincode_ns": 35241568, "lencode_ns": 23297285 },
+            "control_normalized_regression_pct": 3.157
+          }
+        ],
+        "decision": "inverse-reverted above the 2% ceiling because the V0 call boundary outweighed the smaller Legacy body"
+      },
+      "security": "Both compression censuses were encoder-only diagnostics over bounded reference values. The sizing candidate retained every checked width and overflow path. No parser, decoder, unsafe block, unchecked offset, dependency, sidecar, allocation policy, or wire behavior was retained.",
+      "restored_source_sha256": {
+        "lencode_solana_wire": "260fb1681807cf2b4ce79cd68c368591be9e7c6181236918158e22d2552c7343",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "f367fdb239b3949fa40151493a31834eb4e9d4a8c8cd60ebd9ee672a95d6a69d",
+        "agave_focused_sizing_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_end_to_end_benchmark": "0ef4c0ea3078b80b6e2f249e03d83bd654a0af219652dc24dada2979613cdff8",
+        "agave_blockstore_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
     },
     "production_batch_benchmark": {
       "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
