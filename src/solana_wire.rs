@@ -822,27 +822,33 @@ fn canonical_instructions_serialized_size(
     instructions: &[solana_message::compiled_instruction::CompiledInstruction],
 ) -> Result<usize> {
     let mut size = canonical_short_u16_serialized_size(instructions.len())?;
+    let mut payload_size = 0u64;
     for instruction in instructions {
         let accounts_len = instruction.accounts.len();
         let data_len = instruction.data.len();
-        if (accounts_len | data_len) < 0x80 {
-            let instruction_size = accounts_len
+        let instruction_size = if (accounts_len | data_len) < 0x80 {
+            accounts_len
                 .checked_add(data_len)
                 .and_then(|size| size.checked_add(3))
-                .ok_or(Error::IncorrectLength)?;
-            checked_add_canonical_size(&mut size, instruction_size)?;
-            continue;
-        }
-        checked_add_canonical_size(&mut size, size_of::<u8>())?;
-        checked_add_canonical_size(
-            &mut size,
-            canonical_short_payload_serialized_size(&instruction.accounts)?,
-        )?;
-        checked_add_canonical_size(
-            &mut size,
-            canonical_short_payload_serialized_size(&instruction.data)?,
-        )?;
+                .ok_or(Error::IncorrectLength)?
+        } else {
+            let accounts_size = canonical_short_payload_serialized_size(&instruction.accounts)?;
+            let data_size = canonical_short_payload_serialized_size(&instruction.data)?;
+            size_of::<u8>()
+                .checked_add(accounts_size)
+                .and_then(|size| size.checked_add(data_size))
+                .ok_or(Error::IncorrectLength)?
+        };
+        let instruction_size =
+            u32::try_from(instruction_size).map_err(|_| Error::IncorrectLength)?;
+        // The validated u16 instruction count and u32 per-instruction size
+        // make overflow of this u64 subtotal impossible.
+        payload_size += u64::from(instruction_size);
     }
+    checked_add_canonical_size(
+        &mut size,
+        usize::try_from(payload_size).map_err(|_| Error::IncorrectLength)?,
+    )?;
     Ok(size)
 }
 
@@ -2399,6 +2405,7 @@ mod tests {
             (0x80, 0x7f),
             (0x7f, 0x80),
             (0x80, 0x80),
+            (usize::from(u16::MAX), usize::from(u16::MAX)),
         ] {
             let instruction = CompiledInstruction {
                 program_id_index: 0,
@@ -2425,6 +2432,32 @@ mod tests {
                 expected
             );
         }
+
+        let mut maximal_count = vec![
+            CompiledInstruction {
+                program_id_index: 0,
+                accounts: Vec::new(),
+                data: Vec::new(),
+            };
+            usize::from(u16::MAX)
+        ];
+        let expected = canonical_short_u16_serialized_size(maximal_count.len())
+            .unwrap()
+            .checked_add(maximal_count.len().checked_mul(3).unwrap())
+            .unwrap();
+        assert_eq!(
+            canonical_instructions_serialized_size(&maximal_count).unwrap(),
+            expected
+        );
+        maximal_count.push(CompiledInstruction {
+            program_id_index: 0,
+            accounts: Vec::new(),
+            data: Vec::new(),
+        });
+        assert!(matches!(
+            canonical_instructions_serialized_size(&maximal_count),
+            Err(Error::IncorrectLength)
+        ));
 
         let oversized = CompiledInstruction {
             program_id_index: 0,
