@@ -1,12 +1,12 @@
 {
-  "version": 134,
+  "version": 135,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T02:17:16Z",
+  "updated_at": "2026-08-24T02:39:15Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 88,
+    "version": 89,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -195,6 +195,93 @@
       },
       "discarded_measurement": "an older target-113/64 executable emitted different payload and wire totals than the current 9/5 candidate, so that pair was rejected before timing interpretation",
       "security": "no new unsafe block, custom decoder, unchecked hostile offset, dependency, private Solana layout, sidecar, or cross-frame state remains; the existing exact-size libLZ4 decoder boundary is unchanged",
+      "restoration": {
+        "lencode_solana_wire_sha256": "38e57030cd00029fcbbf5e2b607edc855d018ad27555333acd8f233dac007ec1",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
+    "iteration_71_checked_unsafe_and_liblz4_codegen_frontier": {
+      "status": "no production source change; two decoder and writer candidates were inverse-reverted, the unsafe family was fully reset, and two libLZ4 code-generation screens were rejected",
+      "scope": "lencode-owned canonical LZ4 decode, canonical reference-type writing, and wire-compatible libLZ4 compilation; Agave sources changed only by rebuilding the existing replacement benchmarks",
+      "deprecated_fast_decoder_audit": {
+        "upstream_contract": "libLZ4 1.10 states that LZ4_decompress_fast is slower than LZ4_decompress_safe, may read an unknown distance beyond malformed input, does not validate match offsets, and is planned for removal",
+        "decision": "rejected without code because a separate metadata validation pass adds work to a slower decoder and cannot establish a useful performance upper bound"
+      },
+      "checked_unsafe_lz4_flex": {
+        "change": "use lz4_flex 0.14 with safe-decode disabled and checked-decode enabled, calling its safe public API over initialized Vec and BytesMut output",
+        "candidate_binary_sha256": "1a2b35d1ad19ba13c336c2ef10b31e04f76b49264e12958f3bf8a5e7c7e55adf",
+        "baseline_binary_sha256": "bf3e3c49b35e78d1d64ff8b36e0114413db95107fabb61f5e56d29e4ce79c859",
+        "fixture_sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+        "trials_per_process": 7,
+        "absolute_lencode_change_pct_by_pair": [-12.848179, -12.800131],
+        "control_normalized_lencode_change_pct_by_pair": [-10.189017, -10.368966],
+        "validation": "19 focused Solana wire tests passed, including randomized exact-byte comparison, malformed frames, rollback behavior, and advertised expansion limits",
+        "decision": "reverted because both production-jemalloc Blockstore pairs regressed by about 12.8%; the prior 2% zero-fill upper bound cannot make a custom uninitialized adapter competitive"
+      },
+      "deferred_unsafe_canonical_writer": {
+        "change": "hold one raw output pointer across canonical appends, publish initialized bytes before each fallible reallocation, refresh the pointer after growth, and publish the final Vec length once",
+        "safety_proof": [
+          "checked addition and the configured output maximum bound every position",
+          "only initialized bytes are published before try_reserve can reallocate",
+          "the pointer and cached capacity are refreshed after every successful growth",
+          "the exclusive Vec borrow proves source slices cannot alias the destination",
+          "the final set_len exposes only ranges initialized by successful copies"
+        ],
+        "candidate_binary_sha256": "e6354b71a4b21f4e2e85c1c5deffaa6c44f96d5f29c6ad5dc234a5ead6d9836b",
+        "baseline_binary_sha256": "2646ccef8f55729e4082ee0dd58a315e35a4fc771342975a1c2d15a0c25cfa5a",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "trials_per_process": 7,
+        "absolute_leader_improvement_pct_by_pair": [-0.282631, 0.092307],
+        "control_normalized_leader_improvement_pct_by_pair": [-0.545487, -0.625179],
+        "wire_identity": {
+          "components": 1283,
+          "payload_bytes": 32684660,
+          "data_shreds": 48384,
+          "coding_shreds": 48384,
+          "wire_bytes": 117621504
+        },
+        "validation": "the same 19 focused Solana wire tests passed before the timed build",
+        "decision": "reverted because one absolute pair was flat, the other regressed, and both same-binary-normalized leader pairs regressed"
+      },
+      "full_reset": {
+        "reason": "the unsafe append, checked unsafe decoder, and deferred unsafe writer produced three consecutive reverts without a qualifying gain",
+        "fresh_end_to_end_ns": {
+          "wincode_leader": 301607134,
+          "canonical_lz4_leader": 238754136,
+          "wincode_validator": 21368437,
+          "canonical_lz4_validator": 23551155
+        },
+        "fresh_blockstore_ns": {
+          "wincode_validator": 27001458,
+          "canonical_lz4_validator": 24278738
+        },
+        "result": "exact source hashes and the 9/5 wire totals were restored before switching to libLZ4 code generation"
+      },
+      "global_native_cflags_upper_bound": {
+        "change": "rebuild C dependencies with -march=native",
+        "candidate_binary_sha256": "1ecc0125fc7b8b7c6f1b14a05228de3da9dea05a984200eb4bf209a526eb4fb9",
+        "absolute_lencode_leader_improvement_pct_by_pair": [-0.431467, -1.431630],
+        "control_normalized_leader_improvement_pct_by_pair": [2.611446, 0.512854],
+        "decision": "rejected because lencode regressed absolutely in both orders; the larger normalized result came from slowing wincode and the global C rebuild also changed out-of-scope dependencies"
+      },
+      "standard_memcpy_liblz4_access": {
+        "change": "compile libLZ4 with LZ4_FORCE_MEMORY_ACCESS=0 so unaligned words use standard memcpy instead of GCC packed structs",
+        "end_to_end_candidate_binary_sha256": "3cb48c600e575765e8f38559eac7ad240145fff3d4c0b8407668b3fdf38e517f",
+        "blockstore_candidate_binary_sha256": "e40bd44d06edded125c62af06fdb32a83e108e6faf2ce485d7e562112dd27a35",
+        "absolute_leader_improvement_pct_by_pair": [-0.425042, -0.531743],
+        "control_normalized_leader_improvement_pct_by_pair": [-0.349611, -0.101315],
+        "absolute_blockstore_improvement_pct_by_pair": [-0.579327, -0.794099],
+        "control_normalized_blockstore_improvement_pct_by_pair": [0.764291, 0.708784],
+        "wire_bytes_changed": false,
+        "decision": "rejected because every absolute lencode path regressed; the apparent normalized Blockstore gain came from a slower wincode control and missed the absolute same-codec gate"
+      },
+      "zero_copy": "the retained borrowed encoder frame, caller-owned compression and decompression arenas, uninitialized exact-size decode, and BytesMut split-and-freeze handoff are unchanged",
+      "security": "no new unsafe block, deprecated decoder, unchecked hostile offset, dependency, private Solana layout, CPU requirement, sidecar, or cross-frame state remains; the exact-size LZ4_decompress_safe boundary and standard independent block format are unchanged",
       "restoration": {
         "lencode_solana_wire_sha256": "38e57030cd00029fcbbf5e2b607edc855d018ad27555333acd8f233dac007ec1",
         "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
