@@ -217,6 +217,25 @@ pub fn canonical_solana_entry_serialized_size(entry: SolanaEntryRef<'_>) -> Resu
         .checked_add(entry.hash.as_bytes().len())
         .and_then(|size| size.checked_add(size_of::<u64>()))
         .ok_or(Error::IncorrectLength)?;
+    if let [transaction] = entry.transactions {
+        let transaction_size = canonical_solana_transaction_serialized_size_inner(transaction)
+            .map(core::num::NonZeroUsize::get)
+            .ok_or_else(|| canonical_solana_transaction_size_error(transaction))?;
+        #[cfg(target_pointer_width = "64")]
+        {
+            // Legacy/V0 allow at most u16::MAX instructions and lookups, each
+            // bounded by u32::MAX bytes; every other contribution is smaller.
+            // Their combined size plus the 48-byte entry prefix is below 2^49.
+            debug_assert!(transaction_size < (1usize << 49) - size);
+            return Ok(size + transaction_size);
+        }
+        #[cfg(not(target_pointer_width = "64"))]
+        {
+            return size
+                .checked_add(transaction_size)
+                .ok_or(Error::IncorrectLength);
+        }
+    }
     for transaction in entry.transactions {
         checked_add_canonical_size(
             &mut size,
@@ -2800,6 +2819,19 @@ mod tests {
             },
         ];
         let entry_hash = Hash::new_from_array([15u8; 32]);
+        for transaction in &transactions {
+            let single_transaction_entry = SolanaEntryRef {
+                num_hashes: 16,
+                hash: &entry_hash,
+                transactions: core::slice::from_ref(transaction),
+            };
+            assert_eq!(
+                canonical_solana_entry_serialized_size(single_transaction_entry).unwrap(),
+                2 * size_of::<u64>()
+                    + solana_hash::HASH_BYTES
+                    + usize::try_from(wincode::serialized_size(transaction).unwrap()).unwrap()
+            );
+        }
         let entries = [SolanaEntryRef {
             num_hashes: 16,
             hash: &entry_hash,
@@ -2835,6 +2867,14 @@ mod tests {
         invalid_v1.signatures.clear();
         assert!(matches!(
             canonical_solana_transaction_serialized_size(&invalid_v1),
+            Err(Error::InvalidData)
+        ));
+        assert!(matches!(
+            canonical_solana_entry_serialized_size(SolanaEntryRef {
+                num_hashes: 16,
+                hash: &entry_hash,
+                transactions: core::slice::from_ref(&invalid_v1),
+            }),
             Err(Error::InvalidData)
         ));
 
