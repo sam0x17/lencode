@@ -1,14 +1,14 @@
 {
-  "version": 160,
+  "version": 161,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T11:21:50Z",
+  "updated_at": "2026-08-24T11:31:42Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 114,
+    "version": 115,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T11:21:50Z",
+    "updated_at": "2026-08-24T11:31:42Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -3042,6 +3042,65 @@
         "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
         "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_candidate_source_removed": true,
+        "agave_production_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_97_decoder_codegen_and_retry_selection_frontier": {
+      "status": "no production source change; the compiler route was rejected read-only, the retry-selection candidate failed the production-fixture correctness gate, and the retained Rust 1.98 checkpoint is clean",
+      "scope": "audit libLZ4 decode code generation and screen one lencode-only selection policy over standard independent LZ4 blocks without changing Agave production sources",
+      "decoder_codegen_audit": {
+        "registry_check": "crates.io still reports lz4 1.28.1 and lz4-sys 1.11.1+lz4-1.10.0 as the latest releases",
+        "fast_loop": "libLZ4 1.10.0 enables LZ4_FAST_DEC_LOOP by default on x86_64, and perf annotate confirms the retained Blockstore binary executes that loop",
+        "memory_access_2": "excluded because upstream describes direct unaligned typed loads as lying to the compiler about alignment and says to use them with caution; the retained packed-access mode is the safe optimized x86_64 default",
+        "alternate_compiler": "rejected before implementation because Agave's librocksdb-sys shares the same lz4-sys package, so a crate-level Clang override would also change RocksDB and would not be attributable to lencode without a dependency fork",
+        "decision": "no decoder build flag remains that is both untried, portable, security-neutral, lencode-specific, and low complexity"
+      },
+      "smallest_existing_hc_band_retry": {
+        "change": "when FAST(1) and HC output had already been computed inside the retained HC boundary band, emit the shortest retry even if it did not remove another wire block",
+        "extra_compression_work": false,
+        "wire_format": "unchanged LCSH version-1 flag-1 frame containing an independent standard size-prefixed LZ4 block",
+        "focused_validation": "canonical_lz4_recompression_window_tracks_wire_blocks passed under Rust 1.98.0",
+        "candidate_binary_sha256": {
+          "blockstore": "30d4cab6d250028b4a1a55f7344e831eae24ef3f6b42a57ca448f232e491aace",
+          "end_to_end": "66b0e9330352ba4229467a8a40be2e70bcfa1e458bcec3f848e8a6e3fa6d0a85"
+        },
+        "exact_9_5_smoke_ns": {
+          "blockstore_wincode_validator": 27412195,
+          "blockstore_lencode_validator": 24520555,
+          "wincode_leader": 300782542,
+          "lencode_leader": 238982588,
+          "wincode_validator": 20930792,
+          "lencode_validator": 23429231
+        },
+        "exact_9_5_wire_output": {
+          "wincode_payload_bytes": 66597215,
+          "lencode_payload_bytes": 32684660,
+          "wincode_wire_bytes": 195024544,
+          "lencode_wire_bytes": 117621504,
+          "changed_from_retained": false
+        },
+        "production_guardrail": "the candidate returned Error::InvalidData on /tmp/agave-shred-broadcast-batches.bin before timing, while the retained checkpoint accepts the fixture",
+        "decision": "rejected on valid-fixture correctness before paired timing; no retry frame that the retained selector discards is assumed safe to emit"
+      },
+      "restored_validation": "cargo +1.98.0 test --offline --all-features passed 220 unit tests, 8 integration tests, and 5 doctests; one doctest remained ignored",
+      "security": "the temporary candidate used safe Rust and changed only which already-computed standard LZ4 frame was emitted. Frame identity, signed-length conversion, caller maximum, expansion-ratio bound, exact decompressed length, hostile-input rejection, and the official Solana parser were unchanged. No unsafe block, private layout, sidecar, dependency, partial decoder, or cross-frame state was added.",
+      "restoration": {
+        "lencode_head_before_audit": "116b45097a349e2b9beebe27014a77adbd6067c1",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_root_manifest_sha256": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "protected_blockstore_benchmark_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
         "temporary_candidate_source_removed": true,
         "agave_production_source_changed": false,
         "lencode_production_source_changed": false
