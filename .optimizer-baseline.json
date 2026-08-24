@@ -1,12 +1,12 @@
 {
-  "version": 128,
+  "version": 129,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-23T23:20:22Z",
+  "updated_at": "2026-08-24T00:02:12Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 82,
+    "version": 83,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3733,6 +3733,136 @@
         "agave_jemalloc_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
         "agave_standard_broadcast": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
         "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
+    "iteration_65_exact_7_4_validator_and_combined_frontier": {
+      "status": "no production source change; five low-complexity candidate families were rejected and every diagnostic edit was inverse-reverted",
+      "scope": "profile the exact 7/4 mixed-slot validator path, then screen only lencode encoder or decoder policy and direct CanonicalLz4V1 replacement-site behavior while preserving hostile-input checks",
+      "validator_profile": {
+        "binary_path": "/tmp/lencode-mixed-slots-13_8-retained-rust-1.98.0",
+        "fixture_path": "/tmp/agave-shred-broadcast-receiver-canonical-1_75-400ms.bin",
+        "fixture_sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+        "data_path": "/tmp/lencode-mixed-slots-7_4-validator-perf.data",
+        "data_sha256": "a2361ba55862791b53ceab4cd6480d01f3aeda8cb742ed8f0f0ced24f0eecee5",
+        "samples": 5911,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_leader": 315662096,
+          "canonical_lz4_leader": 214489199,
+          "wincode_validator": 21398398,
+          "canonical_lz4_validator": 23388535
+        },
+        "validator_phase_leaf_samples": {
+          "LZ4_decompress_safe": 382,
+          "malloc": 58,
+          "block_component_parser": 46
+        },
+        "conclusion": "the existing audited exact-size LZ4_decompress_safe call dominates the remaining lencode validator delta; allocation and checked parser work are secondary and shared in part with wincode"
+      },
+      "rejected_candidates": {
+        "modeled_9_5_batch_target": {
+          "fixture_path": "/tmp/lencode-batch-sweep-9_5.bin",
+          "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+          "components": 1283,
+          "component_reduction_vs_7_4_pct": 2.507599,
+          "payload_bytes": 32831303,
+          "data_shreds": 46048,
+          "coding_shreds": 46048,
+          "wire_bytes": 111942688,
+          "wire_regression_vs_7_4_pct": 0.069541,
+          "absolute_leader_regression_pct_by_pair": [0.876116, 0.408198],
+          "absolute_validator_improvement_pct_by_pair": [0.927260, 0.529968],
+          "balanced_blockstore_result": "flat in both directions",
+          "decision": "component count improved, but wire grew and neither CPU path cleared the 1% gate"
+        },
+        "wider_strong_recompression_window": {
+          "all_final_baseline": {
+            "divisor": 13,
+            "binary_sha256": "04573dfd2a6a78c0977514e5747ac3a45236f9902b299178e2a83a4ddbb6875d",
+            "wire_bytes": 118243840
+          },
+          "divisor_12": {
+            "binary_sha256": "7a27af593f0b79f28467e9450d6a003fbdf1fe9dc3ae2a357d0c7dc4efd47e83",
+            "wire_bytes": 117932672,
+            "wire_improvement_pct": 0.263158,
+            "decision": "below the 1% gate"
+          },
+          "divisor_10": {
+            "binary_sha256": "2646ccef8f55729e4082ee0dd58a315e35a4fc771342975a1c2d15a0c25cfa5a",
+            "wire_bytes": 117154752,
+            "wire_improvement_pct": 0.920981,
+            "decision": "below the 1% gate"
+          },
+          "divisor_9": {
+            "binary_sha256": "0d96d03eeecbaa2dd43f4f9645180e690cd3fb0a93b0d8ff7f726dfb7d875f95",
+            "wire_bytes": 116921376,
+            "wire_improvement_pct": 1.118437,
+            "control_normalized_leader_regression_pct_by_pair": [4.488561, 2.490011],
+            "decision": "wire cleared 1%, but both leader regressions exceeded the 2% ceiling"
+          }
+        },
+        "canonical_blockstore_fixed_reserves": {
+          "baseline_binary_sha256": "f6889d572a1ee2ba6a9f9eea14ef4166f1d42d20696f9f0dd07f1d49681ff18d",
+          "one_typical_capacity": {
+            "binary_sha256": "91720858b334a34df95b632778b620cb5c046da98c8918b8fe0277beaa274cc6",
+            "absolute_lencode_improvement_pct_by_pair": [0.467548, 1.191542],
+            "control_normalized_change_pct_by_pair": [-0.457239, -0.208543]
+          },
+          "two_typical_capacities": {
+            "binary_sha256": "fbd074e19355efa0171fe9cbd76a9965dfc907dab705ff2e3bbdab2529395194",
+            "absolute_lencode_regression_pct_by_pair": [0.530138, 0.411009]
+          },
+          "decision": "the one-capacity result was not stable after control normalization and the larger reserve regressed absolute lencode latency"
+        },
+        "raw_canonical_fallback_current_fixture": {
+          "thresholds_retested_bytes": [16384, 20480],
+          "threshold_16384_long_pair_ns": {
+            "control_wincode": 27242215,
+            "control_canonical_lz4": 24255515,
+            "candidate_wincode": 29076582,
+            "candidate_canonical_lz4": 25162378
+          },
+          "threshold_16384_absolute_lencode_regression_pct": 3.738791,
+          "threshold_20480_result": "absolute lencode latency regressed about 0.7% to 0.8% and control-normalized movement stayed below 1%",
+          "decision": "the zero-copy raw fallback still does not qualify on the current 7/4 fixture"
+        },
+        "target_113_64_with_divisor_10": {
+          "modeled_fixture_path": "/tmp/lencode-batch-sweep-113_64.bin",
+          "modeled_fixture_sha256": "73883794a0afbb1bae03d6fadc19dacaf612d5c450c6fcc7919131217bf744b1",
+          "components": 1304,
+          "all_final_wire_improvement_pct": 1.052647,
+          "all_final_absolute_leader_regression_pct_by_pair": [0.961371, 1.642906],
+          "exact_current_binary_sha256": "7e18b485a6e0ef09419e89743771cf303c1368725559c4831af79f776973f533",
+          "exact_candidate_binary_sha256": "e9a765b08393b7606a1a3f9363518867a9d904dda51be418cfbfcc7d4df37d92",
+          "exact_current": {
+            "payload_bytes": 32957717,
+            "data_shreds": 46016,
+            "coding_shreds": 46016,
+            "wire_bytes": 111864896
+          },
+          "exact_candidate": {
+            "payload_bytes": 32912678,
+            "data_shreds": 45792,
+            "coding_shreds": 45792,
+            "wire_bytes": 111320352
+          },
+          "exact_component_reduction_pct": 0.911854,
+          "exact_wire_improvement_pct": 0.486787,
+          "divisor_10_changed_exact_mixed_output": false,
+          "decision": "the all-final model overstated the gain; exact final and nonfinal boundaries left both component and wire improvements below 1%"
+        }
+      },
+      "zero_copy": "the retained borrowed frame, caller-owned encode and decode arenas, and BytesMut freeze handoff remain unchanged; no candidate added a copy, allocation sidecar, or owned metadata buffer",
+      "wire_compatibility": "every compression candidate emitted the unchanged LCSH version-1 flag-1 size-prefixed standard LZ4 frame, and every batching candidate preserved that representation",
+      "security": "no candidate changed hostile-frame identity, version, flag, signed-length conversion, caller maximum, compression-ratio bound, exact decompressed-length check, official parser, dependency set, or audited libLZ4 unsafe boundary; no new unsafe block, unchecked offset, partial decoder, sidecar, or private layout was retained",
+      "validation": "all source candidates compiled with Rust 1.98.0 and passed exact canonical reconstruction and shred accounting in their frozen harnesses; after cleanup, 220 lencode unit tests, 8 integration tests, and 5 doctests passed with 1 ignored; strict all-feature all-target Clippy, no-default all-target check, std-only library check, formatting, and diff whitespace checks passed; all diagnostic source was removed and protected lencode and Agave files were restored byte for byte",
+      "source_sha256": {
+        "lencode_solana_wire": "0445dde85cbe7e704e5a7862daceffb59e1fd8f970cb0dfbef609156cda81d3b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_broadcast_utils": "b0bc31a78afc880f3adda624e5a2e43328eacf26cbd224474873a734ab3171fc",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286"
       }
     },
     "production_batch_benchmark": {
