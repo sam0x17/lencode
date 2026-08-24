@@ -1,12 +1,12 @@
 {
-  "version": 129,
+  "version": 130,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T00:02:12Z",
+  "updated_at": "2026-08-24T00:30:47Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 83,
+    "version": 84,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3863,6 +3863,99 @@
         "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "agave_broadcast_utils": "b0bc31a78afc880f3adda624e5a2e43328eacf26cbd224474873a734ab3171fc",
         "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286"
+      }
+    },
+    "iteration_66_canonical_arena_alignment": {
+      "status": "no production source change; all alignment candidates were rejected and both repositories were restored to their exact retained source",
+      "scope": "align canonical decompression destinations inside the existing shared BytesMut parser arena at the direct CanonicalLz4V1 Agave replacement adapter, without changing general Agave processing or lencode's hostile-input decoder",
+      "candidate": {
+        "change": "insert at most 31 initialized padding bytes before each decompression destination, decompress into the aligned suffix, freeze the existing arena segment once, and return a zero-copy slice that excludes the padding",
+        "allocation_bound": "reserve projection was capped at MAX_DATA_SHREDS_SIZE plus 31 bytes even when remaining_components is hostile; the parser received only the exact canonical range",
+        "wire_change": false,
+        "new_allocation_or_copy": false
+      },
+      "screened_variants": {
+        "alignment_16_with_prefix_split": {
+          "binary_sha256": "7fecb3f1d1df405c58c66e1a09612c3873ef426b654f80937ed3bd3f3fdec2a8",
+          "decision": "rejected after a decisive regression from the extra shared-buffer split"
+        },
+        "alignment_16_single_split": {
+          "binary_sha256": "7248e6928f550b77e11cb729a90680aadeead06a164852419af776925263df2b",
+          "control_normalized_improvement_pct": "about 0.9",
+          "decision": "rejected below the 1% gate"
+        },
+        "alignment_32_direct_adapter": {
+          "binary_sha256": "551100f0726226bb766b570bbc268af0435e744fb4c0561bb25aa333b66b883d",
+          "decision": "promising under the system allocator, then superseded by the security-bounded reserve projection and production jemalloc confirmation"
+        },
+        "alignment_32_lencode_api": {
+          "binary_sha256": "8318a2af0f89cc8c407f837b029bfe8ff745bdc4a3a85b1abd5ee7d5f9f6685e",
+          "decision": "rejected because moving the policy into the public decoder API added repeated frame checks and erased the gain"
+        },
+        "alignment_64_direct_adapter": {
+          "binary_sha256": "d4501edd8425e487adc3977ced189b71cf6d40c302a3c4cd5ee06dc95c84d533",
+          "decision": "rejected because both process orders were slower than 32-byte alignment"
+        }
+      },
+      "final_bounded_candidate": {
+        "fixture_path": "/tmp/agave-shred-broadcast-receiver-canonical-1_75-400ms.bin",
+        "fixture_sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+        "slots": 66,
+        "components": 1316,
+        "trials_per_process": 101,
+        "system_allocator": {
+          "baseline_binary_sha256": "35ec7752436212fec6d12ddc55f6eda3de0f9c6238f5dbca09a4e6feaa6e0b86",
+          "candidate_binary_sha256": "4d7b2a5faa6545744bdfa0463b686b403d8194835171dba5fd37fd0c690ce165",
+          "absolute_lencode_improvement_pct_by_pair": [0.374930, 2.609640, 1.773410],
+          "control_normalized_improvement_pct_by_pair": [1.044980, 1.895610, 0.998370],
+          "median_absolute_lencode_improvement_pct": 1.773410,
+          "median_control_normalized_improvement_pct": 1.044980,
+          "result": "cleared the 1% screen narrowly"
+        },
+        "production_jemalloc": {
+          "baseline_binary_sha256": "f6889d572a1ee2ba6a9f9eea14ef4166f1d42d20696f9f0dd07f1d49681ff18d",
+          "candidate_binary_sha256": "eecce9d980b1dc2cf1e7b3cc4a2a289dee6e38fcaccdb136704d33655a479ee9",
+          "pairs": [
+            {
+              "process_order": ["baseline", "candidate"],
+              "baseline_wincode_validator_ns": 27065077,
+              "baseline_lencode_validator_ns": 24387198,
+              "candidate_wincode_validator_ns": 27495499,
+              "candidate_lencode_validator_ns": 24716049,
+              "absolute_lencode_improvement_pct": -1.348457,
+              "control_normalized_improvement_pct": 0.238079
+            },
+            {
+              "process_order": ["candidate", "baseline"],
+              "baseline_wincode_validator_ns": 27030767,
+              "baseline_lencode_validator_ns": 24417778,
+              "candidate_wincode_validator_ns": 27373358,
+              "candidate_lencode_validator_ns": 24643758,
+              "absolute_lencode_improvement_pct": -0.925473,
+              "control_normalized_improvement_pct": 0.337659
+            }
+          ],
+          "decision": "rejected because absolute lencode latency regressed in both orders and control-normalized movement remained well below the 1% gate"
+        },
+        "old_production_batch_fixture": {
+          "fixture_path": "/tmp/agave-shred-broadcast-batches.bin",
+          "absolute_lencode_regression_pct_by_pair": [0.598, 0.754],
+          "control_normalized_improvement_pct_by_pair": [0.49, 0.55],
+          "decision": "no regression exceeded 2%, but the candidate did not qualify"
+        }
+      },
+      "security": "the candidate added no unsafe block, unchecked offset, sidecar, private layout, partial decoder, dependency, or wire change; existing frame identity, version, flag, signed-length, caller maximum, ratio, exact-length, and official parser checks remained intact; a truncated hostile frame cleared the arena and retained the input for error handling; all candidate code was removed after the production-allocator rejection",
+      "zero_copy": "the experiment preserved the existing caller-owned arena and one split, freeze, and slice handoff with no payload copy; the retained baseline remains the previously audited zero-copy handoff",
+      "validation": "the final bounded candidate passed all 13 focused Agave codec tests, including malformed truncated input and shared-storage assertions; after rejection, nightly rustfmt restored the protected Agave codec byte for byte and the lencode API experiment was inverse-reverted byte for byte",
+      "full_reset": {
+        "reason": "multiple alignment layouts and ownership placements failed the production jemalloc keep gate",
+        "result": "the exact retained lencode and Agave codec sources were re-established before recording this iteration"
+      },
+      "source_sha256": {
+        "lencode_solana_wire": "0445dde85cbe7e704e5a7862daceffb59e1fd8f970cb0dfbef609156cda81d3b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b"
       }
     },
     "production_batch_benchmark": {
