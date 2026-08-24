@@ -1,12 +1,12 @@
 {
-  "version": 130,
+  "version": 131,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T00:30:47Z",
+  "updated_at": "2026-08-24T00:58:45Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 84,
+    "version": 85,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -3955,6 +3955,105 @@
         "lencode_solana_wire": "0445dde85cbe7e704e5a7862daceffb59e1fd8f970cb0dfbef609156cda81d3b",
         "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
         "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b"
+      }
+    },
+    "iteration_67_jemalloc_decoder_and_allocation_frontier": {
+      "status": "no production source change; three safe candidate families were rejected and the exact retained lencode and Agave sources were restored",
+      "scope": "re-profile the exact 7/4 production-jemalloc validator path, then screen only lencode batching or direct CanonicalLz4V1 replacement-site allocation and input-layout changes",
+      "fresh_profile": {
+        "binary_sha256": "f6889d572a1ee2ba6a9f9eea14ef4166f1d42d20696f9f0dd07f1d49681ff18d",
+        "fixture_path": "/tmp/agave-shred-broadcast-receiver-canonical-1_75-400ms.bin",
+        "fixture_sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+        "data_path": "/tmp/lencode-blockstore-7_4-jemalloc-iter67-perf.data",
+        "data_sha256": "5a68258c18ed5c9000b24131924f552fc10900a64af2a699eb1a649c64e3608d",
+        "samples": 7142,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_validator": 27128997,
+          "canonical_lz4_validator": 24492678
+        },
+        "largest_total_self_cycle_pct": {
+          "transaction_frame_parse": 10.28,
+          "lz4_decompress_safe": 8.04,
+          "rocksdb_iterator_next": 7.60,
+          "sha256_blocks": 6.82
+        },
+        "inference": "the benchmark alternates equal wincode and canonical work, so the 8.04% total LZ4 share is roughly 16% of the canonical path; the checked exact-size libLZ4 call remains the only large lencode-specific validator hotspot"
+      },
+      "dependency_audit": {
+        "method": "queried the crates.io index with cargo search on 2026-08-24",
+        "lz4": "1.28.1",
+        "lz4_sys": "1.11.1+lz4-1.10.0",
+        "result": "the retained direct dependencies already match the latest published crates, so there is no upstream version upgrade to screen"
+      },
+      "rejected_candidates": {
+        "target_9_5_recheck": {
+          "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+          "current_components": 1316,
+          "candidate_components": 1283,
+          "component_reduction_pct": 2.507599,
+          "wire_regression_pct": 0.069541,
+          "production_jemalloc_absolute_lencode_change_pct": [0.013534, -0.139105],
+          "contention_discard": "one reverse-order pair moved both fixture controls upward and showed a non-reproduced 2.736% candidate regression",
+          "decision": "the two stable 101-trial pairs were flat to 0.14% slower and wire grew, so the component-count reduction alone did not establish an end-to-end lencode gain"
+        },
+        "canonical_allocation_bundle": {
+          "change": "pre-size the retained canonical deshred buffer from the largest bounded completed range and allocate the canonical result vector for the known component count",
+          "binary_sha256": "fec9dd73d846a679738a97248c26f72efee1c7ad928e1bfaed4bdc97756ddd26",
+          "trials_per_process": 101,
+          "pairs": [
+            {
+              "baseline_wincode_ns": 27018188,
+              "baseline_lencode_ns": 24311218,
+              "candidate_wincode_ns": 27288218,
+              "candidate_lencode_ns": 24160177,
+              "absolute_lencode_improvement_pct": 0.621281,
+              "control_normalized_improvement_pct": 1.604681
+            },
+            {
+              "baseline_wincode_ns": 27082069,
+              "baseline_lencode_ns": 24356188,
+              "candidate_wincode_ns": 27246739,
+              "candidate_lencode_ns": 24273858,
+              "absolute_lencode_improvement_pct": 0.338025,
+              "control_normalized_improvement_pct": 0.940348
+            },
+            {
+              "baseline_wincode_ns": 27083967,
+              "baseline_lencode_ns": 24326287,
+              "candidate_wincode_ns": 27381958,
+              "candidate_lencode_ns": 24330808,
+              "absolute_lencode_improvement_pct": -0.018585,
+              "control_normalized_improvement_pct": 1.069892
+            }
+          ],
+          "median_absolute_lencode_improvement_pct": 0.338025,
+          "decision": "rejected because every absolute lencode movement missed 1%; the normalized median crossed 1% only because the candidate binary consistently slowed the unchanged wincode control"
+        },
+        "aligned_compressed_input": {
+          "change": "after the bounded allocation hint, insert at most 31 prefix bytes so the size-prefixed LZ4 payload starts on a 32-byte address inside the retained deshred Vec",
+          "binary_sha256": "08140b8a4ef2d5891128fa9278267917137e5edc78effdf0f662f916aeeb4ffa",
+          "incremental_absolute_lencode_change_pct_by_pair": [-0.349383, 0.002432],
+          "decision": "rejected because source alignment was flat in one order and slower in the other; all offset and padding plumbing was removed"
+        }
+      },
+      "security": "all candidates retained the existing frame identity, version, flag, signed-length conversion, caller maximum, compression-ratio bound, exact decompressed-length check, and official parser; no unsafe block, partial decoder, unchecked offset, sidecar, private layout, dependency, or wire representation was added; allocation projections were bounded by MAX_DATA_SHREDS_SIZE and alignment padding by 31 bytes",
+      "zero_copy": "the retained borrowed leader frame and shared BytesMut split-and-freeze validator handoff are unchanged; no candidate added a payload copy or owned metadata sidecar",
+      "validation": "the allocation and alignment candidates compiled with Rust 1.98.0, and the 13 focused Agave codec tests compiled before screening; after rejection, nightly rustfmt and inverse patches restored both protected Agave sources and the lencode source byte for byte",
+      "full_reset": {
+        "reason": "batching, allocation, and source-alignment directions all failed to produce a 1% absolute lencode gain",
+        "fresh_baseline_ns": {
+          "wincode_validator": 27448879,
+          "canonical_lz4_validator": 24797189
+        },
+        "result": "the fresh run preserved the 1.11x same-boundary canonical throughput ratio and confirmed environmental drift affected both controls together"
+      },
+      "source_sha256": {
+        "lencode_solana_wire": "0445dde85cbe7e704e5a7862daceffb59e1fd8f970cb0dfbef609156cda81d3b",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b"
       }
     },
