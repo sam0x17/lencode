@@ -1,12 +1,12 @@
 {
-  "version": 136,
+  "version": 137,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T02:58:32Z",
+  "updated_at": "2026-08-24T03:17:04Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 90,
+    "version": 91,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -376,6 +376,132 @@
         "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
         "agave_shredder_sha256": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
         "agave_broadcast_run_sha256": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c"
+      }
+    },
+    "iteration_73_target_sized_and_zstd_frontier": {
+      "status": "no production source change; target-sized LZ4 and zstd outer-frame diagnostics were rejected, inverse-reverted, and followed by a full default rebuild",
+      "scope": "lencode-owned canonical-frame compression only; Agave replacement sources, shred algorithms, the retained decoder, and the retained wire format were not changed",
+      "target_sized_fast1": {
+        "change": "retry selected FAST(1) boundary candidates with LZ4_compress_destSize using the previous wire boundary as the destination capacity, and accept output only when the API reports that it consumed the complete canonical source",
+        "safety_audit": [
+          "the linked libLZ4 1.10 public API bounds writes by targetDstSize and reports the consumed source length through srcSizePtr",
+          "the destination capacity came from checked arena arithmetic and the immutable source and mutable destination borrows could not alias",
+          "partial output was never made visible and was discarded unless the returned source length equaled the full trusted encoder input",
+          "hostile-input decoding and the existing exact-size LZ4_decompress_safe boundary were unchanged"
+        ],
+        "validation": "19 focused Solana wire tests passed, including exact reference-wincode reconstruction and hostile malformed-frame coverage",
+        "baseline_binary_sha256": "2646ccef8f55729e4082ee0dd58a315e35a4fc771342975a1c2d15a0c25cfa5a",
+        "candidate_binary_sha256": "3cd38bb835d22f65e80d86cd2e6cb106da437b471d165116cd701515a3f04df0",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "trials_per_process": 7,
+        "baseline_ns": {
+          "wincode_leader": 302245276,
+          "canonical_lz4_leader": 239296804,
+          "wincode_validator": 21330483,
+          "canonical_lz4_validator": 23532961
+        },
+        "candidate_ns": {
+          "wincode_leader": 301888485,
+          "canonical_lz4_leader": 225538950,
+          "wincode_validator": 21022381,
+          "canonical_lz4_validator": 23263719
+        },
+        "candidate_change_pct": {
+          "absolute_leader_improvement": 5.749284,
+          "control_normalized_leader_improvement": 5.637893,
+          "absolute_validator_improvement": 1.144106,
+          "payload_regression": 0.440060,
+          "wire_regression": 3.968254
+        },
+        "baseline_wire": {
+          "payload_bytes": 32684660,
+          "data_shreds": 48384,
+          "coding_shreds": 48384,
+          "wire_bytes": 117621504
+        },
+        "candidate_wire": {
+          "payload_bytes": 32828492,
+          "data_shreds": 50304,
+          "coding_shreds": 50304,
+          "wire_bytes": 122289024
+        },
+        "decision": "rejected after the deterministic wire result exceeded the 2% regression ceiling; fill-output compression often failed to consume a full frame at the target and displaced ordinary FAST(1) wins"
+      },
+      "zstd_outer_frame_upper_bound": {
+        "method": "temporarily substitute reusable-context zstd compression and exact-size decompression behind the private benchmark candidate path; this was an upper-bound diagnostic and was never a proposed flag-1 representation",
+        "level_negative_1": {
+          "candidate_binary_sha256": "6e275c641aeb5b36573c0a17525eabf1e7d611eb5bbccb499953d6c9af513551",
+          "trials": 1,
+          "wincode_leader_ns": 302178902,
+          "candidate_leader_ns": 269228610,
+          "wincode_validator_ns": 21058818,
+          "candidate_validator_ns": 28636317,
+          "payload_bytes": 30473511,
+          "data_shreds": 48320,
+          "coding_shreds": 48320,
+          "wire_bytes": 117465920,
+          "vs_restored_default_pct": {
+            "leader_regression": 12.093150,
+            "validator_regression": 23.002127,
+            "payload_improvement": 6.765097,
+            "wire_improvement": 0.132275
+          }
+        },
+        "level_negative_5": {
+          "candidate_binary_sha256": "61e1c7a1cd9bac342c145300e644901e74419d6dd52852435ae12e88d4eec56d",
+          "trials": 1,
+          "wincode_leader_ns": 301817050,
+          "candidate_leader_ns": 255336817,
+          "wincode_validator_ns": 21236999,
+          "candidate_validator_ns": 27149801,
+          "payload_bytes": 32057679,
+          "data_shreds": 52192,
+          "coding_shreds": 52192,
+          "wire_bytes": 126878752,
+          "vs_restored_default_pct": {
+            "leader_regression": 6.309311,
+            "validator_regression": 16.617066,
+            "payload_improvement": 1.918273,
+            "wire_regression": 7.870370
+          }
+        },
+        "decision": "rejected without long trials because both speed points exceeded the 2% CPU ceiling by wide margins; the faster point also increased actual Turbine wire by nearly 8%",
+        "wire_compatibility": "the temporary substitution reused flag 1 only inside a frozen diagnostic binary and was fully removed; retaining zstd would require a new negotiated frame flag, but the measured tradeoff does not justify that complexity"
+      },
+      "full_reset": {
+        "trigger": "three consecutive rejected families: caller-owned LZ4 fast reset, lencode-only single-unit code generation, and target-sized LZ4 compression",
+        "binary_path": "/tmp/lencode-iter73-restored-rust-1.98.0",
+        "binary_sha256": "b1268d21fbb388842731fcefb6b739aaf2f33b1f3dd35d0ad4ef6e6eee7c0d43",
+        "seven_trial_ns": {
+          "wincode_leader": 301608256,
+          "canonical_lz4_leader": 240182929,
+          "wincode_validator": 20794317,
+          "canonical_lz4_validator": 23281156
+        },
+        "wire_identity": {
+          "components": 1283,
+          "payload_bytes": 32684660,
+          "data_shreds": 48384,
+          "coding_shreds": 48384,
+          "wire_bytes": 117621504
+        }
+      },
+      "restored_validation": "19 focused Solana wire tests passed after every diagnostic was removed",
+      "zero_copy": "the retained borrowed selected-frame slice, caller-owned compression and decompression arenas, uninitialized exact-size decode, and BytesMut split-and-freeze handoff are unchanged",
+      "security": "no new unsafe block, FFI declaration, decoder branch, dependency, unchecked hostile offset, private layout, sidecar, or cross-frame state remains; the reference-Solana input boundary and exact-size libLZ4 decoder are unchanged",
+      "restoration": {
+        "lencode_solana_wire_sha256": "38e57030cd00029fcbbf5e2b607edc855d018ad27555333acd8f233dac007ec1",
+        "lencode_bytes_sha256": "2ce0922fca68359292ac9cf872b941ffec1cfc565a6f5122249201f4688facea",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_manifest_sha256": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder_sha256": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_broadcast_run_sha256": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b"
       }
     },
     "post_iteration_35_profile": {
