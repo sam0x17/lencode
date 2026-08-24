@@ -1,14 +1,14 @@
 {
-  "version": 168,
+  "version": 169,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T14:26:02Z",
+  "updated_at": "2026-08-24T15:00:47Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 122,
+    "version": 123,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T14:26:02Z",
+    "updated_at": "2026-08-24T15:00:47Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -3978,6 +3978,186 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "protected_blockstore_benchmark_sha256": "5c54250b1e41491a024e2b8ced146fd30fa7f35b3231f2e6dd6a2ec5453f450f",
         "lencode_worktree_clean": true,
+        "agave_production_source_changed": false
+      }
+    },
+    "iteration_105_real_200ms_consolidation": {
+      "status": "final evidence checkpoint; no production source changed after the retained two-byte instruction sizing optimization",
+      "scope": "measure the retained lencode implementation against wincode with Agave's receiver behavior normalized to a 200 ms reference slot, then remove every measurement-only edit",
+      "source_corpus": {
+        "path": "/tmp/agave-shred-corpus.bin",
+        "sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "slots": 100,
+        "entries": 68392,
+        "transactions": 124218
+      },
+      "receiver_replay": {
+        "method": "Agave's receiver function with its 50 ms receive deadline, byte-paced entry arrival, 200 ms per source slot, production legacy policy, and retained canonical 9/5 policy",
+        "timing_limit": "the source dump has no BankingStage arrival timestamps, so byte pacing is a deterministic approximation; tick height was reconstructed from cumulative byte progress because tick entries are absent",
+        "legacy_400ms_calibration": {
+          "replayed_components": 1975,
+          "frozen_components": 1974,
+          "component_difference_pct": 0.0507,
+          "replayed_deadline_exits": 29,
+          "frozen_deadline_exits": 24
+        },
+        "legacy_200ms": {
+          "fixture_path": "/tmp/agave-shred-broadcast-receiver-legacy-200ms.bin",
+          "fixture_sha256": "475bedd7be680b67373545dd04085f904477644b1dd2f7efc028b33c43dd3973",
+          "boundaries_sha256": "2122a76cd9d843eb6570289706295e410bdb622a2535e4389ad329f57f3d0efb",
+          "components": 1963,
+          "hit_max": 157,
+          "tight": 1703,
+          "slot_ended": 100,
+          "deadline": 3
+        },
+        "canonical_9_5_200ms": {
+          "fixture_path": "/tmp/agave-shred-broadcast-receiver-canonical-9_5-200ms.bin",
+          "fixture_sha256": "65b8dfdd8f9106eb51492076fd8d48c81a30c56f39313ca8474219cd5c429ad3",
+          "boundaries_sha256": "f9a2cd3257efddc8be0e99670250473be675e0dc3d9f984373f7c9c940cd316f",
+          "components": 1278,
+          "hit_max": 1175,
+          "tight": 0,
+          "slot_ended": 100,
+          "deadline": 3
+        },
+        "component_reduction_pct": 34.895568
+      },
+      "end_to_end": {
+        "binary_path": "/tmp/lencode-200ms-current-mixed-slots-rust-1.98.0",
+        "binary_sha256": "a1d29aa897544b3a60343bd1db892e01f1872ff73febe91dcff1146d977b502e",
+        "protocol": "logical CPU 28; two reverse-order process pairs with 31 alternating warmed trials per format; exact 100-slot boundaries; independently rebuilt validator inputs per component",
+        "pairs": [
+          {
+            "order": "canonical fixture, then legacy fixture",
+            "canonical_fixture": {
+              "wincode_leader_ns": 303007781,
+              "lencode_leader_ns": 216292922,
+              "wincode_validator_ns": 20912055,
+              "lencode_validator_ns": 23365553
+            },
+            "legacy_fixture": {
+              "wincode_leader_ns": 284562965,
+              "lencode_leader_ns": 271359258,
+              "wincode_validator_ns": 22041338,
+              "lencode_validator_ns": 23144533
+            }
+          },
+          {
+            "order": "legacy fixture, then canonical fixture",
+            "legacy_fixture": {
+              "wincode_leader_ns": 283322561,
+              "lencode_leader_ns": 271056317,
+              "wincode_validator_ns": 21983398,
+              "lencode_validator_ns": 23065022
+            },
+            "canonical_fixture": {
+              "wincode_leader_ns": 303690564,
+              "lencode_leader_ns": 215354329,
+              "wincode_validator_ns": 20848174,
+              "lencode_validator_ns": 23296303
+            }
+          }
+        ],
+        "production_comparison_average": {
+          "wincode_legacy_leader_ns_per_100_slots": 283942763,
+          "lencode_canonical_leader_ns_per_100_slots": 215823625.5,
+          "wincode_legacy_leader_ms_per_slot": 2.839428,
+          "lencode_canonical_leader_ms_per_slot": 2.158236,
+          "leader_time_reduction_pct": 23.990447,
+          "leader_speedup": 1.315624,
+          "wincode_legacy_validator_ns_per_100_slots": 22012368,
+          "lencode_canonical_validator_ns_per_100_slots": 23330928,
+          "wincode_legacy_validator_us_per_slot": 220.12368,
+          "lencode_canonical_validator_us_per_slot": 233.30928,
+          "isolated_validator_time_regression_pct": 5.990087,
+          "isolated_validator_throughput_ratio": 0.943
+        },
+        "wire": {
+          "wincode_legacy_payload_bytes": 66602655,
+          "lencode_canonical_payload_bytes": 32677013,
+          "payload_reduction_pct": 50.937372,
+          "wincode_legacy_data_shreds": 73472,
+          "wincode_legacy_coding_shreds": 73472,
+          "lencode_canonical_data_shreds": 45984,
+          "lencode_canonical_coding_shreds": 45984,
+          "wincode_legacy_wire_bytes": 178610432,
+          "lencode_canonical_wire_bytes": 111787104,
+          "wire_reduction_pct": 37.412892
+        }
+      },
+      "blockstore": {
+        "binary_path": "/tmp/lencode-200ms-current-blockstore-rust-1.98.0",
+        "binary_sha256": "0742b81ac23da7bfde66b2fd16f3bc23d11fc9cbfeb27189f1f6279826fb7286",
+        "protocol": "logical CPU 28; two reverse-order process pairs with 31 alternating warmed trials and exact 100-slot boundaries",
+        "pairs": [
+          {
+            "order": "canonical fixture, then legacy fixture",
+            "canonical_wincode_ns": 30568140,
+            "canonical_lencode_ns": 28791553,
+            "legacy_wincode_ns": 29936397,
+            "legacy_lencode_ns": 27001247
+          },
+          {
+            "order": "legacy fixture, then canonical fixture",
+            "legacy_wincode_ns": 30224418,
+            "legacy_lencode_ns": 27298788,
+            "canonical_wincode_ns": 30548499,
+            "canonical_lencode_ns": 28856293
+          }
+        ],
+        "production_comparison_average": {
+          "wincode_legacy_ns_per_100_slots": 30080407.5,
+          "lencode_canonical_ns_per_100_slots": 28823923,
+          "wincode_legacy_us_per_slot": 300.804075,
+          "lencode_canonical_us_per_slot": 288.23923,
+          "time_reduction_pct": 4.177086,
+          "throughput_ratio": 1.043592
+        }
+      },
+      "same_boundary_isolation_controls": {
+        "exact_sizing": {
+          "wincode_ms_per_100_slots": 35.35,
+          "lencode_ms_per_100_slots": 20.08,
+          "time_reduction_pct": 43.2,
+          "throughput_ratio": 1.7603
+        },
+        "leader": {
+          "wincode_ms_per_100_slots": 355.6,
+          "lencode_ms_per_100_slots": 226.7,
+          "time_reduction_pct": 36.3,
+          "speedup": 1.57
+        },
+        "blockstore": {
+          "wincode_ms_per_100_slots": 34.41,
+          "lencode_ms_per_100_slots": 29.41,
+          "time_reduction_pct": 14.5,
+          "throughput_ratio": 1.17
+        }
+      },
+      "interpretation": "the production comparison changes only the codec and its direct batching consequences: lencode lowers leader CPU, wire traffic, component count, and Blockstore CPU, while isolated reconstruction and parsing remains 6.0% slower than wincode",
+      "public_types": "the retained implementation encodes official public Solana types by field and does not depend on Agave-private memory layouts; Agave-specific adaptation remains at the replacement boundaries",
+      "zero_copy": "the selected wire frame is borrowed from the caller arena, decoder storage is caller-owned, and reconstructed bytes use a split-to-freeze parser handoff; no sidecar or cross-frame state is retained",
+      "security_and_wire": "the versioned LCSH frame, standard size-prefixed LZ4 block, caller maximum, expansion bound, exact decompressed-length check, and official parser are unchanged; no private layout, unchecked offset, or measurement-only unsafe code remains",
+      "report": {
+        "path": "/tmp/lencode-agave-shred-processing.md",
+        "sha256": "f382ae9fa5fcf8cf8fe7de849378e58498c6a880398d3db93c8a2d85d64c9f9b"
+      },
+      "restoration": {
+        "lencode_solana_wire_sha256": "12eba3bbf2d8bce1bc0f54394b2ab1cb46dee64e315c63b5c3a5002a7b47079d",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_root_manifest_sha256": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_turbine_manifest_sha256": "81fa6f655e98ee71b2cf163d7f02f3daacb5406b909dbc366be1c22940a26ebc",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_focused_benchmark_sha256": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "protected_blockstore_benchmark_sha256": "5c54250b1e41491a024e2b8ced146fd30fa7f35b3231f2e6dd6a2ec5453f450f",
+        "measurement_edits_removed": true,
         "agave_production_source_changed": false
       }
     },
@@ -11381,6 +11561,15 @@
   },
   "final_summary": {
     "qualifying_scope": "lencode-owned changes and Agave replacement-call-site adapters only; general Agave optimizations are historical and excluded",
+    "agave_real_200ms_reference_slots": 100,
+    "agave_real_200ms_component_reduction_pct": 34.895568,
+    "agave_real_200ms_leader_time_reduction_pct": 23.990447,
+    "agave_real_200ms_leader_speedup_vs_wincode": 1.315624,
+    "agave_real_200ms_wire_reduction_pct": 37.412892,
+    "agave_real_200ms_blockstore_time_reduction_pct": 4.177086,
+    "agave_real_200ms_isolated_validator_time_regression_pct": 5.990087,
+    "agave_exact_sizing_speedup_vs_wincode": 1.7603,
+    "agave_real_200ms_report": "/tmp/lencode-agave-shred-processing.md",
     "agave_full_slot_leader_speedup_vs_wincode": 1.578044,
     "agave_full_slot_validator_throughput_vs_wincode": 0.929128,
     "agave_full_slot_turbine_wire_reduction_vs_wincode_pct": 52.901,
