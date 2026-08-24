@@ -986,6 +986,10 @@ fn canonical_instructions_serialized_size(
                 .checked_add(data_len)
                 .and_then(|size| size.checked_add(3))
                 .ok_or(Error::IncorrectLength)?
+        } else if accounts_len < 0x80 && data_len < 0x4000 {
+            // These bounds make the sum exact in usize and account for the
+            // one-byte accounts prefix plus the two-byte data prefix.
+            accounts_len + data_len + 4
         } else {
             let accounts_size = canonical_short_payload_serialized_size(&instruction.accounts)?;
             let data_size = canonical_short_payload_serialized_size(&instruction.data)?;
@@ -2615,6 +2619,8 @@ mod tests {
             (0x80, 0x7f),
             (0x7f, 0x80),
             (0x80, 0x80),
+            (0x7f, 0x3fff),
+            (0x7f, 0x4000),
             (usize::from(u16::MAX), usize::from(u16::MAX)),
         ] {
             let instruction = CompiledInstruction {
