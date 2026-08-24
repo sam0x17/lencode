@@ -1,12 +1,12 @@
 {
-  "version": 146,
+  "version": 147,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T06:45:44Z",
+  "updated_at": "2026-08-24T07:08:48Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 100,
+    "version": 101,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1669,6 +1669,112 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "temporary_census_removed": true,
         "lencode_production_worktree_clean_before_audit": true
+      }
+    },
+    "iteration_83_single_transaction_entry_sizing": {
+      "status": "retained an lencode-only canonical entry-sizing specialization",
+      "scope": "specialize one-transaction reference-Solana entries without changing Agave source, canonical bytes, compression policy, or receive behavior",
+      "baseline_head": "dd6f1bf3a4544eef3c5b06c1cc756dd6461b33bc",
+      "production_commit": "db8d5f1db3e5526b6a1fb8d7edd95d0b9d91da0a",
+      "candidate": {
+        "change": "size the single transaction once and return the fixed entry prefix plus that size on 64-bit targets; non-64-bit targets retain checked addition",
+        "error_semantics": "transaction sizing still uses the same fallible validator and error mapping before the final addition",
+        "safety_bound": "Legacy/V0 accept at most u16::MAX instructions and lookups, each bounded by u32::MAX bytes; their combined size, signatures, keys, and the 48-byte entry prefix stay below 2^49. V1 has smaller u8 and u16 collection bounds. A debug assertion records the 64-bit bound.",
+        "unsafe_code_added": false,
+        "wire_bytes_changed": false
+      },
+      "binary_sha256": {
+        "focused_baseline": "1bc8915b7bfb262fa5e68e906d724ec58a8d7a7682ab10c9dd921c2e7674fb1c",
+        "focused_candidate": "b1168b544c3425049659605ad88074398b03e5cb37059cf1b4466da16e7bce6b",
+        "end_to_end_candidate": "934c7afa89ee7acbb7101b54666bc94d429ef523fcaa1e7d29f0a84c94725f26",
+        "blockstore_candidate": "3e08a498fa8be778e83858cac80ce310dc1e163a6caaf26eef389e7cad1fdd25",
+        "retained_end_to_end": "5025c4c43d5c6e65d5e3d62e2a22720b22e1673834d8ee15d1254caf75948a12",
+        "retained_blockstore": "f10fd84c348212d97984f00b362cc05a163258659e74f528e2c9761fd48950e8"
+      },
+      "focused_sizing": {
+        "fixture_path": "/tmp/agave-shred-broadcast-batches.bin",
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "components": 1982,
+        "entries": 68392,
+        "transactions": 124218,
+        "rounds_per_process": 101,
+        "repeats_per_round": 3,
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 35306340,
+            "baseline_lencode": 20740456,
+            "candidate_wincode": 35479880,
+            "candidate_lencode": 20539256
+          },
+          {
+            "baseline_wincode": 35338240,
+            "baseline_lencode": 20747587,
+            "candidate_wincode": 35505580,
+            "candidate_lencode": 20624626
+          },
+          {
+            "baseline_wincode": 35287700,
+            "baseline_lencode": 20749776,
+            "candidate_wincode": 35425770,
+            "candidate_lencode": 20564025
+          },
+          {
+            "baseline_wincode": 35342969,
+            "baseline_lencode": 20757625,
+            "candidate_wincode": 35613101,
+            "candidate_lencode": 20634785
+          },
+          {
+            "baseline_wincode": 35331960,
+            "baseline_lencode": 20763856,
+            "candidate_wincode": 35598101,
+            "candidate_lencode": 20630306
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [0.970085, 0.592652, 0.895195, 0.591783, 0.643185],
+        "wincode_control_latency_improvement_pct_by_pair": [-0.491526, -0.473538, -0.391269, -0.764316, -0.753259],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [1.454462, 1.061165, 1.281451, 1.345812, 1.386003],
+        "median_control_normalized_lencode_latency_improvement_pct": 1.345812,
+        "median_candidate_speedup_vs_wincode": 1.7255,
+        "decision": "retained because lencode was faster in every pair and all five same-binary wincode-normalized improvements exceeded 1%"
+      },
+      "rejected_layout_candidates": {
+        "single_transaction_plus_outlined_v1": {
+          "candidate_binary_sha256": "ec78906b2b9133b8fe6879b21411c2ed37d9fa036a7eadb6f843d6fdb1b456f9",
+          "control_normalized_lencode_latency_improvement_pct_by_pair": [-0.768402, -0.765395],
+          "decision": "rejected because both reverse-order pairs regressed"
+        },
+        "outlined_v1_only": {
+          "candidate_binary_sha256": "aa128bd1e1b41481c36292c1fbcdff7f109664f03d864b544ea5c167cb5dc4f4",
+          "control_normalized_lencode_latency_improvement_pct_by_pair": [-1.281755, -1.579791],
+          "decision": "rejected because both reverse-order pairs regressed; the V1 helper was restored inline"
+        }
+      },
+      "end_to_end_guard": {
+        "trials_per_process": 7,
+        "control_normalized_leader_improvement_pct_by_pair": [-0.438829, 0.716692],
+        "control_normalized_validator_improvement_pct_by_pair": [-0.561942, -0.604605],
+        "payload_bytes": 34879635,
+        "data_shreds": 64640,
+        "coding_shreds": 64640,
+        "wire_bytes": 157139840,
+        "output_changed": false
+      },
+      "blockstore_guard": {
+        "trials_per_process": 7,
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [0.970824, -0.564902],
+        "max_normalized_regression_pct": 0.564902
+      },
+      "zero_copy": "the retained borrowed frame, caller-owned arenas, raw allocation transfer, and BytesMut parser handoff are unchanged; the sizing path adds no allocation or copy",
+      "security": "the change reads trusted reference-Solana types and preserves every fallible width check before using the proven 64-bit bound. It adds no unsafe block, hostile-input parser branch, unchecked offset, private layout, sidecar, dependency, or cross-frame state.",
+      "validation": "Rust 1.98 formatting and strict all-target all-feature Clippy passed. The full lencode suite passed with 220 unit tests, 8 integration tests, and 5 doctests with one ignored. All 19 focused Solana wire tests passed after adding exact Legacy, V0, V1, and invalid-V1 single-transaction coverage. All 15 focused Agave codec tests passed. Both end-to-end binaries reconstructed 68,392 entries and 124,218 transactions with exact payload and shred totals.",
+      "restoration": {
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_mixed_representation_benchmark_patch_removed": true,
+        "agave_source_changed": false
       }
     },
     "post_iteration_35_profile": {
@@ -9016,6 +9122,10 @@
     "agave_bounded_raw_blockstore_throughput_vs_wincode": 1.132514,
     "agave_bounded_raw_payload_regression_pct": 0.984733,
     "agave_bounded_raw_turbine_wire_bytes_changed": false,
+    "agave_canonical_entry_sizing_normalized_improvement_pct_by_pair": [1.454462, 1.061165, 1.281451, 1.345812, 1.386003],
+    "agave_canonical_entry_sizing_normalized_improvement_pct_median": 1.345812,
+    "agave_canonical_entry_sizing_speedup_vs_wincode": 1.7255,
+    "agave_canonical_entry_sizing_wire_bytes_changed": false,
     "agave_paced_blockstore_validator_throughput_vs_wincode": 1.015619,
     "agave_paced_blockstore_validator_latency_improvement_pct": 1.538,
     "agave_13_8_component_reduction_vs_49_32_pct": 5.344021,
