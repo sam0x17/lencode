@@ -1,12 +1,12 @@
 {
-  "version": 141,
+  "version": 142,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T04:38:24Z",
+  "updated_at": "2026-08-24T05:35:50Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 95,
+    "version": 96,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1022,6 +1022,161 @@
         "restored_end_to_end_binary_sha256": "11abe3b3886a217cdec53c3ffb72999fac24d85932fa8b70df3fbad5f7aa10ee",
         "lencode_production_worktree_clean": true
       }
+    },
+    "iteration_78_bounded_raw_canonical_fallback": {
+      "status": "kept an additive lencode encoder API and a direct Agave replacement-site integration",
+      "scope": "lencode owns canonical encoding, wire-block accounting, and borrowed raw selection over official Solana types; Agave changes are confined to the feature-gated wincode replacement adapter and its shared parser arena",
+      "profile_basis": {
+        "protocol": "perf record at 999 Hz on logical CPU 28 over the frozen Rust 1.98 jemalloc Blockstore baseline with 101 alternating warmed trials",
+        "data_sha256": "9064397f93e83f240da7b950a5efda75373c2f61efa04d949eee2a373934f8df",
+        "samples": 7626,
+        "lost_samples": 0,
+        "baseline_medians_ns": {
+          "wincode_validator": 27448958,
+          "canonical_lz4_validator": 27779879
+        },
+        "self_cycles_pct": {
+          "canonical_transaction_frame_parse": 9.71,
+          "lz4_decompress_safe": 7.38,
+          "sha256_blocks": 7.24
+        },
+        "finding": "LZ4 decompression was the only large lencode-owned receive cost left at this boundary"
+      },
+      "policy": {
+        "raw_canonical_bytes": {
+          "start_inclusive": 28672,
+          "end_exclusive": 32768
+        },
+        "selection": "return raw canonical bytes only when the configured half-open length range contains the batch and both valid wire-block counts are equal",
+        "invalid_geometry": "zero-capacity or otherwise invalid wire-block layouts keep the LCSH frame",
+        "representations": "the result is either the existing raw canonical wincode representation or the existing LCSH version-1 flag-1 LZ4 frame"
+      },
+      "production_fixture": {
+        "path": "/tmp/agave-shred-broadcast-batches.bin",
+        "sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "components": 1982,
+        "entries": 68392,
+        "transactions": 124218
+      },
+      "blockstore_result": {
+        "protocol": "three reverse-order CPU-28 frozen-binary pairs, each with 31 alternating warmed trials per format, using the jemalloc benchmark",
+        "baseline_binary_sha256": "ba459fffb75efc2f9a1db90b9194309f8f7416763727792dd5b11b8b239ebc5c",
+        "candidate_binary_sha256": "f10fd84c348212d97984f00b362cc05a163258659e74f528e2c9761fd48950e8",
+        "pairs_ns": [
+          {
+            "baseline_wincode": 27262297,
+            "baseline_lencode": 27745758,
+            "candidate_wincode": 27889989,
+            "candidate_lencode": 24612537
+          },
+          {
+            "baseline_wincode": 27146267,
+            "baseline_lencode": 27391277,
+            "candidate_wincode": 27899739,
+            "candidate_lencode": 24720658
+          },
+          {
+            "baseline_wincode": 27331267,
+            "baseline_lencode": 27519988,
+            "candidate_wincode": 27824769,
+            "candidate_lencode": 24569018
+          }
+        ],
+        "absolute_lencode_improvement_pct_by_pair": [11.292613, 9.749889, 10.723006],
+        "control_normalized_improvement_pct_by_pair": [13.289061, 12.187221, 12.306429],
+        "median_absolute_lencode_improvement_pct": 10.723006,
+        "median_control_normalized_improvement_pct": 12.306429,
+        "candidate_lencode_throughput_vs_own_wincode": 1.132514,
+        "control_note": "candidate wincode moved 1.8% to 2.8% slower, but candidate lencode still beat baseline lencode by 9.7% to 11.3%; the receive win does not depend on the control shift"
+      },
+      "end_to_end_guardrail": {
+        "protocol": "three reverse-order CPU-28 frozen-binary pairs with seven alternating warmed trials per format; the temporary diagnostic decoder accepted both existing representations and was restored after freezing the binaries",
+        "baseline_binary_sha256": "3c61788c890974cd19daa078c2eab19c691a61609cb1a44ee1ee16f5016a379a",
+        "candidate_binary_sha256": "5025c4c43d5c6e65d5e3d62e2a22720b22e1673834d8ee15d1254caf75948a12",
+        "leader_pairs_ns": [
+          {
+            "baseline_wincode": 457856831,
+            "baseline_lencode": 271784729,
+            "candidate_wincode": 452343523,
+            "candidate_lencode": 271907160
+          },
+          {
+            "baseline_wincode": 457204301,
+            "baseline_lencode": 272114260,
+            "candidate_wincode": 454158469,
+            "candidate_lencode": 272472662
+          },
+          {
+            "baseline_wincode": 454746762,
+            "baseline_lencode": 272069230,
+            "candidate_wincode": 453184667,
+            "candidate_lencode": 272606953
+          }
+        ],
+        "absolute_lencode_improvement_pct_by_pair": [-0.045047, -0.131710, -0.197642],
+        "control_normalized_improvement_pct_by_pair": [-1.264428, -0.803247, -0.543016],
+        "median_absolute_lencode_regression_pct": 0.131710,
+        "median_control_normalized_regression_pct": 0.803247,
+        "validator_timing_excluded": "the diagnostic Vec decoder does not use the production shared BytesMut arena; the jemalloc Blockstore result is the receive-path measurement",
+        "benchmark_source_restored_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34"
+      },
+      "compression_and_wire": {
+        "baseline_lencode_payload_bytes": 34539513,
+        "candidate_lencode_payload_bytes": 34879635,
+        "payload_regression_pct": 0.984733,
+        "candidate_payload_reduction_vs_wincode_pct": 47.630383,
+        "baseline_lencode_data_shreds": 64640,
+        "candidate_lencode_data_shreds": 64640,
+        "baseline_lencode_coding_shreds": 64640,
+        "candidate_lencode_coding_shreds": 64640,
+        "baseline_lencode_turbine_wire_bytes": 157139840,
+        "candidate_lencode_turbine_wire_bytes": 157139840,
+        "candidate_turbine_wire_reduction_vs_wincode_pct": 48.482530,
+        "wire_bytes_changed": false
+      },
+      "retained_9_5_guardrail": {
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "components": 1283,
+        "raw_selections": 0,
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "absolute_lencode_improvement_pct_by_pair": [-0.689444, 1.524436, -1.645936],
+        "control_normalized_improvement_pct_by_pair": [1.777619, 1.274979, 1.321093],
+        "median_absolute_lencode_regression_pct": 0.689444,
+        "largest_absolute_lencode_regression_pct": 1.645936,
+        "median_control_normalized_improvement_pct": 1.321093,
+        "decision": "kept because bytes were exact, all absolute movements stayed inside 2%, and every paired control-normalized result was positive"
+      },
+      "framed_layout_correction": {
+        "finding": "the first inline raw-copy branch selected no raw batches on the 9/5 fixture but regressed framed-only lencode latency by a 2.34% median",
+        "change": "move the rare raw-copy branch into a cold non-inlined helper inside the direct canonical-lencode replacement adapter",
+        "result": "the final 9/5 median absolute regression fell to 0.69%, with a 1.32% median control-normalized improvement"
+      },
+      "copy_effect": "the leader borrows either selection from the existing encoder arena. On receive, selected raw batches replace LZ4 decompression with one bounded copy into shared parser storage, retain the deshred input allocation, and keep the split-and-freeze parser handoff copy-free. The rare raw branch is outlined so framed-only batches retain their hot layout.",
+      "security": "the new lencode path is safe Rust over encoder-produced canonical bytes. Raw fallback requires two present and equal wire-block counts. The Agave copy is limited to 28-32 KiB, and the existing canonical parser still validates the copied bytes. Decoder bounds, exact decompressed-length checks, the audited LZ4 FFI boundary, and hostile-frame behavior are unchanged.",
+      "rejected_screens": [
+        {
+          "change": "retry two-to-one wire-block misses with LZ4_compress_destSize at FAST(1)",
+          "decision": "removed because the production corpus produced no successful target-sized frame and paired leader movement stayed below 0.5%"
+        },
+        {
+          "change": "replace retained 9/5 batching with 117/64 batching",
+          "decision": "removed because 1.325% fewer components cost 0.661% more wire and slowed leader processing in both reverse-order pairs"
+        },
+        {
+          "change": "allow raw fallback for every canonical batch at least 16 KiB",
+          "decision": "narrowed to 28-32 KiB after the open-ended policy raised packed payload 3.61%; the bounded range held the payload increase to 0.98% without losing the receive win"
+        }
+      ],
+      "measurement_hygiene": "threshold screens accidentally built with the glibc allocator were discarded before the keep decision. Every reported Blockstore result above uses the named jemalloc benchmark and its frozen jemalloc baseline.",
+      "source_sha256": {
+        "lencode_solana_wire": "392397990f866a58550a6d6e46752b2996da2c589d849bf3472a0b56a53340cd",
+        "agave_production_codec": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
+        "protected_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34"
+      },
+      "public_api_change": "additive",
+      "unsafe_code_added": false,
+      "validation": "Rust 1.98 passed 220 lencode unit tests, 8 integration tests, and 5 doctests with one ignored; no-default, std-only, all-target all-feature checks, formatting, and strict Clippy passed. Agave passed 352 ledger tests with 3 ignored, 15 focused codec tests, formatting, and strict Clippy for the ledger library and both benchmark targets."
     },
     "post_iteration_35_profile": {
       "command": "perf record -F 999 -o /tmp/lencode-shred-spare-decode-perf.data -- env LENCODE_SHRED_RUNS=21 taskset -c 28 /tmp/lencode-unsafe-spare-decode-screen-rust-1.98.0 /tmp/agave-shred-broadcast-batches.bin",
@@ -3235,7 +3390,7 @@
       "lencode_validator": { "value": 23790446, "unit": "ns/100 blocks" },
       "wincode_wire_bytes": 172931616,
       "lencode_wire_bytes": 81448224,
-      "mode": "canonical reference-type entry batch compressed in caller-owned arenas with FAST(4) through eleven oversized thresholds, FAST(2) above that cutoff, stronger retries limited to ordinary frames, and impossible LZ4 expansion rejected before output allocation",
+      "mode": "canonical reference-type entry batch compressed in caller-owned arenas with FAST(4) through eleven oversized thresholds, FAST(2) above that cutoff, stronger retries limited to ordinary frames, impossible LZ4 expansion rejected before output allocation, and bounded raw canonical fallback when compression does not remove a wire block",
       "scope_status": "qualifying lencode-owned codec; Agave changes are limited to the feature-gated wincode replacement adapter"
     },
     "native_reference_path": {
@@ -8363,6 +8518,11 @@
     "agave_turbine_wire_reduction_vs_wincode_pct": 59.211,
     "agave_jemalloc_blockstore_validator_throughput_vs_wincode": 1.005,
     "agave_jemalloc_sorted_read_latency_improvement_pct": 8.809,
+    "agave_bounded_raw_blockstore_absolute_improvement_pct": 10.723006,
+    "agave_bounded_raw_blockstore_control_normalized_improvement_pct": 12.306429,
+    "agave_bounded_raw_blockstore_throughput_vs_wincode": 1.132514,
+    "agave_bounded_raw_payload_regression_pct": 0.984733,
+    "agave_bounded_raw_turbine_wire_bytes_changed": false,
     "agave_paced_blockstore_validator_throughput_vs_wincode": 1.015619,
     "agave_paced_blockstore_validator_latency_improvement_pct": 1.538,
     "agave_13_8_component_reduction_vs_49_32_pct": 5.344021,

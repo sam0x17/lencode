@@ -349,8 +349,40 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         if result.is_err() {
             output.clear();
         }
-        let (counts, frame) = result?;
+        let (counts, _, frame) = result?;
         Ok((counts, &output[frame]))
+    }
+
+    /// Encodes one batch and borrows raw canonical bytes when compression does
+    /// not remove a wire block.
+    ///
+    /// `raw_canonical_bytes` limits fallback to canonical lengths suited to the
+    /// ownership or copy policy used by the consumer. The range is half-open.
+    /// Both returned forms use existing wire representations accepted by the
+    /// canonical-LZ4 feature: raw canonical wincode bytes or an `LCSH` frame.
+    pub fn encode_for_wire_blocks_or_raw_in_arena<'entries, 'output>(
+        &mut self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'entries>>,
+        output: &'output mut Vec<u8>,
+        wire_blocks: SolanaCanonicalLz4WireBlocks,
+        raw_canonical_bytes: core::ops::Range<usize>,
+    ) -> Result<(EntryBatchCounts, &'output [u8])> {
+        output.clear();
+        let result = self.encode_inner(entries, output, Some(wire_blocks));
+        if result.is_err() {
+            output.clear();
+        }
+        let (counts, canonical_len, frame) = result?;
+        let use_raw = raw_canonical_bytes.contains(&canonical_len)
+            && matches!(
+                (
+                    wire_block_count(canonical_len, wire_blocks),
+                    wire_block_count(frame.len(), wire_blocks),
+                ),
+                (Some(raw_blocks), Some(frame_blocks)) if raw_blocks == frame_blocks
+            );
+        let selected = if use_raw { 0..canonical_len } else { frame };
+        Ok((counts, &output[selected]))
     }
 
     fn encode_with_wire_blocks<'a>(
@@ -364,7 +396,7 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         if result.is_err() {
             output.clear();
         }
-        let (counts, frame) = result?;
+        let (counts, _, frame) = result?;
         let frame_len = frame.len();
         output.copy_within(frame, 0);
         output.truncate(frame_len);
@@ -376,7 +408,7 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
         output: &mut Vec<u8>,
         wire_blocks: Option<SolanaCanonicalLz4WireBlocks>,
-    ) -> Result<(EntryBatchCounts, core::ops::Range<usize>)> {
+    ) -> Result<(EntryBatchCounts, usize, core::ops::Range<usize>)> {
         let counts =
             encode_canonical_entry_batch(entries, output, self.config.max_canonical_bytes)?;
         let canonical_len = output.len();
@@ -515,7 +547,7 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
         }
         let frame = frame_offset..frame_offset + frame_len;
         output.truncate(frame.end);
-        Ok((counts, frame))
+        Ok((counts, canonical_len, frame))
     }
 }
 
@@ -2872,6 +2904,54 @@ mod tests {
             .unwrap();
         assert_eq!(arena_counts, counts);
         assert_eq!(frame, expected_frame);
+
+        let one_block = SolanaCanonicalLz4WireBlocks::new(1, usize::MAX);
+        let (raw_counts, raw) = encoder
+            .encode_for_wire_blocks_or_raw_in_arena(
+                entries.iter().copied(),
+                &mut arena,
+                one_block,
+                expected.len()..expected.len() + 1,
+            )
+            .unwrap();
+        assert_eq!(raw_counts, counts);
+        assert_eq!(raw, expected);
+
+        let (_, upper_excluded) = encoder
+            .encode_for_wire_blocks_or_raw_in_arena(
+                entries.iter().copied(),
+                &mut arena,
+                one_block,
+                0..expected.len(),
+            )
+            .unwrap();
+        let mut fast_frame = SOLANA_ENTRY_BATCH_MAGIC.to_vec();
+        fast_frame.extend_from_slice(&[
+            SOLANA_ENTRY_BATCH_VERSION,
+            SOLANA_ENTRY_BATCH_CANONICAL_LZ4_FLAG,
+        ]);
+        fast_frame.extend_from_slice(&compressed);
+        assert_eq!(upper_excluded, fast_frame);
+
+        let (_, saved_block) = encoder
+            .encode_for_wire_blocks_or_raw_in_arena(
+                entries.iter().copied(),
+                &mut arena,
+                SolanaCanonicalLz4WireBlocks::new(1, 1),
+                0..usize::MAX,
+            )
+            .unwrap();
+        assert!(saved_block.starts_with(&SOLANA_ENTRY_BATCH_MAGIC));
+
+        let (_, invalid_blocks) = encoder
+            .encode_for_wire_blocks_or_raw_in_arena(
+                entries.iter().copied(),
+                &mut arena,
+                SolanaCanonicalLz4WireBlocks::new(0, 0),
+                0..usize::MAX,
+            )
+            .unwrap();
+        assert!(invalid_blocks.starts_with(&SOLANA_ENTRY_BATCH_MAGIC));
 
         let mut canonical = Vec::new();
         let decoded_len =
