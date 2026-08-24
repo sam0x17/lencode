@@ -1,12 +1,12 @@
 {
-  "version": 137,
+  "version": 138,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T03:17:04Z",
+  "updated_at": "2026-08-24T03:47:11Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 91,
+    "version": 92,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -502,6 +502,152 @@
         "agave_broadcast_run_sha256": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
         "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b"
+      }
+    },
+    "iteration_74_lightweight_canonical_size_error": {
+      "status": "retained production lencode source change",
+      "scope": "lencode-owned canonical sizing over official Solana transaction types; Agave source and component boundaries are unchanged, and the sizing API remains at the existing direct wincode replacement site",
+      "motivation": "the receiver computes exact component sizes but does not carry them across the coalescing boundary; preserving that value would require cross-stage metadata, so this iteration optimizes the independent lencode sizing walk instead",
+      "profile": {
+        "command": "perf record at 999 Hz on logical CPU 28 over the frozen baseline entry-size binary",
+        "data_path": "/tmp/lencode-iter74-entry-size-baseline.data",
+        "data_sha256": "a99e229f378a8dce9946f23790da095dd1563bff302983ceb242b258ab43fe7d",
+        "samples": 6073,
+        "lost_samples": 0,
+        "self_cycles_pct": {
+          "wincode_serialized_size": 60.26,
+          "lencode_transaction_size": 27.02,
+          "lencode_entry_size_wrapper": 4.45
+        },
+        "finding": "the private transaction sizer returned Result<usize, Error>; Error can contain std::io::Error, so the hot helper used an indirect return ABI and carried cold error machinery through every transaction"
+      },
+      "change": [
+        "return a private two-variant, payload-free CanonicalSizeError from the per-transaction sizing helper",
+        "convert the private error to the existing public Error at the entry-size boundary",
+        "keep the former private test wrapper so existing boundary and reference-wincode tests exercise the same public errors"
+      ],
+      "focused_size_benchmark": {
+        "command": "LENCODE_SIZE_RUNS=101 LENCODE_SIZE_REPEATS=3 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218,
+        "baseline_binary_sha256": "a8e4f158eafe24e7a531da2a07fc7efa67a6caad23b9df9cb8d4625c251c9914",
+        "candidate_binary_sha256": "a11f0933ac956111ea09ea86aea962700a239f39b4f2c090f1783968280b4096",
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 35172768,
+            "baseline_lencode": 22517572,
+            "candidate_wincode": 35242319,
+            "candidate_lencode": 21276287,
+            "absolute_lencode_improvement_pct": 5.512517,
+            "control_normalized_improvement_pct": 5.698989
+          },
+          {
+            "baseline_wincode": 35212368,
+            "baseline_lencode": 22541609,
+            "candidate_wincode": 35246249,
+            "candidate_lencode": 21303826,
+            "absolute_lencode_improvement_pct": 5.491103,
+            "control_normalized_improvement_pct": 5.581951
+          }
+        ],
+        "exact_final_confirmation_ns": {
+          "baseline_wincode": 35300213,
+          "baseline_lencode": 22639289,
+          "candidate_wincode": 35354284,
+          "candidate_lencode": 21339275,
+          "absolute_lencode_improvement_pct": 5.742292,
+          "control_normalized_improvement_pct": 5.886450
+        },
+        "decision": "retained above the 1% gate; all three 101-trial comparisons improved the focused lencode path by more than 5.4% without relying on a slower wincode control"
+      },
+      "end_to_end_guardrail": {
+        "command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/lencode-batch-sweep-9_5.bin",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "baseline_binary_sha256": "b1268d21fbb388842731fcefb6b739aaf2f33b1f3dd35d0ad4ef6e6eee7c0d43",
+        "candidate_binary_sha256": "8ab8ba519d62c0a291889081cdf362da9da07e9e17a72cd010552a008b76bac2",
+        "baseline_ns": {
+          "wincode_leader": 302028820,
+          "canonical_lz4_leader": 238917838,
+          "wincode_validator": 20777193,
+          "canonical_lz4_validator": 23307192
+        },
+        "candidate_ns": {
+          "wincode_leader": 302589540,
+          "canonical_lz4_leader": 239367579,
+          "wincode_validator": 21525596,
+          "canonical_lz4_validator": 23446322
+        },
+        "candidate_change_pct": {
+          "absolute_leader_regression": 0.188241,
+          "control_normalized_leader_regression": 0.002585,
+          "absolute_validator_regression": 0.596940
+        },
+        "control_note": "the candidate process's unchanged wincode validator was 3.602% slower, so its apparent 2.901% normalized validator gain is not credited",
+        "wire_identity": {
+          "wincode_payload_bytes": 66597215,
+          "canonical_lz4_payload_bytes": 32684660,
+          "wincode_wire_bytes": 195024544,
+          "canonical_lz4_wire_bytes": 117621504,
+          "canonical_data_shreds": 48384,
+          "canonical_coding_shreds": 48384,
+          "payload_reduction_pct": 50.92,
+          "turbine_wire_reduction_pct": 39.69
+        }
+      },
+      "blockstore_guardrail": {
+        "command": "LENCODE_BLOCKSTORE_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "baseline_binary_sha256": "bf3e3c49b35e78d1d64ff8b36e0114413db95107fabb61f5e56d29e4ce79c859",
+        "candidate_binary_sha256": "f52f4e20939e3adf10703ca143b978887d6d42a67f0184ecd9889b14d70b964d",
+        "baseline_ns": {
+          "wincode_validator": 27125195,
+          "canonical_lz4_validator": 27473336
+        },
+        "candidate_ns": {
+          "wincode_validator": 27819947,
+          "canonical_lz4_validator": 27917029
+        },
+        "absolute_lencode_regression_pct": 1.614995,
+        "control_normalized_improvement_pct": 0.922653,
+        "decision": "the exact final pair remains inside the 2% absolute guardrail; no Blockstore gain is claimed"
+      },
+      "binary_identity": {
+        "end_to_end_text_sha256": "34c9245c413fd500ab0bd13eab82602f8b5cfe295f9c9de88954040566ed6d5a",
+        "blockstore_text_sha256": "f80249223f31c897710355503a2fc83dab28b828f17c79e96fa76dea4a24ba5b",
+        "result": "the pre-comment candidate and exact final binaries have identical .text sections for both guardrail targets"
+      },
+      "compatibility": "no public API, frame tag, encoded byte, component boundary, decompression rule, or public error result changed",
+      "security": [
+        "the change is safe Rust and adds no unsafe block, FFI call, layout assumption, dependency, sidecar, or cross-frame state",
+        "the helper reads already parsed official Solana types; it does not consume hostile wire offsets or weaken decoder bounds",
+        "InvalidData and IncorrectLength remain distinct at the public boundary, and existing oversized and invalid-v1 tests passed"
+      ],
+      "zero_copy": "the retained borrowed selected-frame slice, caller-owned compression and decompression arenas, exact-size decode, and BytesMut split-and-freeze parser handoff are unchanged",
+      "validation": {
+        "rust": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+        "lencode_all_features": "220 unit tests, 8 integration tests, and 5 doctests passed; 1 doctest ignored",
+        "lencode_no_default_features": "162 unit tests, 8 integration tests, and 5 doctests passed; 1 doctest ignored",
+        "lencode_checks": "cargo fmt --all -- --check, all-feature all-target clippy with warnings denied, and no-default all-target check passed",
+        "agave_tests": "13 ledger block_component_codec tests and 12 Turbine broadcast_utils tests passed",
+        "agave_checks": "ledger library plus all three relevant benches and the Turbine library passed clippy with warnings denied; all three release benches rebuilt"
+      },
+      "source_sha256": {
+        "lencode_solana_wire": "a2866d489f661a4c52fcc4951bc8365c79264e9f8edd2a8ac7fca00af71b5b42",
+        "lencode_bytes": "2ce0922fca68359292ac9cf872b941ffec1cfc565a6f5122249201f4688facea",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_manifest": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_entry_size_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_blockstore_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_broadcast_run": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_broadcast_utils": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b"
       }
     },
     "post_iteration_35_profile": {

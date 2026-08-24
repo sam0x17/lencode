@@ -220,7 +220,7 @@ pub fn canonical_solana_entry_serialized_size(entry: SolanaEntryRef<'_>) -> Resu
     for transaction in entry.transactions {
         checked_add_canonical_size(
             &mut size,
-            canonical_solana_transaction_serialized_size(transaction)?,
+            canonical_solana_transaction_serialized_size_inner(transaction).map_err(Error::from)?,
         )?;
     }
     Ok(size)
@@ -721,9 +721,47 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
 }
 
 #[cfg(feature = "solana-types")]
+// Keep the hot per-transaction result payload-free. The public `Error` owns
+// `std::io::Error`, which makes this result use an indirect return ABI. Public
+// sizing functions convert this private error at their boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CanonicalSizeError {
+    InvalidData,
+    IncorrectLength,
+}
+
+#[cfg(feature = "solana-types")]
+impl From<CanonicalSizeError> for Error {
+    fn from(error: CanonicalSizeError) -> Self {
+        match error {
+            CanonicalSizeError::InvalidData => Self::InvalidData,
+            CanonicalSizeError::IncorrectLength => Self::IncorrectLength,
+        }
+    }
+}
+
+#[cfg(feature = "solana-types")]
+impl From<Error> for CanonicalSizeError {
+    #[cold]
+    fn from(error: Error) -> Self {
+        match error {
+            Error::InvalidData => Self::InvalidData,
+            _ => Self::IncorrectLength,
+        }
+    }
+}
+
+#[cfg(all(feature = "solana-types", test))]
 fn canonical_solana_transaction_serialized_size(
     transaction: &VersionedTransaction,
 ) -> Result<usize> {
+    canonical_solana_transaction_serialized_size_inner(transaction).map_err(Error::from)
+}
+
+#[cfg(feature = "solana-types")]
+fn canonical_solana_transaction_serialized_size_inner(
+    transaction: &VersionedTransaction,
+) -> core::result::Result<usize, CanonicalSizeError> {
     match &transaction.message {
         VersionedMessage::Legacy(message) => {
             let signature_size =
@@ -733,7 +771,7 @@ fn canonical_solana_transaction_serialized_size(
                     &message.account_keys,
                     &message.instructions,
                 )?;
-            usize::try_from(size).map_err(|_| Error::IncorrectLength)
+            usize::try_from(size).map_err(|_| CanonicalSizeError::IncorrectLength)
         }
         VersionedMessage::V0(message) => {
             let signature_size =
@@ -748,7 +786,7 @@ fn canonical_solana_transaction_serialized_size(
                     writable_len
                         .checked_add(readonly_len)
                         .and_then(|size| size.checked_add(solana_pubkey::PUBKEY_BYTES + 2))
-                        .ok_or(Error::IncorrectLength)?
+                        .ok_or(CanonicalSizeError::IncorrectLength)?
                 } else {
                     let writable_size =
                         canonical_short_payload_serialized_size(&lookup.writable_indexes)?;
@@ -759,40 +797,43 @@ fn canonical_solana_transaction_serialized_size(
                         .and_then(|size| size.checked_add(readonly_size))
                         .ok_or(Error::IncorrectLength)?
                 };
-                let lookup_size = u32::try_from(lookup_size).map_err(|_| Error::IncorrectLength)?;
+                let lookup_size =
+                    u32::try_from(lookup_size).map_err(|_| CanonicalSizeError::IncorrectLength)?;
                 // The validated u16 lookup count and u32 per-lookup size make
                 // overflow of this u64 subtotal impossible.
                 lookup_payload_size += u64::from(lookup_size);
             }
             let size = u64::try_from(signature_size)
                 .and_then(|size| u64::try_from(lookup_prefix).map(|prefix| size + prefix))
-                .map_err(|_| Error::IncorrectLength)?
+                .map_err(|_| CanonicalSizeError::IncorrectLength)?
                 + 1
                 + canonical_legacy_message_serialized_size(
                     &message.account_keys,
                     &message.instructions,
                 )?
                 + lookup_payload_size;
-            usize::try_from(size).map_err(|_| Error::IncorrectLength)
+            usize::try_from(size).map_err(|_| CanonicalSizeError::IncorrectLength)
         }
         VersionedMessage::V1(message) => {
             let signature_bytes = transaction
                 .signatures
                 .len()
                 .checked_mul(solana_signature::SIGNATURE_BYTES)
-                .ok_or(Error::IncorrectLength)?;
+                .ok_or(CanonicalSizeError::IncorrectLength)?;
             if usize::from(message.header.num_required_signatures) != transaction.signatures.len() {
-                return Err(Error::InvalidData);
+                return Err(CanonicalSizeError::InvalidData);
             }
-            u8::try_from(message.instructions.len()).map_err(|_| Error::IncorrectLength)?;
-            u8::try_from(message.account_keys.len()).map_err(|_| Error::IncorrectLength)?;
+            u8::try_from(message.instructions.len())
+                .map_err(|_| CanonicalSizeError::IncorrectLength)?;
+            u8::try_from(message.account_keys.len())
+                .map_err(|_| CanonicalSizeError::IncorrectLength)?;
 
             let mut size = size_of::<u8>()
                 .checked_add(3)
                 .and_then(|size| size.checked_add(size_of::<u32>()))
                 .and_then(|size| size.checked_add(solana_hash::HASH_BYTES))
                 .and_then(|size| size.checked_add(2 * size_of::<u8>()))
-                .ok_or(Error::IncorrectLength)?;
+                .ok_or(CanonicalSizeError::IncorrectLength)?;
             checked_add_canonical_items(
                 &mut size,
                 message.account_keys.len(),
@@ -812,8 +853,10 @@ fn canonical_solana_transaction_serialized_size(
             }
             checked_add_canonical_items(&mut size, message.instructions.len(), 4)?;
             for instruction in &message.instructions {
-                u8::try_from(instruction.accounts.len()).map_err(|_| Error::IncorrectLength)?;
-                u16::try_from(instruction.data.len()).map_err(|_| Error::IncorrectLength)?;
+                u8::try_from(instruction.accounts.len())
+                    .map_err(|_| CanonicalSizeError::IncorrectLength)?;
+                u16::try_from(instruction.data.len())
+                    .map_err(|_| CanonicalSizeError::IncorrectLength)?;
                 checked_add_canonical_size(&mut size, instruction.accounts.len())?;
                 checked_add_canonical_size(&mut size, instruction.data.len())?;
             }
