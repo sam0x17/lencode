@@ -30,6 +30,8 @@
 //! [`SolanaCanonicalLz4EntryBatchEncoder`] provides the lower-latency
 //! alternative: it writes the same canonical bytes directly from reference
 //! Solana types, then wraps them in the compatible flag-1 LZ4 frame.
+//! [`SolanaSemanticLz4EntryBatchEncoder`] combines the contextual LEB128
+//! dictionary representation with an LZ4-compressed body for larger batches.
 
 use std::{sync::Arc, vec::Vec};
 
@@ -71,11 +73,15 @@ pub const SOLANA_ENTRY_BATCH_DICTIONARY_FLAG: u8 = 2;
 pub const SOLANA_ENTRY_BATCH_CONTEXTUAL_DICTIONARY_FLAG: u8 = 4;
 /// Contextual frame flag using LEB128 for reference-Solana address IDs.
 pub const SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_DICTIONARY_FLAG: u8 = 8;
+/// Contextual LEB128 address dictionary followed by an LZ4-compressed batch body.
+pub const SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_LZ4_FLAG: u8 = 16;
 /// Bytes used to identify the frozen address dictionary.
 pub const SOLANA_DICTIONARY_ID_BYTES: usize = 16;
 /// Fixed compact entry-batch header size.
 pub const SOLANA_ENTRY_BATCH_HEADER_BYTES: usize =
     SOLANA_ENTRY_BATCH_MAGIC.len() + 1 + 1 + SOLANA_DICTIONARY_ID_BYTES;
+/// Header size for a dictionary-identified semantic-LZ4 entry batch.
+pub const SOLANA_SEMANTIC_LZ4_HEADER_BYTES: usize = SOLANA_ENTRY_BATCH_HEADER_BYTES + 4;
 /// Fixed header size for the canonical-LZ4 entry-batch variant.
 pub const SOLANA_CANONICAL_LZ4_HEADER_BYTES: usize = SOLANA_ENTRY_BATCH_MAGIC.len() + 1 + 1;
 
@@ -299,6 +305,13 @@ impl SolanaCanonicalLz4WireBlocks {
             regular_bytes,
             final_bytes,
         }
+    }
+
+    /// Returns the number of complete wire blocks needed for `encoded_len`.
+    ///
+    /// Invalid zero-capacity layouts return `None`.
+    pub const fn block_count(self, encoded_len: usize) -> Option<usize> {
+        wire_block_count(encoded_len, self)
     }
 }
 
@@ -1423,6 +1436,206 @@ impl SolanaEntryBatchEncoder {
     }
 }
 
+/// Encodes a contextual pubkey-deduplicated batch and compresses its body with LZ4.
+///
+/// The frozen dictionary is identified in the outer frame. The compact body
+/// omits the nested semantic header, so each frame remains independently
+/// decodable without paying for two copies of the dictionary metadata.
+#[cfg(feature = "solana-types")]
+pub struct SolanaSemanticLz4EntryBatchEncoder {
+    dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+    inner: SolanaEntryBatchEncoder,
+}
+
+#[cfg(feature = "solana-types")]
+impl SolanaSemanticLz4EntryBatchEncoder {
+    /// Creates an encoder using contextual unsigned-LEB128 address IDs.
+    pub fn with_frozen_contextual_leb128(
+        dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+        frozen: Arc<FrozenEncoderState>,
+    ) -> Self {
+        Self {
+            dictionary_id,
+            inner: SolanaEntryBatchEncoder::with_frozen_contextual_leb128(dictionary_id, frozen),
+        }
+    }
+
+    /// Encodes into a retained arena and returns the selected frame by borrow.
+    ///
+    /// Bytes before the returned frame are reusable semantic-encoder scratch.
+    /// The borrow prevents arena mutation until the caller finishes consuming
+    /// the frame.
+    pub fn encode_in_arena<'entries, 'output>(
+        &mut self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'entries>>,
+        output: &'output mut Vec<u8>,
+    ) -> Result<&'output [u8]> {
+        output.clear();
+        let result = self.encode_inner(entries, output);
+        if result.is_err() {
+            output.clear();
+        }
+        let frame = result?;
+        Ok(&output[frame])
+    }
+
+    fn encode_inner<'a>(
+        &mut self,
+        entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
+        output: &mut Vec<u8>,
+    ) -> Result<core::ops::Range<usize>> {
+        let compact_len = self.inner.encode(entries, output)?;
+        if compact_len < SOLANA_ENTRY_BATCH_HEADER_BYTES {
+            return Err(Error::InvalidData);
+        }
+        let body_len = compact_len - SOLANA_ENTRY_BATCH_HEADER_BYTES;
+        let compressed_capacity =
+            lz4_block::compress_bound(body_len).map_err(|_| Error::IncorrectLength)?;
+        let frame_capacity = SOLANA_SEMANTIC_LZ4_HEADER_BYTES
+            .checked_add(compressed_capacity)
+            .ok_or(Error::IncorrectLength)?;
+        let arena_len = compact_len
+            .checked_add(frame_capacity)
+            .ok_or(Error::IncorrectLength)?;
+        output
+            .try_reserve(arena_len - compact_len)
+            .map_err(|_| Error::DecodeLimitExceeded)?;
+        output.resize(arena_len, 0);
+        let frame_len = {
+            let (compact, frame) = output.split_at_mut(compact_len);
+            frame[..4].copy_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
+            frame[4] = SOLANA_ENTRY_BATCH_VERSION;
+            frame[5] = SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_LZ4_FLAG;
+            frame[6..SOLANA_ENTRY_BATCH_HEADER_BYTES].copy_from_slice(&self.dictionary_id);
+            frame[SOLANA_ENTRY_BATCH_HEADER_BYTES..SOLANA_SEMANTIC_LZ4_HEADER_BYTES]
+                .copy_from_slice(
+                    &u32::try_from(body_len)
+                        .map_err(|_| Error::IncorrectLength)?
+                        .to_le_bytes(),
+                );
+            SOLANA_SEMANTIC_LZ4_HEADER_BYTES
+                + lz4_block::compress_to_buffer(
+                    &compact[SOLANA_ENTRY_BATCH_HEADER_BYTES..],
+                    Some(CompressionMode::FAST(4)),
+                    false,
+                    &mut frame[SOLANA_SEMANTIC_LZ4_HEADER_BYTES..],
+                )
+                .map_err(|_| Error::InvalidData)?
+        };
+        let frame = compact_len..compact_len + frame_len;
+        output.truncate(frame.end);
+        Ok(frame)
+    }
+}
+
+/// A validated semantic-LZ4 entry-batch frame ready for bounded decompression.
+#[cfg(feature = "solana-types")]
+#[derive(Clone, Copy, Debug)]
+pub struct SolanaSemanticLz4EntryBatchDecoder<'a> {
+    dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+    compressed: &'a [u8],
+    compressed_len: i32,
+    body_len: i32,
+}
+
+#[cfg(feature = "solana-types")]
+impl<'a> SolanaSemanticLz4EntryBatchDecoder<'a> {
+    /// Validates the frame, dictionary identity, and advertised compact length.
+    pub fn new(
+        input: &'a [u8],
+        dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
+        max_compact_bytes: usize,
+    ) -> Result<Self> {
+        if input.len() < SOLANA_SEMANTIC_LZ4_HEADER_BYTES + 1
+            || input[..4] != SOLANA_ENTRY_BATCH_MAGIC
+            || input[4] != SOLANA_ENTRY_BATCH_VERSION
+            || input[5] != SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_LZ4_FLAG
+            || input[6..SOLANA_ENTRY_BATCH_HEADER_BYTES] != dictionary_id
+        {
+            return Err(Error::InvalidData);
+        }
+        let body_len = i32::from_le_bytes(
+            input[SOLANA_ENTRY_BATCH_HEADER_BYTES..SOLANA_SEMANTIC_LZ4_HEADER_BYTES]
+                .try_into()
+                .expect("checked semantic LZ4 length prefix"),
+        );
+        let body_len_usize = usize::try_from(body_len).map_err(|_| Error::IncorrectLength)?;
+        let compact_len = SOLANA_ENTRY_BATCH_HEADER_BYTES
+            .checked_add(body_len_usize)
+            .ok_or(Error::IncorrectLength)?;
+        if compact_len > max_compact_bytes {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        let compressed = &input[SOLANA_SEMANTIC_LZ4_HEADER_BYTES..];
+        if body_len_usize
+            > compressed
+                .len()
+                .saturating_mul(MAX_LZ4_BLOCK_COMPRESSION_RATIO)
+        {
+            return Err(Error::InvalidData);
+        }
+        let compressed_len = i32::try_from(compressed.len()).map_err(|_| Error::IncorrectLength)?;
+        Ok(Self {
+            dictionary_id,
+            compressed,
+            compressed_len,
+            body_len,
+        })
+    }
+
+    /// Returns the reconstructed compact semantic-frame length.
+    pub const fn compact_len(&self) -> usize {
+        SOLANA_ENTRY_BATCH_HEADER_BYTES + self.body_len as usize
+    }
+
+    /// Reconstructs the compact semantic frame into retained vector storage.
+    ///
+    /// The output is cleared on every error. Decompression writes directly to
+    /// spare capacity and exposes it only after LZ4 reports the exact length.
+    pub fn decompress_compact_into(&self, output: &mut Vec<u8>) -> Result<usize> {
+        output.clear();
+        let result = self.decompress_compact_inner(output);
+        if result.is_err() {
+            output.clear();
+        }
+        result
+    }
+
+    fn decompress_compact_inner(&self, output: &mut Vec<u8>) -> Result<usize> {
+        let body_len = self.body_len as usize;
+        output
+            .try_reserve(self.compact_len())
+            .map_err(|_| Error::DecodeLimitExceeded)?;
+        output.extend_from_slice(&SOLANA_ENTRY_BATCH_MAGIC);
+        output.push(SOLANA_ENTRY_BATCH_VERSION);
+        output.push(SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_DICTIONARY_FLAG);
+        output.extend_from_slice(&self.dictionary_id);
+        // SAFETY: `new` checked both C argument lengths. The immutable frame
+        // and mutable output cannot overlap through this safe API. The reserve
+        // above provides `body_len` writable spare bytes, and the safe LZ4
+        // entry point bounds every read and write by the supplied lengths.
+        let written = unsafe {
+            lz4_sys::LZ4_decompress_safe(
+                self.compressed.as_ptr().cast(),
+                output.spare_capacity_mut().as_mut_ptr().cast(),
+                self.compressed_len,
+                self.body_len,
+            )
+        };
+        if written != self.body_len {
+            return Err(Error::InvalidData);
+        }
+        let compact_len = output
+            .len()
+            .checked_add(body_len)
+            .ok_or(Error::DecodeLimitExceeded)?;
+        // SAFETY: capacity for the complete compact frame was reserved above,
+        // and bounded LZ4 decompression initialized exactly `body_len` bytes.
+        unsafe { output.set_len(compact_len) };
+        Ok(compact_len)
+    }
+}
+
 /// Reconstructs canonical Solana entry-batch bytes from compact lencode frames.
 pub struct SolanaEntryBatchTranscoder {
     dictionary_id: [u8; SOLANA_DICTIONARY_ID_BYTES],
@@ -2537,6 +2750,171 @@ mod tests {
 
     #[cfg(feature = "solana-types")]
     #[test]
+    fn semantic_lz4_roundtrips_and_rejects_invalid_frames() {
+        let addresses: Vec<[u8; 32]> = (0..300u16)
+            .map(|index| {
+                let mut address = [0u8; 32];
+                address[..2].copy_from_slice(&index.to_le_bytes());
+                address
+            })
+            .collect();
+        let (frozen_encoder, frozen_decoder) = frozen_reference_dictionary(&addresses);
+        let transaction = VersionedTransaction {
+            signatures: vec![Signature::from([1u8; 64])],
+            message: VersionedMessage::Legacy(LegacyMessage {
+                header: MessageHeader {
+                    num_required_signatures: 1,
+                    num_readonly_signed_accounts: 0,
+                    num_readonly_unsigned_accounts: 0,
+                },
+                account_keys: vec![canonical_address(addresses[299])],
+                recent_blockhash: Hash::new_from_array([3u8; 32]),
+                instructions: Vec::new(),
+            }),
+        };
+        let entry_hash = Hash::new_from_array([4u8; 32]);
+        let entries = [SolanaEntryRef {
+            num_hashes: 7,
+            hash: &entry_hash,
+            transactions: core::slice::from_ref(&transaction),
+        }];
+        let dictionary_id = [9u8; SOLANA_DICTIONARY_ID_BYTES];
+        let mut encoder = SolanaSemanticLz4EntryBatchEncoder::with_frozen_contextual_leb128(
+            dictionary_id,
+            frozen_encoder,
+        );
+        let mut arena = Vec::new();
+        let (frame_address, frame) = {
+            let frame = encoder
+                .encode_in_arena(entries.into_iter(), &mut arena)
+                .unwrap();
+            (frame.as_ptr() as usize, frame.to_vec())
+        };
+        assert!(frame_address > arena.as_ptr() as usize);
+        let arena_capacity = arena.capacity();
+        encoder
+            .encode_in_arena(entries.into_iter(), &mut arena)
+            .unwrap();
+        assert_eq!(arena.capacity(), arena_capacity);
+        assert_eq!(frame[..4], SOLANA_ENTRY_BATCH_MAGIC);
+        assert_eq!(frame[4], SOLANA_ENTRY_BATCH_VERSION);
+        assert_eq!(frame[5], SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_LZ4_FLAG);
+        assert_eq!(frame[6..SOLANA_ENTRY_BATCH_HEADER_BYTES], dictionary_id);
+
+        let decoder = SolanaSemanticLz4EntryBatchDecoder::new(
+            &frame,
+            dictionary_id,
+            SOLANA_ENTRY_BATCH_HEADER_BYTES + 1024,
+        )
+        .unwrap();
+        let mut compact = vec![0xff];
+        assert_eq!(
+            decoder.decompress_compact_into(&mut compact).unwrap(),
+            decoder.compact_len()
+        );
+        assert_eq!(compact[..4], SOLANA_ENTRY_BATCH_MAGIC);
+        assert_eq!(
+            compact[5],
+            SOLANA_ENTRY_BATCH_CONTEXTUAL_LEB128_DICTIONARY_FLAG
+        );
+        assert_eq!(compact[6..SOLANA_ENTRY_BATCH_HEADER_BYTES], dictionary_id);
+        let compact_capacity = compact.capacity();
+        decoder.decompress_compact_into(&mut compact).unwrap();
+        assert_eq!(compact.capacity(), compact_capacity);
+
+        let canonical_transaction = wincode::serialize(&transaction).unwrap();
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&1u64.to_le_bytes());
+        expected.extend_from_slice(&7u64.to_le_bytes());
+        expected.extend_from_slice(entry_hash.as_bytes());
+        expected.extend_from_slice(&1u64.to_le_bytes());
+        expected.extend_from_slice(&canonical_transaction);
+        let limits = EntryBatchWireLimits::new(
+            compact.len(),
+            expected.len(),
+            u16::MAX as usize,
+            expected.len(),
+            TransactionWireLimits::CURRENT,
+        );
+        let mut transcoder = SolanaEntryBatchTranscoder::with_frozen(dictionary_id, frozen_decoder);
+        let mut canonical = Vec::new();
+        let counts = transcoder
+            .transcode_exact(&compact, &mut canonical, limits)
+            .unwrap();
+        assert_eq!(canonical, expected);
+        assert_eq!(counts.entries, 1);
+        assert_eq!(counts.transactions, 1);
+
+        let mut wrong_dictionary = dictionary_id;
+        wrong_dictionary[0] ^= 1;
+        assert!(matches!(
+            SolanaSemanticLz4EntryBatchDecoder::new(
+                &frame,
+                wrong_dictionary,
+                decoder.compact_len(),
+            ),
+            Err(Error::InvalidData)
+        ));
+        assert!(matches!(
+            SolanaSemanticLz4EntryBatchDecoder::new(
+                &frame,
+                dictionary_id,
+                decoder.compact_len() - 1,
+            ),
+            Err(Error::DecodeLimitExceeded)
+        ));
+        assert!(matches!(
+            SolanaSemanticLz4EntryBatchDecoder::new(
+                &frame[..SOLANA_SEMANTIC_LZ4_HEADER_BYTES],
+                dictionary_id,
+                decoder.compact_len(),
+            ),
+            Err(Error::InvalidData)
+        ));
+
+        let mut impossible = frame.clone();
+        let impossible_body_len = (impossible.len() - SOLANA_SEMANTIC_LZ4_HEADER_BYTES)
+            .saturating_mul(MAX_LZ4_BLOCK_COMPRESSION_RATIO)
+            .saturating_add(1);
+        impossible[SOLANA_ENTRY_BATCH_HEADER_BYTES..SOLANA_SEMANTIC_LZ4_HEADER_BYTES]
+            .copy_from_slice(&u32::try_from(impossible_body_len).unwrap().to_le_bytes());
+        assert!(matches!(
+            SolanaSemanticLz4EntryBatchDecoder::new(
+                &impossible,
+                dictionary_id,
+                SOLANA_ENTRY_BATCH_HEADER_BYTES + impossible_body_len,
+            ),
+            Err(Error::InvalidData)
+        ));
+
+        let mut corrupted = frame.clone();
+        let advertised_body_len = u32::from_le_bytes(
+            corrupted[SOLANA_ENTRY_BATCH_HEADER_BYTES..SOLANA_SEMANTIC_LZ4_HEADER_BYTES]
+                .try_into()
+                .unwrap(),
+        );
+        corrupted[SOLANA_ENTRY_BATCH_HEADER_BYTES..SOLANA_SEMANTIC_LZ4_HEADER_BYTES]
+            .copy_from_slice(&(advertised_body_len + 1).to_le_bytes());
+        let corrupted = SolanaSemanticLz4EntryBatchDecoder::new(
+            &corrupted,
+            dictionary_id,
+            decoder.compact_len() + 1,
+        )
+        .unwrap();
+        compact.extend_from_slice(&[1, 2, 3]);
+        assert!(corrupted.decompress_compact_into(&mut compact).is_err());
+        assert!(compact.is_empty());
+
+        arena.extend_from_slice(&[1, 2, 3]);
+        assert!(matches!(
+            encoder.encode_in_arena(core::iter::empty(), &mut arena),
+            Err(Error::InvalidData)
+        ));
+        assert!(arena.is_empty());
+    }
+
+    #[cfg(feature = "solana-types")]
+    #[test]
     fn canonical_short_u16_sizes_cover_wire_boundaries() {
         for (len, expected) in [
             (0, 1),
@@ -3140,10 +3518,10 @@ mod tests {
     #[test]
     fn canonical_lz4_recompression_window_tracks_wire_blocks() {
         let blocks = SolanaCanonicalLz4WireBlocks::new(100, 80);
-        assert_eq!(wire_block_count(80, blocks), Some(1));
-        assert_eq!(wire_block_count(81, blocks), Some(2));
-        assert_eq!(wire_block_count(180, blocks), Some(2));
-        assert_eq!(wire_block_count(181, blocks), Some(3));
+        assert_eq!(blocks.block_count(80), Some(1));
+        assert_eq!(blocks.block_count(81), Some(2));
+        assert_eq!(blocks.block_count(180), Some(2));
+        assert_eq!(blocks.block_count(181), Some(3));
         assert!(should_recompress(81, blocks));
         assert!(!should_recompress(90, blocks));
         assert!(should_recompress(181, blocks));
@@ -3151,7 +3529,7 @@ mod tests {
         assert!(should_recompress(200, blocks));
         assert!(!should_recompress(201, blocks));
         assert_eq!(
-            wire_block_count(181, SolanaCanonicalLz4WireBlocks::new(0, 80)),
+            SolanaCanonicalLz4WireBlocks::new(0, 80).block_count(181),
             None
         );
     }

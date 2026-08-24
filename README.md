@@ -20,8 +20,8 @@ Compact, fast binary encoding with varints, optional deduplication, and opportun
   `solana` adds the broader Agave runtime, status, and Geyser adapters
 - Agave transaction bridge: feature `std` includes a bounded, reusable compact-to-canonical
   transcoder for current legacy, v0, and v1 transaction wire layouts
-- Native entry-batch bridge: feature `solana-types` encodes reference transactions and validates
-  the versioned `LCSH` envelope inside lencode
+- Native entry-batch bridge: feature `solana-types` encodes reference transactions, supports
+  dictionary-backed semantic LZ4, and validates the versioned `LCSH` envelope inside lencode
 - Big-endian ready: CI runs tests on s390x
 
 ## Install
@@ -191,6 +191,11 @@ the versioned `LCSH` envelope, per-transaction framing, dictionary identity, and
 `SolanaEntryBatchTranscoder` validates the same envelope and reconstructs one bounded canonical
 entry batch. Its dictionary frame flag is distinct from Agave's earlier canonical-LZ4 prototype,
 so both formats can remain explicitly versioned without ambiguous decoding.
+
+`SolanaSemanticLz4EntryBatchEncoder` combines contextual LEB128 pubkey IDs with LZ4 compression.
+It keeps the compact batch as arena scratch and returns the compressed frame by borrow, avoiding a
+final frame copy. `SolanaSemanticLz4EntryBatchDecoder` validates the version, dictionary ID, output
+limit, and possible LZ4 expansion before decompressing directly into reusable vector capacity.
 
 This is a bridge into Agave's existing zero-copy parser, not a drop-in Turbine wire change. Putting
 the compact representation into shreds changes Merkle roots and shred signatures, so a network
