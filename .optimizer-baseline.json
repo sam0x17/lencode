@@ -1,12 +1,12 @@
 {
-  "version": 148,
+  "version": 149,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T07:37:05Z",
+  "updated_at": "2026-08-24T08:09:21Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 102,
+    "version": 103,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1933,6 +1933,130 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "agave_production_source_changed": false,
         "lencode_production_worktree_clean_before_audit": true
+      }
+    },
+    "iteration_85_direct_raw_deshred_to_parser_storage": {
+      "status": "retained an Agave lencode replacement-site prototype; lencode production source is unchanged",
+      "scope": "send raw canonical components from validated shred payload slices into the parser-owned BytesMut arena, while leaving the legacy wincode and framed LZ4 paths on their existing Vec reconstruction",
+      "baseline_head": "0d9cc3037995cb92ec9799157091581bfe9c3fba",
+      "read_only_corpus_census": {
+        "fixture_path": "/tmp/agave-shred-broadcast-batches.bin",
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "components": 1982,
+        "raw_canonical_components": 1470,
+        "synthetic_slots": 100,
+        "raw_final_components": 2,
+        "decision": "allocation transfer at the final component would cover only 2 of 100 slots, so the retained path writes every raw component directly into shared parser storage"
+      },
+      "rejected_generic_deshred_candidate": {
+        "change": "generalize the existing Vec deshred methods over BufMut",
+        "blockstore_binary_sha256": "85cb026d5df438a56b172a4a400408446913bdf6044202f1c761f00b98cec4e7",
+        "end_to_end_binary_sha256": "77a4031c5caabf2004f25dbdce433cb2d06c3ae9b40b262baa4221124f937d2e",
+        "control_normalized_validator_improvement_pct_by_pair": [-2.036468, -2.253458],
+        "decision": "rejected because the generic method changed the legacy validator layout and both normalized guards crossed the 2% regression limit"
+      },
+      "retained_candidate": {
+        "change": "keep the Vec methods source-identical and add a separate BytesMut deshred path used only after the canonical-LZ4 reader has reconstructed four bytes and ruled out the LCSH frame magic",
+        "blockstore_binary_sha256": "37ca642c6938cc631f515e2863bca3fe5d7d478a7288baa30ec2dc519126ea51",
+        "end_to_end_binary_sha256": "036c8839066db6c48a47821b997bd66c97d9ad9ac2827696112a30f98e414232",
+        "baseline_blockstore_binary_sha256": "f10fd84c348212d97984f00b362cc05a163258659e74f528e2c9761fd48950e8",
+        "baseline_end_to_end_binary_sha256": "934c7afa89ee7acbb7101b54666bc94d429ef523fcaa1e7d29f0a84c94725f26",
+        "unsafe_code_added": false,
+        "wire_bytes_changed": false
+      },
+      "blockstore_guard": {
+        "trials_per_process": 31,
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 27925650,
+            "baseline_lencode": 24568248,
+            "candidate_wincode": 27438988,
+            "candidate_lencode": 22425551
+          },
+          {
+            "baseline_wincode": 28035511,
+            "baseline_lencode": 24666719,
+            "candidate_wincode": 27539689,
+            "candidate_lencode": 22470540
+          },
+          {
+            "baseline_wincode": 27899960,
+            "baseline_lencode": 24705328,
+            "candidate_wincode": 27540779,
+            "candidate_lencode": 22383820
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [8.721407, 8.903409, 9.396791],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [7.102477, 7.263315, 8.215163],
+        "baseline_speedup_vs_wincode_by_pair": [1.136656, 1.136572, 1.129309],
+        "candidate_speedup_vs_wincode_by_pair": [1.223559, 1.225591, 1.230388],
+        "decision": "retained because all three wincode-normalized pairs cleared 7% with no output change"
+      },
+      "end_to_end_guard": {
+        "trials_per_process": 7,
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode_leader": 453509389,
+            "baseline_lencode_leader": 272211358,
+            "baseline_wincode_validator": 22112300,
+            "baseline_lencode_validator": 23292993,
+            "candidate_wincode_leader": 453736200,
+            "candidate_lencode_leader": 272555259,
+            "candidate_wincode_validator": 22371630,
+            "candidate_lencode_validator": 23506584
+          },
+          {
+            "baseline_wincode_leader": 454063521,
+            "baseline_lencode_leader": 273383002,
+            "baseline_wincode_validator": 22084709,
+            "baseline_lencode_validator": 23199103,
+            "candidate_wincode_leader": 451363041,
+            "candidate_lencode_leader": 271193514,
+            "candidate_wincode_validator": 22185340,
+            "candidate_lencode_validator": 23302793
+          }
+        ],
+        "control_normalized_leader_improvement_pct_by_pair": [-0.076285, 0.207384],
+        "control_normalized_validator_improvement_pct_by_pair": [0.252846, 0.008663],
+        "payload_bytes": 34879635,
+        "data_shreds": 64640,
+        "coding_shreds": 64640,
+        "wire_bytes": 157139840,
+        "output_changed": false
+      },
+      "profile": {
+        "candidate_data_path": "/tmp/lencode-iter85-direct-raw-deshred-narrow.data",
+        "candidate_data_sha256": "24dd7fde32f685b5e51b9f4859fa6c4a467487f300da71133a380093b6de1442",
+        "baseline_data_path": "/tmp/lencode-iter78-raw28-32-outlined.data",
+        "baseline_data_sha256": "14fa15840aa0c9e309bdf8efdb15d92638a68c7d3d985a4d4f9ec92d03172091",
+        "samples": "about 7000 per binary with no lost samples",
+        "aggregate_memmove_self_cycles_pct": {
+          "baseline": 6.67,
+          "candidate": 5.20
+        },
+        "interpretation": "the raw Vec-to-BytesMut reconstruction copy is absent from the candidate path; one copy from each disjoint shred payload into its contiguous parser segment remains required"
+      },
+      "memory_guard": {
+        "command": "/usr/bin/time -v with 31 warmed Blockstore trials on logical CPU 28",
+        "baseline_max_rss_kib": 541088,
+        "candidate_max_rss_kib": 540768
+      },
+      "zero_copy": "after a one-time migration of the first at-most-one-shred prefix used for classification, raw canonical bytes are appended directly from shred payload slices into shared BytesMut storage and handed to the official parser with split_to(...).freeze(); framed decompression and legacy wincode behavior are unchanged",
+      "security": "each append performs the existing payload-size, consecutive-index, no-trailing-shred, and DATA_COMPLETE checks. Classification waits for all four magic bytes, so partial LCSH prefixes cannot enter the raw path. A complete LCSH prefix remains on the versioned decoder, where invalid versions, flags, compressed sizes, expansion bounds, and non-entry components are rejected. Raw bytes still pass through the official BlockComponent parser. Arena reservation is capped at MAX_DATA_SHREDS_SIZE. No unsafe block, unchecked offset, private layout, sidecar, dependency, or cross-frame state was added.",
+      "validation": "Rust 1.98 formatting passed for all touched files. Strict Clippy passed for the lencode all-target all-feature build, the solana-ledger library, and both measured lencode benches. The stable Agave all-benches Clippy command reached the existing nightly-only ledger/benches/blockstore.rs feature gate. The full lencode suite passed with 220 unit tests, 8 integration tests, and 5 doctests with one ignored. Fifteen codec tests, two framed/raw Blockstore integration tests, and both data-shredder matrix cases passed. The raw test uses incompressible signed transactions and verifies exact canonical bytes plus parser output. Both end-to-end binaries reconstructed 68,392 entries and 124,218 transactions with exact payload, shred, and wire totals.",
+      "checkpoint": {
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_census_removed": true,
+        "temporary_mixed_representation_benchmark_patch_removed": true,
+        "agave_changes_committed": false,
+        "lencode_production_source_changed": false
       }
     },
     "post_iteration_35_profile": {
