@@ -1,14 +1,14 @@
 {
-  "version": 158,
+  "version": 159,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T10:46:12Z",
+  "updated_at": "2026-08-24T10:59:27Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 112,
+    "version": 113,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T10:46:12Z",
+    "updated_at": "2026-08-24T10:59:27Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2871,6 +2871,64 @@
         "lencode_head_before_audit": "c5bc2d976d445921debe683a08f5cbe42826731f",
         "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
         "retained_end_to_end_binary_sha256": "036c8839066db6c48a47821b997bd66c97d9ad9ac2827696112a30f98e414232",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_candidate_source_removed": true,
+        "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_95_multi_transaction_sizing_screen": {
+      "status": "no production source change; the candidate was inverse-reverted, and the retained Rust 1.98 checkpoint is clean",
+      "scope": "reduce repeated lencode canonical sizing setup for entries containing multiple official Solana transactions without changing Agave or the wire format",
+      "motivation": {
+        "fixture_path": "/tmp/agave-shred-broadcast-batches.bin",
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "entries": 68392,
+        "transactions": 124218,
+        "multi_transaction_entries": 7817,
+        "transactions_in_multi_transaction_entries": 70043,
+        "observation": "the retained path enters the standalone canonical transaction sizer once per transaction, so multi-transaction entries offered a bounded chance to share setup"
+      },
+      "candidate": {
+        "change": "add a non-inlined batch helper that loops over a multi-transaction entry inside one canonical sizing call while preserving the existing one-transaction fast path",
+        "types": "official Solana VersionedTransaction and SanitizedVersionedTransaction variants",
+        "standalone_helper_text_bytes": 1316,
+        "batch_helper_text_bytes": 1488,
+        "candidate_binary_sha256": "e39680f47550142d8574e548813ade214f5d45b7398170b26c35de08575d4c6a",
+        "retained_binary_sha256": "b1168b544c3425049659605ad88074398b03e5cb37059cf1b4466da16e7bce6b"
+      },
+      "validation": {
+        "toolchain": "Rust 1.98.0",
+        "focused_tests": "all 19 solana_wire tests passed",
+        "benchmark": "101 trials with three repeats per sample, pinned to CPU 28, with frozen binaries and reversed execution order",
+        "pairs_ns": [
+          {
+            "order": "retained_then_candidate",
+            "retained": { "wincode_sizing": 35280008, "lencode_sizing": 20539811 },
+            "candidate": { "wincode_sizing": 35197488, "lencode_sizing": 20901062 },
+            "absolute_lencode_regression_pct": 1.7588,
+            "control_normalized_lencode_regression_pct": 1.9974
+          },
+          {
+            "order": "candidate_then_retained",
+            "candidate": { "wincode_sizing": 35186997, "lencode_sizing": 20950711 },
+            "retained": { "wincode_sizing": 35460148, "lencode_sizing": 20599201 },
+            "absolute_lencode_regression_pct": 1.7064,
+            "control_normalized_lencode_regression_pct": 2.496
+          }
+        ]
+      },
+      "decision": "rejected because both pairs regressed absolute lencode sizing and the second control-normalized regression exceeded the 2% guardrail",
+      "security": "the candidate used safe Rust, retained every fallible width and overflow check, preserved the existing error mapping, and relied only on official Solana types. It added no private layout assumption, unchecked access, cross-frame state, or Agave change.",
+      "restoration": {
+        "lencode_head_before_audit": "51545ab2aad8c61c3a9051e7b0fd331a4e4118b2",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
         "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
         "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
         "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
