@@ -1,12 +1,12 @@
 {
-  "version": 143,
+  "version": 144,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T05:52:38Z",
+  "updated_at": "2026-08-24T06:11:39Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 97,
+    "version": 98,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1307,6 +1307,124 @@
       "validation": "the one-block candidate passed Rust 1.98 formatting and all 19 focused solana_wire tests; both diagnostic binaries reproduced the retained payload and wire totals where exactness was required",
       "restoration": {
         "lencode_head": "466bccc327b9aa0d4fbde2780e96bd10215a6400",
+        "lencode_solana_wire_sha256": "392397990f866a58550a6d6e46752b2996da2c589d849bf3472a0b56a53340cd",
+        "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "lencode_production_worktree_clean_before_audit": true
+      }
+    },
+    "iteration_80_disjoint_raw_range_frontier": {
+      "status": "no production source change; the additive lencode ranges API and direct replacement-adapter candidate were inverse-reverted below the 1% gate",
+      "scope": "extend equal-wire-block raw fallback into the larger production component band while excluding the retained 9/5 component band",
+      "candidate": {
+        "lencode": "add a disjoint-range form of encode_for_wire_blocks_or_raw_in_arena while preserving the existing single-range API",
+        "agave": "use 28-32 KiB and one larger range only in the canonical-lencode replacement adapter, with the same ranges controlling shared-arena raw reconstruction",
+        "selection_invariant": "raw bytes remain eligible only when a configured range contains the trusted encoder output and raw and compressed forms occupy the same valid wire-block count"
+      },
+      "range_census": {
+        "28_36_kib": {
+          "candidate_binary_sha256": {
+            "end_to_end": "8904b430d5a1f2b40432e643265c79b21b86d31d27e5ad0338e46ba1b2dbeec3",
+            "blockstore": "cb77953900ff1a67a9686be255792434a59e5e64e7633217850f5c32e5be78df"
+          },
+          "production_payload_bytes": 34879635,
+          "retained_9_5_payload_bytes": 32684660,
+          "output_changed": false,
+          "decision": "there are no additional eligible components between 32 and 36 KiB"
+        },
+        "28_64_kib_upper_bound": {
+          "production_payload_bytes": 35411147,
+          "production_incremental_payload_regression_pct": 1.523846,
+          "production_wire_bytes": 157139840,
+          "retained_9_5_payload_bytes": 37615676,
+          "retained_9_5_payload_regression_pct": 15.086637,
+          "retained_9_5_wire_bytes": 117621504,
+          "decision": "wire stayed exact, but the contiguous range captured the 9/5 batching band and exceeded its payload guardrail"
+        },
+        "disjoint_28_32_and_58_64_kib": {
+          "candidate_binary_sha256": {
+            "end_to_end": "4240f6ab1f4e62d45455ec9533cf5438caf5478d7cadb9592e89e313d685992b",
+            "blockstore": "9ba9308851dbb60653f557a6ac800561543cb0c8fe66b0e6fb35e2288eaebaf0"
+          },
+          "production_payload_bytes": 35087686,
+          "production_incremental_payload_regression_pct": 0.596483,
+          "production_wire_bytes": 157139840,
+          "retained_9_5_payload_bytes": 32684660,
+          "retained_9_5_wire_bytes": 117621504,
+          "retained_9_5_output_changed": false,
+          "blockstore_pairs_ns": [
+            {
+              "baseline_wincode": 27921850,
+              "baseline_lencode": 24628379,
+              "candidate_wincode": 27491689,
+              "candidate_lencode": 24123207
+            },
+            {
+              "baseline_wincode": 29950028,
+              "baseline_lencode": 26520666,
+              "candidate_wincode": 27512589,
+              "candidate_lencode": 24214407
+            },
+            {
+              "baseline_wincode": 27963820,
+              "baseline_lencode": 24660689,
+              "candidate_wincode": 27594799,
+              "candidate_lencode": 24210037
+            }
+          ],
+          "absolute_lencode_improvement_pct_by_pair": [2.051178, 8.696083, 1.827410],
+          "control_normalized_improvement_pct_by_pair": [0.518578, 0.607141, 0.514563],
+          "median_absolute_lencode_improvement_pct": 2.051178,
+          "median_control_normalized_improvement_pct": 0.518578
+        },
+        "disjoint_28_32_and_56_64_kib": {
+          "candidate_binary_sha256": {
+            "end_to_end": "ab2484edbc3d9f3917aa0bc89c410dc18d4760216770a78d0cbe9d5b665d27d7",
+            "blockstore": "a5eb779d40d32b8d57af75a513b9417ea06fdf47d5ebd754461092218aeb4e60"
+          },
+          "production_payload_bytes": 35411147,
+          "production_incremental_payload_regression_pct": 1.523846,
+          "production_total_payload_regression_vs_pre_raw_pct": 2.523585,
+          "production_wire_bytes": 157139840,
+          "retained_9_5_payload_bytes": 32684660,
+          "retained_9_5_wire_bytes": 117621504,
+          "retained_9_5_output_changed": false,
+          "blockstore_pairs_ns": [
+            {
+              "baseline_wincode": 27897981,
+              "baseline_lencode": 24530608,
+              "candidate_wincode": 27384909,
+              "candidate_lencode": 23992316
+            },
+            {
+              "baseline_wincode": 27836950,
+              "baseline_lencode": 24552028,
+              "candidate_wincode": 27396449,
+              "candidate_lencode": 24094617
+            },
+            {
+              "baseline_wincode": 27960690,
+              "baseline_lencode": 24683129,
+              "candidate_wincode": 27308139,
+              "candidate_lencode": 24003326
+            }
+          ],
+          "absolute_lencode_improvement_pct_by_pair": [2.194369, 1.863027, 2.754120],
+          "control_normalized_improvement_pct_by_pair": [0.361924, 0.285106, 0.430348],
+          "median_absolute_lencode_improvement_pct": 2.194369,
+          "median_control_normalized_improvement_pct": 0.361924
+        }
+      },
+      "decision": "rejected because both disjoint candidates made the unchanged wincode control faster by most of the apparent absolute gain; the normalized lencode medians were 0.52% and 0.36%, below the user's 1% gate",
+      "consecutive_reverts": 3,
+      "full_reset": {
+        "triggered": false,
+        "reason": "the retained source is still materially faster than the immutable original baseline, so the optimizer's three-revert reset condition is not satisfied; every iteration-80 source edit was removed independently"
+      },
+      "security": "the candidate used safe Rust over trusted encoder output. It added no decoder branch, unsafe block, hostile offset, private Solana layout, sidecar, dependency, or cross-frame state. Existing LZ4 and parser checks were unchanged.",
+      "validation": "Rust 1.98 formatting and all 19 focused solana_wire tests passed with the ranges API; both fixtures reconstructed every selected representation and preserved exact data-shred, coding-shred, and Turbine wire totals",
+      "restoration": {
+        "lencode_head": "56cd9ad2d3de3672c8a9fabe41de9a19255ea3ac",
         "lencode_solana_wire_sha256": "392397990f866a58550a6d6e46752b2996da2c589d849bf3472a0b56a53340cd",
         "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
