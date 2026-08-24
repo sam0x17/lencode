@@ -1,12 +1,12 @@
 {
-  "version": 133,
+  "version": 134,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T01:57:57Z",
+  "updated_at": "2026-08-24T02:17:16Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 87,
+    "version": 88,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -129,6 +129,76 @@
         "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
         "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
         "agave_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
+    },
+    "iteration_70_proof_bounded_unsafe_frontier": {
+      "status": "no production source change; the only unsafe candidate was inverse-reverted below the 1% gate",
+      "scope": "screen unsafe code only inside lencode when a safe public boundary proves every pointer invariant; Agave replacement sites and hostile-input parsing remained unchanged",
+      "lz4_nonaliasing_audit": {
+        "profile_data_path": "/tmp/lencode-mixed-slots-9_5-memmove-dwarf.data",
+        "profile_data_sha256": "970b547e7528232f0bcc18ace71ce237bf1f960b81d0a3f1e107417b6405f34c",
+        "observed_total_self_cycles_pct": {
+          "memmove": 2.44,
+          "lz4_decompress_safe_body": 0.93
+        },
+        "upstream_callsite": "LZ4_decompress_safe uses memmove only for the terminal literal run so it can support in-place decompression",
+        "safe_rust_invariant": "lencode's immutable compressed-frame borrow and mutable caller-owned destination borrow cannot alias",
+        "runtime_result": "gdb resolved libc memcpy and memmove to the identical address 0x7ffff7feb920 in the frozen executable, so replacing this call cannot improve the target host",
+        "decision": "rejected before implementation because the measured upper bound is zero and a namespaced decoder fork would add substantial security and maintenance cost"
+      },
+      "unsafe_canonical_append_screen": {
+        "change": "after checked length and fallible capacity growth, copy one canonical byte slice into Vec spare capacity with copy_nonoverlapping and expose exactly that range with set_len",
+        "safety_proof": [
+          "checked_add proves the new visible length cannot wrap",
+          "the configured output limit is checked before mutation",
+          "try_reserve proves capacity covers the complete destination range",
+          "the exclusive Vec borrow and immutable source borrow prove non-aliasing in safe callers",
+          "copy_nonoverlapping initializes exactly the bytes later exposed by set_len"
+        ],
+        "validation": "19 focused Solana wire tests passed, including randomized exact-byte comparison with current wincode, malformed frames, rollback behavior, decompression expansion limits, and canonical size boundaries",
+        "candidate_binary_sha256": "cd2ec5348990a8a7b6baf32d1b1747789bdfd319b9c452d1bbc776f58e2607f3",
+        "baseline_binary_sha256": "2646ccef8f55729e4082ee0dd58a315e35a4fc771342975a1c2d15a0c25cfa5a",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "trials_per_process": 7,
+        "wire_identity": {
+          "components": 1283,
+          "payload_bytes": 32684660,
+          "data_shreds": 48384,
+          "coding_shreds": 48384,
+          "wire_bytes": 117621504
+        },
+        "reverse_order_pairs": [
+          {
+            "baseline_wincode_leader_ns": 301229994,
+            "baseline_lencode_leader_ns": 240337380,
+            "candidate_wincode_leader_ns": 300657582,
+            "candidate_lencode_leader_ns": 238363683,
+            "absolute_leader_improvement_pct": 0.821219,
+            "control_normalized_leader_improvement_pct": 0.632396,
+            "control_normalized_validator_improvement_pct": -1.871159
+          },
+          {
+            "baseline_wincode_leader_ns": 303098751,
+            "baseline_lencode_leader_ns": 240551200,
+            "candidate_wincode_leader_ns": 300734903,
+            "candidate_lencode_leader_ns": 239636557,
+            "absolute_leader_improvement_pct": 0.380228,
+            "control_normalized_leader_improvement_pct": -0.402807,
+            "control_normalized_validator_improvement_pct": -1.404678
+          }
+        ],
+        "decision": "reverted because both absolute leader movements missed 1%, the normalized result changed sign, and the unchanged validator path moved adversely after normalization"
+      },
+      "discarded_measurement": "an older target-113/64 executable emitted different payload and wire totals than the current 9/5 candidate, so that pair was rejected before timing interpretation",
+      "security": "no new unsafe block, custom decoder, unchecked hostile offset, dependency, private Solana layout, sidecar, or cross-frame state remains; the existing exact-size libLZ4 decoder boundary is unchanged",
+      "restoration": {
+        "lencode_solana_wire_sha256": "38e57030cd00029fcbbf5e2b607edc855d018ad27555333acd8f233dac007ec1",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
         "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
         "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
