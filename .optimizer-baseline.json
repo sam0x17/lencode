@@ -1,12 +1,12 @@
 {
-  "version": 144,
+  "version": 145,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T06:11:39Z",
+  "updated_at": "2026-08-24T06:20:39Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 98,
+    "version": 99,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1425,6 +1425,79 @@
       "validation": "Rust 1.98 formatting and all 19 focused solana_wire tests passed with the ranges API; both fixtures reconstructed every selected representation and preserved exact data-shred, coding-shred, and Turbine wire totals",
       "restoration": {
         "lencode_head": "56cd9ad2d3de3672c8a9fabe41de9a19255ea3ac",
+        "lencode_solana_wire_sha256": "392397990f866a58550a6d6e46752b2996da2c589d849bf3472a0b56a53340cd",
+        "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "lencode_production_worktree_clean_before_audit": true
+      }
+    },
+    "iteration_81_large_raw_zero_copy_transfer": {
+      "status": "no production source change; the additive lencode ranges API and direct replacement-adapter ownership-transfer candidate were inverse-reverted after normalized Blockstore regression",
+      "scope": "avoid copying selected 56-64 KiB raw canonical components while retaining the 28-32 KiB shared-arena path",
+      "candidate": {
+        "lencode": "add a disjoint-range form of encode_for_wire_blocks_or_raw_in_arena while preserving the existing single-range API",
+        "agave": "select 28-32 KiB and 56-64 KiB in the canonical-lencode replacement adapter, copy lower raw components into the shared parser arena, and transfer the deshred Vec allocation into Bytes for upper raw components",
+        "copy_invariant": "the upper raw representation reuses the exact deshred allocation without copying; compressed and lower raw components keep the retained arena behavior",
+        "wire_invariant": "raw bytes remain eligible only when a configured range contains the trusted encoder output and raw and compressed forms occupy the same valid wire-block count"
+      },
+      "binary_sha256": {
+        "retained_end_to_end": "5025c4c43d5c6e65d5e3d62e2a22720b22e1673834d8ee15d1254caf75948a12",
+        "retained_blockstore": "f10fd84c348212d97984f00b362cc05a163258659e74f528e2c9761fd48950e8",
+        "candidate_end_to_end": "e2aad1ef3cc38d6fa48f249564e55386f0dbb584fff8718598212e16f9f49813",
+        "candidate_blockstore": "065477a27b3aba5c8548edf3540e614eb302c774d3b5e3186f9d7a37d023fcbc"
+      },
+      "production_exactness": {
+        "retained_payload_bytes": 34879635,
+        "candidate_payload_bytes": 35411147,
+        "payload_regression_pct": 1.523846,
+        "candidate_data_shreds": 64640,
+        "candidate_coding_shreds": 64640,
+        "candidate_wire_bytes": 157139840,
+        "wire_bytes_changed": false
+      },
+      "retained_9_5_guardrail": {
+        "payload_bytes": 32684660,
+        "data_shreds": 48384,
+        "coding_shreds": 48384,
+        "wire_bytes": 117621504,
+        "output_changed": false
+      },
+      "blockstore_pairs_ns": [
+        {
+          "retained_wincode": 28027972,
+          "retained_lencode": 24770899,
+          "candidate_wincode": 27586660,
+          "candidate_lencode": 24401168
+        },
+        {
+          "retained_wincode": 27958911,
+          "retained_lencode": 24665599,
+          "candidate_wincode": 27425179,
+          "candidate_lencode": 24299288
+        },
+        {
+          "retained_wincode": 28027101,
+          "retained_lencode": 24711929,
+          "candidate_wincode": 27346759,
+          "candidate_lencode": 24142347
+        }
+      ],
+      "absolute_lencode_latency_improvement_pct_by_pair": [1.492602, 1.485109, 2.304887],
+      "wincode_control_latency_improvement_pct_by_pair": [1.574541, 1.908987, 2.427443],
+      "control_normalized_lencode_latency_improvement_pct_by_pair": [-0.083250, -0.432127, -0.125606],
+      "median_absolute_lencode_latency_improvement_pct": 1.492602,
+      "median_wincode_control_latency_improvement_pct": 1.908987,
+      "median_control_normalized_lencode_latency_regression_pct": 0.125606,
+      "decision": "rejected because the candidate's absolute lencode improvement was smaller than the same binary's unchanged wincode-control improvement in all three pairs; transferring ownership also consumed the reusable deshred allocation, and payload bytes rose 1.523846% without reducing Turbine wire bytes",
+      "consecutive_reverts": 4,
+      "full_reset": {
+        "triggered": false,
+        "reason": "the retained source remains materially faster than the immutable original baseline, so the reset condition is not satisfied; every iteration-81 source edit was removed independently"
+      },
+      "security": "the candidate used safe Rust over trusted encoder output. It added no decoder branch, hostile offset, private Solana layout, sidecar, dependency, cross-frame state, or unsafe block. Existing LZ4 and parser checks were unchanged.",
+      "validation": "Rust 1.98 formatting, all 19 focused lencode solana_wire tests, and all 16 focused Agave codec tests passed; the large-raw test proved pointer retention, both fixtures reconstructed every selected representation, and data-shred, coding-shred, and Turbine wire totals stayed exact",
+      "restoration": {
+        "lencode_head": "84ac3e91fab27fa55b9cc40d9bf29d7f46d55978",
         "lencode_solana_wire_sha256": "392397990f866a58550a6d6e46752b2996da2c589d849bf3472a0b56a53340cd",
         "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
