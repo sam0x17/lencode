@@ -1,13 +1,14 @@
 {
-  "version": 152,
+  "version": 153,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T08:55:05Z",
+  "updated_at": "2026-08-24T09:18:11Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 106,
+    "version": 107,
     "created_at": "2026-08-22T06:19:02Z",
+    "updated_at": "2026-08-24T09:18:11Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2292,6 +2293,142 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "temporary_raw_guard_removed": true,
         "temporary_selection_counter_removed": true,
+        "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_89_writer_and_raw_policy_frontier": {
+      "status": "no production source change; three candidates were inverse-reverted and the exact retained checkpoint was re-established",
+      "scope": "screen one lencode-internal writer implementation and two raw canonical policies at the direct canonical-lencode replacement boundary",
+      "baseline_head": "b1d14b201edb94e6ff64c6d1f0793e68d335a954",
+      "baseline_binary_sha256": {
+        "end_to_end": "036c8839066db6c48a47821b997bd66c97d9ad9ac2827696112a30f98e414232",
+        "blockstore": "37ca642c6938cc631f515e2863bca3fe5d7d478a7288baa30ec2dc519126ea51"
+      },
+      "unsafe_canonical_append_refresh": {
+        "change": "after the checked output limit and fallible reserve, copy each canonical slice into Vec spare capacity and expose the initialized range with set_len",
+        "reason_for_refresh": "measure the proof-bounded unsafe form against the newer direct-raw Rust 1.98 checkpoint",
+        "safety_proof": [
+          "checked addition and the configured maximum bound the new visible length",
+          "try_reserve proves capacity for the complete destination range",
+          "safe immutable and exclusive mutable borrows prevent source and destination aliasing",
+          "copy_nonoverlapping initializes exactly the range exposed by set_len"
+        ],
+        "candidate_binary_sha256": "bb4f489863c2953a4e007732e7037dd43f49b300e428b1084a8624cb2dbc1275",
+        "trials_per_process": 7,
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode_leader": 451725860,
+            "baseline_lencode_leader": 272063331,
+            "candidate_wincode_leader": 453032255,
+            "candidate_lencode_leader": 273420456
+          },
+          {
+            "baseline_wincode_leader": 452539482,
+            "baseline_lencode_leader": 271170019,
+            "candidate_wincode_leader": 451705570,
+            "candidate_lencode_leader": 273142325
+          }
+        ],
+        "absolute_lencode_leader_improvement_pct_by_pair": [-0.498827, -0.727332],
+        "control_normalized_lencode_leader_improvement_pct_by_pair": [-0.209022, -0.913289],
+        "payload_bytes": 34879635,
+        "wire_bytes": 157139840,
+        "decision": "rejected because both normalized pairs regressed; the standard Vec extension path already removes the apparent duplicate check effectively"
+      },
+      "raw_20_32_kib_policy": {
+        "change": "lower the direct replacement adapter's equal-wire raw range from 28-32 KiB to 20-32 KiB while retaining the current direct BytesMut deshred path",
+        "candidate_binary_sha256": {
+          "end_to_end": "609dbe80164703a124eeb13f955e0ebb0c5872b47f03a90c4dfa070669e16349",
+          "blockstore": "2c7ebc2b28898224c677afdfd0a575c5badb071c154cd6585909d682d3bd051c"
+        },
+        "blockstore_trials_per_process": 101,
+        "blockstore_reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 27487449,
+            "baseline_lencode": 22508061,
+            "candidate_wincode": 29578397,
+            "candidate_lencode": 24092667
+          },
+          {
+            "baseline_wincode": 27531889,
+            "baseline_lencode": 22620411,
+            "candidate_wincode": 29543677,
+            "candidate_lencode": 24212987
+          }
+        ],
+        "control_normalized_blockstore_improvement_pct_by_pair": [0.526684, 0.248522],
+        "end_to_end_screen": {
+          "baseline_wincode_leader": 454622519,
+          "baseline_lencode_leader": 272900423,
+          "candidate_wincode_leader": 451393157,
+          "candidate_lencode_leader": 271135937,
+          "absolute_lencode_leader_improvement_pct": 0.646568,
+          "control_normalized_lencode_leader_improvement_pct": -0.064228
+        },
+        "baseline_payload_bytes": 34879635,
+        "candidate_payload_bytes": 35188443,
+        "payload_regression_pct": 0.885353,
+        "wire_bytes": 157139840,
+        "decision": "rejected because both long Blockstore pairs stayed below 1% after control normalization, the leader did not improve after normalization, and payload grew"
+      },
+      "early_one_block_raw_1_32_kib": {
+        "change": "make eligible 1-32 KiB canonical batches raw before compression when the raw form already occupies the minimum one wire block",
+        "lencode_behavior": "the raw-range API returns the existing canonical bytes before allocating or running LZ4 only when checked wire geometry proves a one-block raw result",
+        "candidate_binary_sha256": {
+          "end_to_end": "691baf9f522f04fbac1181c3e21bb1f9360bccc65b153f0f35412650cf635b98",
+          "blockstore": "c73a0a0212b2a65cfd7ed1aef6901b2cd1f28ec99006d77f3d1a43be0cc486c5"
+        },
+        "trials_per_process": 7,
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode_leader": 451387493,
+            "baseline_lencode_leader": 271306931,
+            "candidate_wincode_leader": 449338285,
+            "candidate_lencode_leader": 271620592
+          },
+          {
+            "baseline_wincode_leader": 453873542,
+            "baseline_lencode_leader": 270896220,
+            "candidate_wincode_leader": 451477263,
+            "candidate_lencode_leader": 271278332
+          }
+        ],
+        "absolute_lencode_leader_improvement_pct_by_pair": [-0.115611, -0.141055],
+        "control_normalized_lencode_leader_improvement_pct_by_pair": [-0.572189, -0.672567],
+        "baseline_payload_bytes": 34879635,
+        "candidate_payload_bytes": 35432338,
+        "payload_regression_pct": 1.584601,
+        "wire_bytes": 157139840,
+        "decision": "rejected because both normalized leader pairs regressed and the larger raw payload did not buy measurable compression savings"
+      },
+      "full_reset": {
+        "triggered": true,
+        "reason": "three consecutive candidates failed the 1% gate, so every cycle edit was removed and both frozen retained controls were rerun",
+        "fresh_end_to_end_ns": {
+          "wincode_leader": 463610247,
+          "lencode_leader": 271011420,
+          "wincode_validator": 22080990,
+          "lencode_validator": 23264915
+        },
+        "fresh_blockstore_ns": {
+          "wincode_validator": 27582250,
+          "lencode_validator": 22539972
+        },
+        "payload_bytes": 34879635,
+        "wire_bytes": 157139840,
+        "result": "the exact retained code and wire totals were re-established"
+      },
+      "security": "the unsafe writer was confined to lencode and had a complete pointer proof, but was removed after regression. Both raw policies operated only on canonical bytes produced from official Solana types, required checked valid wire geometry, and emitted only existing raw canonical or LCSH representations. Hostile frame decoding, parser validation, private layouts, sidecars, dependencies, and cross-frame state were unchanged.",
+      "validation": "Rust 1.98 formatting and all 19 focused Solana wire tests passed, including randomized exact-wincode parity, malformed frames, output rollback, and size limits. Frozen end-to-end runs reconstructed 68,392 entries and 124,218 transactions with exact Turbine wire totals.",
+      "restoration": {
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_benchmark_guards_removed": true,
         "agave_candidate_source_changed": false,
         "lencode_production_source_changed": false
       }
@@ -9232,9 +9369,35 @@
         "reason": "The paired screen improved absolute leader latency by 0.145% but regressed 0.552% after normalization to its wincode control. The hint-only patch was removed.",
         "candidate_binary_sha256": "ae118ffcc66caf19c7fd4716c2fe49c26f0d5cac0e8109b819d08d5cc1eddcc8",
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "refresh the proof-bounded unsafe canonical append on the direct-raw checkpoint",
+        "reason": "Two reverse-order pairs regressed normalized leader latency by 0.209% and 0.913%. The private unsafe copy was removed because Vec extension already compiled efficiently.",
+        "candidate_binary_sha256": "bb4f489863c2953a4e007732e7037dd43f49b300e428b1084a8624cb2dbc1275",
+        "unsafe_code_added": true
+      },
+      {
+        "optimization": "widen equal-wire direct raw canonical receive from 28-32 KiB to 20-32 KiB",
+        "reason": "Two 101-trial Blockstore pairs improved by only 0.527% and 0.249% after control normalization, the leader was flat after normalization, and payload grew 0.885%. The retained 28-32 KiB range was restored.",
+        "candidate_binary_sha256": "2c7ebc2b28898224c677afdfd0a575c5badb071c154cd6585909d682d3bd051c",
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "skip compression for eligible one-block raw canonical batches from 1-32 KiB",
+        "reason": "Two reverse-order pairs regressed normalized leader latency by 0.572% and 0.673% while payload grew 1.585%. The early raw selector and wider replacement-site range were removed.",
+        "candidate_binary_sha256": "691baf9f522f04fbac1181c3e21bb1f9360bccc65b153f0f35412650cf635b98",
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
+      {
+        "after": "unsafe canonical append refresh, 20-32 KiB raw widening, and early 1-32 KiB one-block raw selection",
+        "restored_lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "restored_agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "fresh_end_to_end_lencode_leader_ns": 271011420,
+        "fresh_blockstore_lencode_validator_ns": 22539972,
+        "result": "exact retained source hashes, payload bytes, and Turbine wire bytes restored"
+      },
       {
         "after": "four consecutive Blockstore allocation/parallel decode reverts and three subsequent compressor/recycling reverts",
         "restored_codec_sha256": "915184c31dafd6b3c512b4f527e8656ab2ceb6beb7ff974cae1d9a3df69087ba",
