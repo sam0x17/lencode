@@ -1,14 +1,14 @@
 {
-  "version": 159,
+  "version": 160,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T10:59:27Z",
+  "updated_at": "2026-08-24T11:21:50Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 113,
+    "version": 114,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T10:59:27Z",
+    "updated_at": "2026-08-24T11:21:50Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2938,6 +2938,112 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "temporary_candidate_source_removed": true,
         "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_96_instruction_and_bounded_sizing_frontier": {
+      "status": "no production source change; both candidate families were inverse-reverted, and the retained Rust 1.98 checkpoint is clean",
+      "scope": "screen two lencode-owned canonical sizing layouts over official Solana transactions without changing the wire format or Agave production sources",
+      "outlined_instruction_walk": {
+        "change": "keep the Legacy and V0 transaction dispatch local while moving their shared canonical instruction-size walk into one non-inlined helper",
+        "baseline_binary_sha256": "b1168b544c3425049659605ad88074398b03e5cb37059cf1b4466da16e7bce6b",
+        "candidate_binary_sha256": "ac5ae4fb4ee27a21953a5ce6e9579e11c10e8966c45afb4b9fb292a930f637cd",
+        "machine_code_bytes": {
+          "retained_transaction_sizer": 1316,
+          "candidate_transaction_sizer": 938,
+          "candidate_instruction_helper": 312
+        },
+        "validation": "all 19 solana_wire tests passed",
+        "screen_ns": {
+          "trials": 101,
+          "repeats": 3,
+          "cpu": 28,
+          "retained": { "wincode_sizing": 35432620, "lencode_sizing": 20631596 },
+          "candidate": { "wincode_sizing": 35492650, "lencode_sizing": 22611973 },
+          "absolute_lencode_regression_pct": 9.598758,
+          "control_normalized_lencode_regression_pct": 9.41339
+        },
+        "decision": "rejected after one exact pair because the call boundary cost exceeded the code-size reduction and crossed the 2% ceiling"
+      },
+      "bounded_coalescing_size": {
+        "idea": "return an over-limit result after sizing only the transaction prefix needed to reject a carryover entry, then fully size that entry when it starts the next component",
+        "fixture_path": "/tmp/agave-shred-corpus.bin",
+        "fixture_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "census": {
+          "slots": 100,
+          "entries": 68392,
+          "transactions": 124218,
+          "size_rejected_entries": 1175,
+          "transactions_in_size_rejected_entries": 6235,
+          "transactions_needed_before_bounded_rejection": 3602,
+          "baseline_transaction_visits": 130453,
+          "bounded_transaction_visits": 127820,
+          "visit_reduction_pct": 2.018,
+          "visits_saved_by_entries_with_at_least_16_transactions": 1996
+        },
+        "benchmark": "same-source temporary coalescing benchmark, 101 alternating trials with three repeats, pinned to CPU 28; every process verified exact wincode size parity and stable batching totals",
+        "exact_filter_baseline_binary_sha256": "dc7c34fbee2e133d7e3ca3a160deda18f30136a3f469e0cc204eb3b64934ee82",
+        "exact_filter_baseline_ns": { "wincode": 36044390, "lencode": 21281817 },
+        "screens": [
+          {
+            "layout": "bound every entry",
+            "binary_sha256": "dd9e0585a8f7f25de5ba8709240f9e56dd2f1ef6df21da1e34cba1ab21fb42c6",
+            "wincode_ns": 35752280,
+            "lencode_ns": 21685738,
+            "absolute_lencode_regression_pct": 1.897963,
+            "control_normalized_lencode_regression_pct": 2.730509
+          },
+          {
+            "layout": "retain exact sizing through one transaction and bound entries with at least two",
+            "binary_sha256": "0c5c34a6b3d5882db1fd2da76cd06167b198dfa32c17cbd8b344981531de471e",
+            "wincode_ns": 35733229,
+            "lencode_ns": 21432917,
+            "absolute_lencode_regression_pct": 0.709996,
+            "control_normalized_lencode_regression_pct": 1.586967
+          },
+          {
+            "layout": "retain exact sizing through three transactions and bound entries with at least four",
+            "binary_sha256": "8223e2140b9b569390fc6fda1bb09e16b1897f0649a6f1b409484af01f38c6bb",
+            "wincode_ns": 35844449,
+            "lencode_ns": 21563408,
+            "absolute_lencode_regression_pct": 1.323153,
+            "control_normalized_lencode_regression_pct": 1.888335
+          },
+          {
+            "layout": "inline bounded sizing only for entries with at least 16 transactions",
+            "binary_sha256": "308a75254ea2a1970d8c4a172ef69cd175a820f4c8f68335f97d568f28bfed38",
+            "wincode_ns": 35873740,
+            "lencode_ns": 21541957,
+            "absolute_lencode_regression_pct": 1.222358,
+            "control_normalized_lencode_regression_pct": 1.703869
+          },
+          {
+            "layout": "outline bounded sizing for entries with at least 16 transactions",
+            "binary_sha256": "5d2b2f8bd09cd4f86713f7fe4e1f119e9ab79bb7b0ba6bc8f3db2697768f2d7c",
+            "bounded_helper_text_bytes": 192,
+            "wincode_ns": 36019590,
+            "lencode_ns": 21595758,
+            "absolute_lencode_regression_pct": 1.475161,
+            "control_normalized_lencode_regression_pct": 1.545028
+          }
+        ],
+        "decision": "rejected because every bounded layout regressed absolute and control-normalized lencode coalescing time; the selection branch and limit checks cost more than the skipped transaction visits",
+        "temporary_benchmark_removed": true
+      },
+      "security": "all candidates used safe Rust over official Solana reference types and retained the exact sizing error mapping for every inspected transaction. The bounded prototype deferred an uninspected tail only until the carried entry became the next component's fully sized first entry. Hostile frame decoding, parser validation, private layouts, sidecars, dependencies, unsafe code, and cross-frame state were unchanged.",
+      "restoration": {
+        "lencode_head_before_audit": "0cda90f98f1448832ac368ac5017b63ce32f37fb",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "agave_focused_sizing_benchmark_sha256": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_candidate_source_removed": true,
+        "agave_production_source_changed": false,
         "lencode_production_source_changed": false
       }
     },
