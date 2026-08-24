@@ -1,14 +1,14 @@
 {
-  "version": 156,
+  "version": 157,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T10:01:19Z",
+  "updated_at": "2026-08-24T10:26:00Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 110,
+    "version": 111,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T10:01:19Z",
+    "updated_at": "2026-08-24T10:26:00Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2643,6 +2643,127 @@
         "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "temporary_candidate_source_removed": true,
+        "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_93_exact_9_5_decode_frontier": {
+      "status": "no production source change; the diagnostic and unsafe sizing candidate were inverse-reverted, and the retained Rust 1.98 checkpoint is clean",
+      "scope": "profile the exact retained 9/5 Blockstore workload, bound additional equal-wire raw selection, and test whether a proven nonzero transaction size can remove a branch in lencode",
+      "exact_9_5_checkpoint": {
+        "fixture_path": "/tmp/lencode-batch-sweep-9_5.bin",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "components": 1283,
+        "entries": 68392,
+        "transactions": 124218,
+        "end_to_end_binary_sha256": "036c8839066db6c48a47821b997bd66c97d9ad9ac2827696112a30f98e414232",
+        "end_to_end_31_trial_ns": {
+          "wincode_leader": 301903220,
+          "lencode_leader": 239226158,
+          "wincode_validator": 20925044,
+          "lencode_validator": 23391503
+        },
+        "blockstore_binary_sha256": "37ca642c6938cc631f515e2863bca3fe5d7d478a7288baa30ec2dc519126ea51",
+        "blockstore_101_trial_ns": {
+          "wincode_validator": 27059536,
+          "lencode_validator": 24816478
+        },
+        "wire_output": {
+          "wincode_payload_bytes": 66597215,
+          "lencode_payload_bytes": 32684660,
+          "wincode_wire_bytes": 195024544,
+          "lencode_wire_bytes": 117621504
+        },
+        "raw_selections": 0
+      },
+      "blockstore_profile": {
+        "data_path": "/tmp/lencode-iter93-9_5-blockstore.data",
+        "data_sha256": "30197c1087a9f65b5134e5537e759906512012ac846ded2e81ae938c28849e0c",
+        "samples": 7186,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_validator": 27269907,
+          "lencode_validator": 24784828
+        },
+        "flat_self_cycles_pct": {
+          "transaction_frame_parser": 10.87,
+          "lz4_decompress_safe": 8.06,
+          "rocksdb_iterator_next": 7.22,
+          "sha256_blocks": 6.67,
+          "rocksdb_perf_context_tls": 5.18,
+          "block_component_parser": 4.82,
+          "memmove_all_paths": 4.22,
+          "deshred_state_push": 1.93
+        },
+        "interpretation": "safe LZ4 decompression is the only remaining lencode-owned Blockstore cost above 1%; transaction parsing, RocksDB, hashing, and deshredding are general Agave work outside the qualifying scope"
+      },
+      "equal_wire_raw_upper_bound": {
+        "method": "a temporary counter encoded official Solana entry batches with the retained policy and scored only raw canonical forms with the same valid wire-block count as their compressed frame",
+        "census": {
+          "frames": 1283,
+          "canonical_bytes": 66597215,
+          "compressed_frame_bytes": 32684660,
+          "equal_wire_candidates": 288,
+          "equal_wire_candidate_canonical_bytes": 13432618,
+          "all_candidate_payload_delta_bytes": 5272207
+        },
+        "best_decode_bypass_by_payload_budget": [
+          {
+            "payload_budget_pct": 0.25,
+            "frames": 21,
+            "canonical_bytes": 279124,
+            "payload_delta_bytes": 78275
+          },
+          {
+            "payload_budget_pct": 0.5,
+            "frames": 27,
+            "canonical_bytes": 532795,
+            "payload_delta_bytes": 160315
+          },
+          {
+            "payload_budget_pct": 1.0,
+            "frames": 38,
+            "canonical_bytes": 1011631,
+            "payload_delta_bytes": 323163
+          },
+          {
+            "payload_budget_pct": 2.0,
+            "frames": 55,
+            "canonical_bytes": 1894390,
+            "payload_delta_bytes": 634990
+          }
+        ],
+        "decision": "rejected before production implementation; spending a full 2% compressed-payload increase bypasses only 2.844% of canonical decode bytes, which caps the total Blockstore gain near 0.23% at the measured 8.06% LZ4 share"
+      },
+      "nonzero_transaction_size": {
+        "change": "replace NonZeroUsize::new with one lencode-only unsafe NonZeroUsize::new_unchecked after successful canonical transaction sizing",
+        "proof": "every supported Legacy, V0, and V1 transaction encoding contains fixed nonzero header and hash bytes; every fallible width, signature-count, and overflow check remained in place",
+        "baseline_binary_sha256": "b1168b544c3425049659605ad88074398b03e5cb37059cf1b4466da16e7bce6b",
+        "candidate_binary_sha256": "77e9f4b520f7c232fb581d06c373862367a9a95b4f7a5a30610001064f570681",
+        "baseline_and_candidate_text_sha256": "796b4c2f9414ea8fbe6142e2d3a235320d839149fa01ddc58a605a8777480893",
+        "machine_code_identical": true,
+        "focused_validation": "all nine canonical sizing, wire-boundary, and LZ4 limit tests passed",
+        "decision": "inverse-reverted because Rust 1.98 already proves the successful size is nonzero and emits identical executable code; retaining the unsafe block would add no speed"
+      },
+      "decoder_frontier": {
+        "retained_path": "validate the complete independent frame, enforce the caller maximum and expansion ratio, decompress with LZ4_decompress_safe into exact uninitialized caller-owned BytesMut capacity, then split and freeze the parser range without copying",
+        "partial_decode": "not implemented because reaching the advertised output size does not prove that the complete compressed input was consumed; accepting a valid prefix with trailing bytes would weaken hostile-frame rejection",
+        "deprecated_fast_decode": "already excluded because malformed input can read beyond the supplied source and upstream documents it as slower than the safe decoder"
+      },
+      "security": "no unsafe block remains from this iteration. Frame identity, version, flag, signed-length conversion, expansion bound, exact decompressed length, official parser validation, and independent-block behavior are unchanged. No private Solana layout, sidecar, dependency, unchecked offset, partial decoder, or cross-frame state was added.",
+      "restoration": {
+        "lencode_head_before_audit": "7e0f7a6d43724e0cc8eb5ac2ce57bb98ed1803f6",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "focused_sizing_binary_sha256": "b1168b544c3425049659605ad88074398b03e5cb37059cf1b4466da16e7bce6b",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_diagnostic_source_removed": true,
+        "unsafe_candidate_source_removed": true,
         "agave_candidate_source_changed": false,
         "lencode_production_source_changed": false
       }
