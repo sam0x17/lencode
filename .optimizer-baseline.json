@@ -1,14 +1,14 @@
 {
-  "version": 154,
+  "version": 155,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T09:32:28Z",
+  "updated_at": "2026-08-24T09:44:20Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 108,
+    "version": 109,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T09:32:28Z",
+    "updated_at": "2026-08-24T09:44:20Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2488,6 +2488,49 @@
         "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
         "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_91_final_entry_overfill_screen": {
+      "status": "no production source change; the temporary branch-accurate census was inverse-reverted and the retained checkpoint remains clean",
+      "scope": "test whether canonical-lencode batching can eliminate a final one-entry slot component by admitting a bounded overfill above the retained 9/5 target, while leaving legacy wincode batching unchanged",
+      "candidate_model": {
+        "production_branch": "only a final slot entry rejected because its exact canonical size would exceed the current batch maximum can be admitted",
+        "dynamic_maximum": "max(9/5 of one typical FEC input, the next full typical boundary above the first entry)",
+        "tested_hard_caps_of_typical": ["9/5", "29/16", "117/64", "15/8", "31/16", "2/1"],
+        "security_bound": "the proposed branch would have remained canonical-lencode-only and capped at no more than two typical FEC inputs; no unbounded hostile metadata or wire change was considered"
+      },
+      "fixture": {
+        "original_slot_corpus_path": "/tmp/agave-shred-corpus.bin",
+        "original_slot_corpus_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+        "retained_9_5_component_fixture_path": "/tmp/lencode-batch-sweep-9_5.bin",
+        "retained_9_5_component_fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "slots": 100,
+        "components": 1283,
+        "entry_identity_and_slot_boundaries_verified": true
+      },
+      "result": {
+        "singleton_final_components": 1,
+        "singleton_combined_batch_bytes": 488,
+        "retained_9_5_target_bytes": 55468,
+        "size_limited_singleton_final_components": 0,
+        "components_removed_at_every_tested_cap": 0,
+        "decision": "rejected before production implementation because the only singleton tail was already far below the current target and therefore arose from timing or a boundary, not the size-limit branch; bounded final-entry overfill has zero opportunity on the representative 100-slot corpus"
+      },
+      "validation": "the Rust 1.98 diagnostic decoded official VersionedTransaction values, verified exact flattened entry identity, rejected components crossing original slot boundaries, and used lencode's canonical reference-Solana sizer to reproduce the production decision",
+      "security": "no production unsafe block, decoder relaxation, private Solana layout, sidecar, dependency, wire change, or cross-frame state was added. The hostile-input path was untouched.",
+      "restoration": {
+        "lencode_head_before_audit": "ff67c86f9d4a64850b818fa0df38d7e3ff5fb489",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_diagnostic_source_removed": true,
         "agave_candidate_source_changed": false,
         "lencode_production_source_changed": false
       }
