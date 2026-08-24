@@ -1,12 +1,12 @@
 {
-  "version": 149,
+  "version": 150,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T08:09:21Z",
+  "updated_at": "2026-08-24T08:27:09Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 103,
+    "version": 104,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2056,6 +2056,97 @@
         "temporary_census_removed": true,
         "temporary_mixed_representation_benchmark_patch_removed": true,
         "agave_changes_committed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_86_direct_receive_micro_frontier": {
+      "status": "no production source change; three direct canonical-lencode receive candidates were inverse-reverted below the 1% gate",
+      "scope": "screen the remaining raw-prefix copy, a wider equal-wire raw policy, and parsed-result allocation only at the canonical-lencode Blockstore replacement site",
+      "baseline_head": "cdb481780ac776a83a69163ee2a3b65e7da6d42c",
+      "baseline_blockstore_binary_sha256": "37ca642c6938cc631f515e2863bca3fe5d7d478a7288baa30ec2dc519126ea51",
+      "first_fragment_direct_classification": {
+        "change": "validate and borrow the first shred fragment, classify its four-byte prefix, and append it directly to Vec or BytesMut without the raw Vec-to-BytesMut migration",
+        "candidate_binary_sha256": "eaf150577c7b4bfdb6907788f6c06b50d2c33d2bba94bb6166f8f6fbfb99e773",
+        "trials_per_process": 31,
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 27484297,
+            "baseline_lencode": 22564899,
+            "candidate_wincode": 27977028,
+            "candidate_lencode": 22935531
+          },
+          {
+            "baseline_wincode": 27688816,
+            "baseline_lencode": 22574929,
+            "candidate_wincode": 28212438,
+            "candidate_lencode": 23027221
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [-1.642516, -2.003515],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [0.147611, -0.110332],
+        "decision": "rejected because normalization removed the apparent layout movement and both results missed 1%"
+      },
+      "raw_1_32_kib_with_direct_deshred": {
+        "change": "lower the retained raw canonical minimum from 28 KiB to 1 KiB while retaining equal valid wire-block selection and the 32 KiB upper bound",
+        "candidate_binary_sha256": "5a498df3a574bc7ffe505134cc1e0f1c3acba8515ba3e5b63df3e17a55f40054",
+        "preliminary_control_normalized_improvement_pct_by_pair": [0.556051, 1.152932, 1.782620, 0.226841, 1.147787],
+        "confirmation_trials_per_process": 301,
+        "confirmation_pairs_ns": [
+          {
+            "baseline_wincode": 27485136,
+            "baseline_lencode": 22420379,
+            "candidate_wincode": 27548357,
+            "candidate_lencode": 22325459
+          },
+          {
+            "baseline_wincode": 27489127,
+            "baseline_lencode": 22442329,
+            "candidate_wincode": 27518297,
+            "candidate_lencode": 22236128
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [0.423365, 0.918804],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [0.651884, 1.023832],
+        "test_policy": "a 56-byte initial screen made tiny entry batches raw and failed two tests that require them to stay framed; the measured candidate used a 1 KiB minimum and passed all 15 codec tests",
+        "decision": "rejected because the longer normalized pair median was 0.837858%, and the candidate gave back canonical payload bytes without clearing the CPU gate"
+      },
+      "canonical_result_capacity": {
+        "change": "reserve the exact completed-range count only for the canonical-lencode parsed-component result vector",
+        "candidate_binary_sha256": "b0824c35adc713efa02684b62238c792d76003ff4873e21ed614a8e1bb313c1a",
+        "confirmation_trials_per_process": 301,
+        "confirmation_pairs_ns": [
+          {
+            "baseline_wincode": 27545948,
+            "baseline_lencode": 22568490,
+            "candidate_wincode": 27427347,
+            "candidate_lencode": 22224079
+          },
+          {
+            "baseline_wincode": 27475438,
+            "baseline_lencode": 22419810,
+            "candidate_wincode": 27413548,
+            "candidate_lencode": 22268839
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [1.526070, 0.673382],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [1.100250, 0.449138],
+        "decision": "rejected because the normalized confirmation median was 0.774694% and the two process orders disagreed on whether the change cleared 1%"
+      },
+      "consecutive_reverts": 3,
+      "full_reset": {
+        "triggered": false,
+        "reason": "iteration 85 remains 7.10-8.22% faster than its retained Blockstore baseline after wincode-control normalization; each iteration-86 patch was removed independently"
+      },
+      "security": "all candidates used safe Rust and retained the existing shred size, index ordering, completion, frame identity, decoder bounds, and official parser checks. The raw-policy candidate still required trusted canonical encoder output and equal valid wire-block counts. No unsafe block, unchecked offset, private layout, sidecar, dependency, or cross-frame state was added.",
+      "validation": "Rust 1.98 touched-file formatting passed for every candidate. The first-fragment and result-capacity candidates passed both raw/framed Blockstore tests and strict Clippy for the ledger library and measured jemalloc bench. The final raw-policy candidate passed all 15 codec tests. End-to-end builds were skipped after each primary Blockstore gate failed.",
+      "restoration": {
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_candidate_source_changed": false,
         "lencode_production_source_changed": false
       }
     },
