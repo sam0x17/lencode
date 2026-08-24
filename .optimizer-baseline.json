@@ -1,14 +1,14 @@
 {
-  "version": 165,
+  "version": 166,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T13:18:47Z",
+  "updated_at": "2026-08-24T13:48:11Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 119,
+    "version": 120,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T13:18:47Z",
+    "updated_at": "2026-08-24T13:48:11Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -3551,6 +3551,105 @@
         "temporary_diagnostics_removed": true,
         "temporary_benchmark_dispatch_removed": true,
         "agave_production_source_changed": false
+      }
+    },
+    "iteration_102_paced_payload_acceleration_bands": {
+      "status": "rejected both lencode-only paced-size acceleration policies and restored the retained iteration-101 source",
+      "scope": "screen direct FAST(1) and FAST(2) payload policies for the paced 1.5-FEC broadcaster geometry without changing Agave production code, component boundaries, frame format, or hostile-input decoding",
+      "fixture": {
+        "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218,
+        "framed_canonical_bytes": 66599215
+      },
+      "retained_checkpoint": {
+        "lencode_commit": "495fdb8c83a8ce35b4c578fe213857c243dc4d2a",
+        "payload_bytes": 33392635,
+        "data_shreds": 49440,
+        "coding_shreds": 49440,
+        "turbine_wire_bytes": 120188640,
+        "end_to_end_binary_sha256": "2628a063d807e9f64a011da8f924326d4f54ab44cbbe6b80d499f23a4271b070",
+        "blockstore_binary_sha256": "6e29f3cc050edfa02ed995ca65945d18ded38f0343f270a6c43a03b1377fe23f"
+      },
+      "read_only_census": {
+        "all_additional_fast1_payload_savings_bytes": 1306087,
+        "all_additional_fast1_payload_savings_pct": 3.911303,
+        "all_additional_fast2_payload_savings_bytes": 819218,
+        "all_additional_fast2_payload_savings_pct": 2.453289,
+        "additional_turbine_wire_savings_bytes": 0,
+        "interpretation": "the retained wire-boundary policy already captures every shred-count reduction; the remaining compression is payload-only and concentrated near 45 KiB"
+      },
+      "rejected_fast1_wide": {
+        "canonical_bytes_half_open": [45824, 46336],
+        "candidate_payload_bytes": 32911841,
+        "payload_reduction_bytes": 480794,
+        "payload_reduction_pct": 1.439820,
+        "turbine_wire_bytes": 120188640,
+        "candidate_binary_sha256": "46c32eeddacb20426669726bec61d9577aa954e19662370837315496934de37f",
+        "absolute_leader_regression_pct": 2.576589,
+        "control_normalized_leader_regression_pct": 2.675085,
+        "decision": "rejected on the first 31-trial pair because both leader regressions exceeded 2%"
+      },
+      "rejected_fast1_narrow": {
+        "canonical_bytes_half_open": [45920, 46208],
+        "affected_frames": 368,
+        "candidate_payload_bytes": 33051933,
+        "payload_reduction_bytes": 340702,
+        "payload_reduction_pct": 1.020291,
+        "data_shreds": 49440,
+        "coding_shreds": 49440,
+        "turbine_wire_bytes": 120188640,
+        "candidate_end_to_end_binary_sha256": "942b53e57db56ae539a48b2d402826db6810e7da3bc67e7fe4cfe800a3086e0e",
+        "candidate_blockstore_binary_sha256": "ec63c5c7d14330054cc997a8797f46a8a58aba830562eef49abba5736d788265",
+        "leader_absolute_regression_pct_by_pair": [1.636762, 1.578337],
+        "leader_control_normalized_regression_pct_by_pair": [1.689251, 2.445573],
+        "validator_control_normalized_regression_pct_by_pair": [0.231840, 0.684026],
+        "blockstore_absolute_change_pct_by_pair": [-0.186377, 0.436919],
+        "blockstore_control_normalized_regression_pct_by_pair": [0.485780, 0.496078],
+        "decision": "rejected because the second reverse-order end-to-end pair exceeded the 2% normalized leader ceiling"
+      },
+      "rejected_fast2": {
+        "canonical_bytes_half_open": [45568, 46080],
+        "candidate_payload_bytes": 33056377,
+        "payload_reduction_bytes": 336258,
+        "payload_reduction_pct": 1.006983,
+        "data_shreds": 49440,
+        "coding_shreds": 49440,
+        "turbine_wire_bytes": 120188640,
+        "candidate_binary_sha256": "2d77aa718f4a161bcd271bd6ef2f80b3da29387e87a906afe49b5aadfda80591",
+        "leader_absolute_regression_pct_by_pair": [1.937560, 5.956966],
+        "leader_control_normalized_regression_pct_by_pair": [0.728030, 3.912436],
+        "validator_control_normalized_regression_pct_by_pair": [1.146279, 0.381769],
+        "decision": "rejected because the reverse-order pair exceeded both absolute and normalized 2% leader ceilings"
+      },
+      "cross_fixture_guard": {
+        "path": "/tmp/agave-shred-broadcast-batches.bin",
+        "sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "retained_payload_bytes": 34469639,
+        "candidate_payload_bytes": 34469639,
+        "turbine_wire_bytes": 157139840,
+        "interpretation": "both paced-size policies were inactive on the retained 1,982-component production geometry"
+      },
+      "decision": "the remaining paced-size payload frontier costs too much leader CPU for a payload-only gain that does not remove any Turbine bytes; no production code was retained",
+      "wire_compatibility": "every candidate emitted the unchanged LCSH version-1 flag-1 frame containing an independent standard size-prefixed LZ4 block",
+      "security": "only trusted reference-Solana encoder acceleration selection was screened; no decoder, hostile length, parser, unsafe block, private layout, sidecar, dependency, or cross-frame state changed",
+      "restoration": {
+        "lencode_solana_wire_sha256": "c36f86fe1a98dab61911787aabdb1a35d7e096297d2593cf3b1da57e4f67c049",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_root_manifest_sha256": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "protected_blockstore_benchmark_sha256": "5c54250b1e41491a024e2b8ced146fd30fa7f35b3231f2e6dd6a2ec5453f450f",
+        "temporary_diagnostics_removed": true,
+        "temporary_benchmark_dispatch_removed": true,
+        "agave_production_source_changed": false,
+        "lencode_production_source_changed": false
       }
     },
     "post_iteration_35_profile": {
