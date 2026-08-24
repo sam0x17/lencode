@@ -1,12 +1,12 @@
 {
-  "version": 139,
+  "version": 140,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T04:05:46Z",
+  "updated_at": "2026-08-24T04:20:07Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 93,
+    "version": 94,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -828,6 +828,74 @@
         "agave_broadcast_run": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
         "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_broadcast_utils": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b"
+      }
+    },
+    "iteration_76_validator_and_entry_boundary_frontier": {
+      "status": "no production source change; the remaining validator cost was isolated to libLZ4 and a compact per-entry sizing API was rejected, inverse-reverted, and restored to committed HEAD",
+      "scope": "lencode-owned canonical decode and sizing paths; the only candidate Agave edit was the direct canonical-lencode replacement adapter",
+      "end_to_end_profile": {
+        "command": "perf record at 999 Hz on logical CPU 28 over 31 alternating warmed trials",
+        "data_path": "/tmp/lencode-iter76-e2e-current.data",
+        "data_sha256": "305cae8ca60323a3869d4d656a89f371f4f45a8f053f5617f017c2c3fa34a7cd",
+        "samples": 19804,
+        "lost_samples": 0,
+        "medians_ns": {
+          "wincode_leader": 304399206,
+          "canonical_lz4_leader": 240786197,
+          "wincode_validator": 21161509,
+          "canonical_lz4_validator": 23711959
+        },
+        "relevant_total_self_cycles_pct": {
+          "lz4_decompress_safe": 0.85,
+          "canonical_transaction_frame_parse": 1.21,
+          "bytes_promotable_even_to_mut": 0.60
+        },
+        "callgraph_finding": "bytes::promotable_even_to_mut belongs to Agave's shared leader make_shreds_from_data path. The canonical validator stack enters lencode's bounded transcode path and then LZ4_decompress_safe, so no shared Agave optimization is credited."
+      },
+      "compression_frontier": {
+        "decision": "no compressor candidate was rebuilt because prior exact screens already covered FAST(1), FAST(2), FAST(3), FAST(4), FAST(5), FAST(8), HC(2), HC(3), target-sized compression, native table sizes, and duplicate extreme-frame retries",
+        "decoder_decision": "the remaining qualifying validator work is the audited exact-size LZ4_decompress_safe call; unchecked fast decode, partial decode, and dependency forks do not meet the hostile-input or complexity constraints"
+      },
+      "compact_entry_result_screen": {
+        "change": "add an Option<NonZeroUsize> lencode entry-size API and use it at Agave's direct canonical-lencode adapter, while preserving the detailed Result API and its public error variants",
+        "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218,
+        "baseline_binary_sha256": "358a6b826ef81f99f04690419fa328e57fd3ca9d29ed9f594356428de14e2628",
+        "candidate_binary_sha256": {
+          "outlined": "cf4e87c4f745efe738275a419692e6ec3963b37d23e075a5ab0a88108291f1d3",
+          "inlined": "fde1ec46b26f3106d5fbf2cba78c33d5e7c3ddb841a381f8df99245245c70c76"
+        },
+        "screens_ns": [
+          {
+            "form": "outlined",
+            "baseline_wincode": 35262639,
+            "baseline_lencode": 20694916,
+            "candidate_wincode": 35428601,
+            "candidate_lencode": 21670680,
+            "control_normalized_regression_pct": 4.224466
+          },
+          {
+            "form": "inlined",
+            "baseline_wincode": 35359390,
+            "baseline_lencode": 20696486,
+            "candidate_wincode": 35339450,
+            "candidate_lencode": 21638460,
+            "control_normalized_regression_pct": 4.610364
+          }
+        ],
+        "decision": "inverse-reverted because both ABI forms exceeded the 2% regression ceiling; end-to-end and Blockstore guardrails were skipped after the focused rejection"
+      },
+      "compatibility": "the rejected candidate changed no encoded bytes, frame flags, compressed blocks, component boundaries, decoder behavior, or retained public API",
+      "security": "the rejected candidate used safe Rust over parsed official Solana types and retained every checked length and overflow path. No unsafe block, FFI call, hostile-input shortcut, dependency, private layout, sidecar, or cross-frame state was added.",
+      "zero_copy": "the borrowed selected-frame slice, caller-owned compression and decompression arenas, exact-size uninitialized decode, and BytesMut split-and-freeze parser handoff remain unchanged",
+      "validation": "19 focused Solana wire tests passed after restoration; rebuilding the Rust 1.98 focused benchmark reproduced the committed baseline binary byte for byte",
+      "restoration": {
+        "lencode_head": "94883722659fd9146e8c5c4a4bfcf980e6512f32",
+        "lencode_solana_wire_sha256": "807d1fbeebd896b2ad23d151868e7cf5c4cded7b2f4a4c631a1f5f710839e8d4",
+        "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "lencode_production_worktree_clean": true
       }
     },
     "post_iteration_35_profile": {
