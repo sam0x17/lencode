@@ -1,14 +1,14 @@
 {
-  "version": 167,
+  "version": 168,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T14:08:49Z",
+  "updated_at": "2026-08-24T14:26:02Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 121,
+    "version": 122,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T14:08:49Z",
+    "updated_at": "2026-08-24T14:26:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -3827,6 +3827,159 @@
         "protected_blockstore_benchmark": "5c54250b1e41491a024e2b8ced146fd30fa7f35b3231f2e6dd6a2ec5453f450f"
       },
       "agave_production_source_changed": false
+    },
+    "iteration_104_post_two_byte_sizing_layout_screen": {
+      "status": "no production source change; every candidate was inverse-reverted to the retained two-byte instruction sizing checkpoint",
+      "scope": "test compiler-layout changes around the remaining canonical sizing fallback without changing Agave source, official Solana types, wire bytes, compression, decoding, or caller-owned storage",
+      "retained_profile": {
+        "command": "perf record -F 999 on logical CPU 28 with the retained focused sizing binary",
+        "data_path": "/tmp/lencode-iter104-entry-sizes-profile.data",
+        "data_sha256": "ec073561996ffc26e6e958fac77c7a0ca3898d87927737ec2fadba884f3d7c8e",
+        "samples": 5794,
+        "lost_samples": 0,
+        "wincode_median_ns": 35577358,
+        "lencode_median_ns": 20210933,
+        "lencode_speedup_vs_wincode": 1.7603,
+        "self_cycles_pct": {
+          "wincode_entry_size_of": 63.47,
+          "lencode_transaction_size": 24.88
+        },
+        "transaction_sizer_text_bytes": 1360,
+        "instruction_census": {
+          "instructions": 304976,
+          "both_lengths_below_128": 224925,
+          "accounts_below_128_and_data_below_16384": 80051,
+          "other": 0
+        }
+      },
+      "candidates": [
+        {
+          "change": "move only the checked long-instruction fallback to a cold non-inlined helper",
+          "binary_sha256": "b463468572a6b1ed70c092b1c73f762fe2c13d077b3c188dc479185f99e41932",
+          "transaction_sizer_text_bytes": 1384,
+          "cold_helper_text_bytes": 123,
+          "focused_31_trial_pairs": [
+            {
+              "baseline_wincode_ns": 35000257,
+              "baseline_lencode_ns": 19908132,
+              "candidate_wincode_ns": 35230357,
+              "candidate_lencode_ns": 20552315,
+              "absolute_regression_pct": 3.235778,
+              "control_normalized_regression_pct": 2.561514
+            },
+            {
+              "candidate_wincode_ns": 35183218,
+              "candidate_lencode_ns": 20517874,
+              "baseline_wincode_ns": 35068067,
+              "baseline_lencode_ns": 19935992,
+              "absolute_regression_pct": 2.918751,
+              "control_normalized_regression_pct": 2.581909
+            }
+          ],
+          "decision": "rejected because both reverse-order pairs exceeded the 2% absolute and normalized regression ceiling"
+        },
+        {
+          "change": "move multibyte short-u16 sizing to a shared cold non-inlined helper after an inline sub-128 branch",
+          "binary_sha256": "4daa4ead544f467d7979e0c3b219701b1bacedf0b50be8c6daff6ed74895c38d",
+          "transaction_sizer_text_bytes": 1093,
+          "cold_helper_text_bytes": 48,
+          "focused_31_trial_pairs": [
+            {
+              "baseline_wincode_ns": 35208458,
+              "baseline_lencode_ns": 20099323,
+              "candidate_wincode_ns": 35380069,
+              "candidate_lencode_ns": 23758476,
+              "absolute_regression_pct": 18.205354,
+              "control_normalized_regression_pct": 17.631999
+            },
+            {
+              "candidate_wincode_ns": 35386539,
+              "candidate_lencode_ns": 23773266,
+              "baseline_wincode_ns": 35261628,
+              "baseline_lencode_ns": 20060393,
+              "absolute_regression_pct": 18.508476,
+              "control_normalized_regression_pct": 18.090153
+            },
+            {
+              "baseline_wincode_ns": 35247808,
+              "baseline_lencode_ns": 20062253,
+              "candidate_wincode_ns": 35419348,
+              "candidate_lencode_ns": 23793737,
+              "absolute_regression_pct": 18.599526,
+              "control_normalized_regression_pct": 18.025135
+            }
+          ],
+          "candidate_profile": {
+            "data_path": "/tmp/lencode-iter104-cold-multibyte-profile.data",
+            "data_sha256": "ec0c16521f9e603d7888dfd502607f17ce2aca7e3b2069fba21df42a31838b3c",
+            "samples": 6199,
+            "lost_samples": 0,
+            "wincode_median_ns": 35773440,
+            "lencode_median_ns": 24030547,
+            "self_cycles_pct": {
+              "outlined_legacy_message_size": 15.43,
+              "transaction_size": 15.98
+            },
+            "diagnosis": "the smaller transaction function made LLVM stop inlining the legacy-message size walk, so call structure and code layout dominated the cold-helper saving"
+          },
+          "decision": "rejected because every pair regressed by more than 17.6% after control normalization"
+        },
+        {
+          "change": "force-inline the legacy-message size walk while retaining the cold multibyte short-u16 helper",
+          "binary_sha256": "6adbb019958c964774e30e2f73c298267fed9eabdb763fe89fcc0cb6d9c3e32f",
+          "transaction_sizer_text_bytes": 1265,
+          "cold_helper_text_bytes": 48,
+          "focused_31_trial_pairs": [
+            {
+              "baseline_wincode_ns": 35268895,
+              "baseline_lencode_ns": 20042845,
+              "candidate_wincode_ns": 35396696,
+              "candidate_lencode_ns": 23574317,
+              "absolute_regression_pct": 17.619614,
+              "control_normalized_regression_pct": 17.194945
+            },
+            {
+              "candidate_wincode_ns": 35456676,
+              "candidate_lencode_ns": 23564907,
+              "baseline_wincode_ns": 35118855,
+              "baseline_lencode_ns": 19986826,
+              "absolute_regression_pct": 17.902197,
+              "control_normalized_regression_pct": 16.778859
+            },
+            {
+              "baseline_wincode_ns": 35247765,
+              "baseline_lencode_ns": 20075525,
+              "candidate_wincode_ns": 35412116,
+              "candidate_lencode_ns": 23573507,
+              "absolute_regression_pct": 17.424112,
+              "control_normalized_regression_pct": 16.879136
+            }
+          ],
+          "decision": "rejected because restoring legacy-message inlining did not recover the retained hot-path layout"
+        }
+      ],
+      "unmeasured_candidate": {
+        "change": "combine the two retained instruction branches into one accounts-below-128 and data-below-16,384 predicate with a data-prefix-width adjustment",
+        "status": "compiled and passed the focused test, then was inverse-reverted before timing when the external benchmark report took priority",
+        "decision": "no performance conclusion recorded"
+      },
+      "decision": "keep the existing two-byte fast tier and move to a different lencode-owned hotspot; further cold outlining changes the compiler layout enough to erase the intended saving",
+      "security": "all candidates used safe Rust and preserved fallible u16 validation, checked aggregation, hostile-input bounds, and exact canonical sizing. No parser, compression, decoder, unsafe block, private layout, sidecar, dependency, or cross-frame state changed.",
+      "restoration": {
+        "lencode_solana_wire_sha256": "12eba3bbf2d8bce1bc0f54394b2ab1cb46dee64e315c63b5c3a5002a7b47079d",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_root_manifest_sha256": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "protected_focused_benchmark_sha256": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "protected_blockstore_benchmark_sha256": "5c54250b1e41491a024e2b8ced146fd30fa7f35b3231f2e6dd6a2ec5453f450f",
+        "lencode_worktree_clean": true,
+        "agave_production_source_changed": false
+      }
     },
     "post_iteration_35_profile": {
       "command": "perf record -F 999 -o /tmp/lencode-shred-spare-decode-perf.data -- env LENCODE_SHRED_RUNS=21 taskset -c 28 /tmp/lencode-unsafe-spare-decode-screen-rust-1.98.0 /tmp/agave-shred-broadcast-batches.bin",
