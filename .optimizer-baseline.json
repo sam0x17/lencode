@@ -1,14 +1,14 @@
 {
-  "version": 157,
+  "version": 158,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T10:26:00Z",
+  "updated_at": "2026-08-24T10:46:12Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 111,
+    "version": 112,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T10:26:00Z",
+    "updated_at": "2026-08-24T10:46:12Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2764,6 +2764,121 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "temporary_diagnostic_source_removed": true,
         "unsafe_candidate_source_removed": true,
+        "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_94_selective_compression_frontier": {
+      "status": "no production source change; all three compression candidates were inverse-reverted, and the retained Rust 1.98 checkpoint is clean",
+      "scope": "profile the retained 9/5 end-to-end workload and screen cheaper lencode-owned selective LZ4 retries without changing the frame format or Agave replacement sites",
+      "exact_9_5_profile": {
+        "fixture_path": "/tmp/lencode-batch-sweep-9_5.bin",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "data_path": "/tmp/lencode-iter94-9_5-e2e.data",
+        "data_sha256": "40082b2effbcf67d45bc7d2fb7662f8dc4282c863fd15f8505050951ea4566cb",
+        "samples": 19795,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_leader": 304037828,
+          "lencode_leader": 241159860,
+          "wincode_validator": 21327184,
+          "lencode_validator": 23823503
+        },
+        "flat_self_cycles_pct": {
+          "sha256_blocks": 29.06,
+          "reed_solomon_all_paths": 21.72,
+          "curve25519_all_paths": 5.96,
+          "lz4_fast4": 4.42,
+          "wincode_component_serialize": 2.36,
+          "memmove_all_paths": 2.06,
+          "malloc": 1.56,
+          "lz4_hc3": 1.54,
+          "lz4_decompress_safe": 1.07,
+          "canonical_short_u16": 0.91,
+          "canonical_addresses": 0.83,
+          "lz4_hc2": 0.82,
+          "canonical_transactions": 0.41,
+          "canonical_instructions": 0.39,
+          "canonical_append": 0.25
+        },
+        "interpretation": "the HC(2) and HC(3) retry work is 2.36% of total alternating cycles, about 4.7% of the lencode leader path; the profile supports a bounded retry-policy screen but leaves no credible 1% target in an individual canonical writer helper"
+      },
+      "hc2_only": {
+        "change": "use HC(2) for every retained HC retry and remove the HC(3) selection and fallback",
+        "candidate_binary_sha256": "96bde0579e7bff3713c23a3f39c94059983000bb9181cd7ba17f34fc76afb206",
+        "focused_test": "cargo +1.98.0 test --offline --all-features canonical_lz4_recompression_window_tracks_wire_blocks",
+        "nine_five_screen_ns": {
+          "trials": 7,
+          "wincode_leader": 302842780,
+          "lencode_leader": 236666948,
+          "wincode_validator": 20956243,
+          "lencode_validator": 23407882
+        },
+        "nine_five_wire_output": {
+          "payload_bytes": 32748717,
+          "wire_bytes": 119566304,
+          "payload_regression_pct": 0.196,
+          "wire_regression_pct": 1.653
+        },
+        "production_guardrail": "the candidate aborted with Error::InvalidData on /tmp/agave-shred-broadcast-batches.bin; the exact retained binary reconstructed the same valid fixture",
+        "decision": "rejected on correctness before paired timing"
+      },
+      "remove_hc3_fallback": {
+        "change": "retain the HC(2) closest-band selection and HC(3) outer band, but remove the HC(3) fallback after a closest-band HC(2) miss",
+        "candidate_binary_sha256": "e241dbdb5cada69058fd66dbb7cf84b33e45d6efc9d1328f3ceb4a54285256cb",
+        "focused_test": "cargo +1.98.0 test --offline --all-features canonical_lz4_recompression_window_tracks_wire_blocks",
+        "nine_five_wire_output": {
+          "payload_bytes": 32691977,
+          "wire_bytes": 117932672,
+          "payload_regression_pct": 0.0224,
+          "wire_regression_pct": 0.2646
+        },
+        "exact_pairs_ns": [
+          {
+            "baseline": { "wincode_leader": 301682348, "lencode_leader": 238801778, "wincode_validator": 21699147, "lencode_validator": 23413152 },
+            "candidate": { "wincode_leader": 301265017, "lencode_leader": 238098606, "wincode_validator": 20818743, "lencode_validator": 23462422 },
+            "absolute_lencode_leader_improvement_pct": 0.2945,
+            "control_normalized_lencode_leader_improvement_pct": 0.1563,
+            "absolute_lencode_validator_improvement_pct": -0.2104,
+            "control_normalized_lencode_validator_improvement_pct": -4.4482
+          },
+          {
+            "candidate": { "wincode_leader": 301630329, "lencode_leader": 238366537, "wincode_validator": 20788343, "lencode_validator": 23487003 },
+            "baseline": { "wincode_leader": 300237284, "lencode_leader": 238607808, "wincode_validator": 21020173, "lencode_validator": 23338222 },
+            "absolute_lencode_leader_improvement_pct": 0.1011,
+            "control_normalized_lencode_leader_improvement_pct": 0.5625,
+            "absolute_lencode_validator_improvement_pct": -0.6375,
+            "control_normalized_lencode_validator_improvement_pct": -1.7598
+          }
+        ],
+        "decision": "rejected because both leader gains stayed below the 1% CPU gate, validator latency regressed, and the candidate enlarged Turbine wire output"
+      },
+      "fast3_first_with_fast1_fallback": {
+        "change": "try FAST(3) for each retained selective retry, accept it only when it removes the same wire block, and otherwise run the retained FAST(1) pass in the same initialized arena",
+        "candidate_binary_sha256": "8a8a8d87036067305a22bffa40442158d605a0de990b0e1f3e0ef2cdde1f18e0",
+        "focused_test": "cargo +1.98.0 test --offline --all-features canonical_lz4_recompression_window_tracks_wire_blocks",
+        "nine_five_wire_output": {
+          "payload_bytes": 32710795,
+          "wire_bytes": 117621504,
+          "payload_regression_pct": 0.08,
+          "wire_bytes_changed": false
+        },
+        "production_guardrail": "the candidate aborted with Error::InvalidData on /tmp/agave-shred-broadcast-batches.bin; the exact retained binary completed the fixture with 68,392 entries and 124,218 transactions",
+        "decision": "rejected on correctness before paired timing"
+      },
+      "security": "all candidates changed only lencode's bounded encoder policy and added no unsafe blocks. The decoder, hostile-frame limits, official Solana parser, independent frame format, and cross-frame state were unchanged. Valid-fixture failures were treated as correctness failures and no candidate source remains.",
+      "restoration": {
+        "lencode_head_before_audit": "c5bc2d976d445921debe683a08f5cbe42826731f",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "retained_end_to_end_binary_sha256": "036c8839066db6c48a47821b997bd66c97d9ad9ac2827696112a30f98e414232",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_candidate_source_removed": true,
         "agave_candidate_source_changed": false,
         "lencode_production_source_changed": false
       }
