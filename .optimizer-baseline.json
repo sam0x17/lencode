@@ -1,12 +1,12 @@
 {
-  "version": 132,
+  "version": 133,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T01:34:07Z",
+  "updated_at": "2026-08-24T01:57:57Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 86,
+    "version": 87,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -22,6 +22,118 @@
       "transactions": 124218,
       "trials_per_run": 31,
       "independent_runs": 3
+    },
+    "iteration_69_security_bounded_compression_and_batching_frontier": {
+      "status": "no production source change; every diagnostic edit was inverse-reverted to the retained 9/5 and divisor-10 frontier",
+      "scope": "audit candidates rejected under the former 5% gate, refresh the current leader profile, and test whether stronger standard-LZ4 selection can make larger canonical-only batching qualify without weakening hostile-input checks",
+      "profile": {
+        "data_path": "/tmp/lencode-mixed-slots-9_5-divisor10-leader-perf.data",
+        "data_sha256": "dcf0c9d1d270c9378a828868b5b34b939e788e2bfe4d1b61b3de1c73e2766676",
+        "samples": 13765,
+        "lost_samples": 0,
+        "profiled_medians_ns": {
+          "wincode_leader": 313877159,
+          "canonical_lz4_leader": 220256728,
+          "wincode_validator": 21115965,
+          "canonical_lz4_validator": 23204802
+        },
+        "relevant_total_self_cycle_pct": {
+          "lz4_compress_fast_ext_state": 4.27,
+          "memmove_all_paths": 2.19,
+          "wincode_component_serialize": 2.03,
+          "lz4_decompress_safe": 0.79,
+          "lencode_append_addresses": 0.79,
+          "lencode_short_u16": 0.72,
+          "lencode_append_instructions": 0.42,
+          "lencode_encode_transaction": 0.41,
+          "lencode_append_entry_batch": 0.35
+        },
+        "interpretation": "the benchmark alternates formats, so libLZ4 compression is about 8.5% of the canonical leader path and canonical writer work is about 5%; SHA-256 and Reed-Solomon dominate total cycles but are shared Agave work outside the qualifying scope"
+      },
+      "former_threshold_audit": {
+        "direct_outer_frame_compression": "superseded by the retained encode_for_wire_blocks_in_arena API, which already returns the selected frame borrowed from the caller arena without the old final copy",
+        "retained_compressed_deshred_buffer": "superseded by the current direct Blockstore scan, retained deshred Vec, caller-owned BytesMut decode arena, and split-to-freeze parser handoff",
+        "dictionary_decoder_candidates": "excluded because canonical-LZ4 shred processing reconstructs canonical bytes and uses the official parser rather than the contextual dictionary decoder",
+        "remaining_candidates": "already retested against the current arena path or rejected for wire growth, more than 2% latency regression, dependency cost, or sub-1% movement"
+      },
+      "rejected_candidates": {
+        "larger_31_16_batching": {
+          "fixture_path": "/tmp/lencode-batch-sweep-31_16.bin",
+          "fixture_sha256": "511d3714ca4b198a31aac1ce9a360a2d80110d75e29a7467fe44c4be41365739",
+          "exact_binary_sha256": "cb7be4fe2eabd3d8e0ce9dbd69afc7b5d0ec8578d5433f39d0b0d0e5b1f33afa",
+          "components": 1197,
+          "payload_bytes": 32638937,
+          "data_shreds": 46464,
+          "coding_shreds": 46464,
+          "wire_bytes": 112953984,
+          "incremental_vs_9_5_pct": {
+            "component_improvement": 6.703040,
+            "payload_improvement": 0.573836,
+            "wire_regression": 0.973574
+          },
+          "thirty_one_trial_lencode_change_pct_by_pair": {
+            "leader_regression": [1.075, 1.350],
+            "validator_regression": [1.219, 1.233]
+          },
+          "production_jemalloc_blockstore_change_pct_by_pair": [-0.156, 0.116],
+          "decision": "rejected because it improves only component count while giving back wire and regressing both controlled CPU paths; balanced Blockstore is flat, so the extra Agave-only batching tradeoff does not strengthen lencode itself"
+        },
+        "wider_standard_lz4_retries": {
+          "changes_screened": [
+            "FAST(1) boundary divisors 9, 8, and 6",
+            "HC boundary divisors 24 and 16",
+            "raise the existing retry eligibility cutoff from two to 2.5 typical FEC inputs"
+          ],
+          "result": "every setting emitted the exact retained payload and wire totals for 9/5, 31/16, and 2/1 mixed-slot fixtures; none recovered a FEC set, so every constant and replacement-site diagnostic was inverse-reverted"
+        },
+        "all_fast1_upper_bound": {
+          "current_9_5": {
+            "payload_bytes": 31639630,
+            "payload_improvement_pct": 3.617969,
+            "wire_bytes": 111864896
+          },
+          "larger_31_16": {
+            "payload_bytes": 31461035,
+            "payload_improvement_pct": 3.608886,
+            "wire_bytes": 112953984
+          },
+          "decision": "even compressing every normal frame more strongly removed no additional mixed-slot FEC set; prior controlled runs already place the all-FAST(1) CPU cost above the 2% ceiling"
+        },
+        "fine_batch_frontier": [
+          {
+            "target": "231/128",
+            "components": 1282,
+            "component_improvement_pct": 0.077942,
+            "wire_regression_pct": 0.139082
+          },
+          {
+            "target": "29/16",
+            "components": 1278,
+            "component_improvement_pct": 0.389712,
+            "wire_regression_pct": 0.695410
+          },
+          {
+            "target": "117/64",
+            "components": 1266,
+            "component_improvement_pct": 1.325019,
+            "wire_regression_pct": 1.043115
+          }
+        ],
+        "batching_decision": "9/5 is the last exact-wire plateau: the next target adds wire for one fewer component, while the first nearby target to clear 1% component improvement gives back more than 1% wire"
+      },
+      "zero_copy": "the retained borrowed selected-frame slice, caller-owned encoder and decoder arenas, and BytesMut split-and-freeze handoff are unchanged; no copy, allocation sidecar, or owned metadata survived",
+      "wire_compatibility": "all compression diagnostics emitted the existing independent standard size-prefixed LZ4 block inside the unchanged LCSH version-1 flag-1 frame; the retained bytes and Turbine wire totals are exact",
+      "security": "only trusted reference-Solana encoder policy and benchmark-only slot alignment changed temporarily. The decoder, frame identity, signed-length conversion, caller maximum, expansion-ratio bound, exact decompressed-length check, and official parser were untouched. No unsafe block, unchecked offset, partial decoder, private layout, sidecar, dependency, or cross-frame state was added",
+      "restoration": {
+        "lencode_solana_wire_sha256": "38e57030cd00029fcbbf5e2b607edc855d018ad27555333acd8f233dac007ec1",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
+      }
     },
     "post_iteration_35_profile": {
       "command": "perf record -F 999 -o /tmp/lencode-shred-spare-decode-perf.data -- env LENCODE_SHRED_RUNS=21 taskset -c 28 /tmp/lencode-unsafe-spare-decode-screen-rust-1.98.0 /tmp/agave-shred-broadcast-batches.bin",
