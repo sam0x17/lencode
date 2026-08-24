@@ -1,12 +1,12 @@
 {
-  "version": 138,
+  "version": 139,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T03:47:11Z",
+  "updated_at": "2026-08-24T04:05:46Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 92,
+    "version": 93,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -635,6 +635,186 @@
       },
       "source_sha256": {
         "lencode_solana_wire": "a2866d489f661a4c52fcc4951bc8365c79264e9f8edd2a8ac7fca00af71b5b42",
+        "lencode_bytes": "2ce0922fca68359292ac9cf872b941ffec1cfc565a6f5122249201f4688facea",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_manifest": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_entry_size_benchmark": "1f0b0841ead5d570ccecd24c20a138b01027c53298ff7eb079cbc7fa5b61770d",
+        "agave_end_to_end_benchmark": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_blockstore_benchmark": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_shredder": "c103dacfec7ae31565e055cf6e3c8feb701def390727efeb69fc611e591a4032",
+        "agave_broadcast_run": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_broadcast_utils": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b"
+      }
+    },
+    "iteration_75_one_word_canonical_size_result": {
+      "status": "retained production lencode source change",
+      "scope": "lencode-owned canonical sizing over parsed official Solana transaction types; Agave source, component boundaries, compression, and decoding are unchanged",
+      "baseline_profile": {
+        "command": "perf record at 999 Hz on logical CPU 28 over 301 alternating sizing trials with three corpus repetitions",
+        "data_path": "/tmp/lencode-iter75-entry-size-current.data",
+        "data_sha256": "23c08edef2373dc237a1792f32c52c0071d9a4b48d2d142ad5218cdfe651cbd5",
+        "samples": 16899,
+        "lost_samples": 0,
+        "wincode_median_ns": 35544586,
+        "lencode_median_ns": 21454276,
+        "self_cycles_pct": {
+          "wincode_serialized_size": 64.81,
+          "lencode_transaction_size": 26.42,
+          "lencode_entry_size_wrapper": 6.23
+        },
+        "assembly_finding": "the payload-free Result from iteration 74 still used an output pointer and saved six registers in the x86-64 transaction-size helper"
+      },
+      "change": [
+        "return Option<NonZeroUsize> from the hot transaction-size helper, which compiles to a one-register result",
+        "inline the fallible size walk only into that private wrapper, preserving the standalone transaction helper that prior direct inlining screens required",
+        "classify the rare None result at a cold boundary so InvalidData for a V1 signature mismatch and IncorrectLength for every other sizing failure remain unchanged"
+      ],
+      "correctness_invariant": "every supported transaction has fixed header and hash bytes, so a successful canonical serialized size is nonzero; the fallible walk emits InvalidData only for the V1 signature-count invariant, while its helper failures emit IncorrectLength",
+      "candidate_profile": {
+        "data_path": "/tmp/lencode-iter75-entry-size-final.data",
+        "data_sha256": "a19c53bf74986ea12d61b692cdfead041d94281d30c163c9042739a71ebaddfc",
+        "samples": 16657,
+        "lost_samples": 0,
+        "wincode_median_ns": 35548978,
+        "lencode_median_ns": 20854924,
+        "self_cycles_pct": {
+          "wincode_serialized_size": 65.58,
+          "lencode_transaction_size": 26.78,
+          "lencode_entry_size_wrapper": 5.17
+        },
+        "assembly_finding": "the transaction-size helper returns through RAX and saves five registers; no output pointer remains"
+      },
+      "focused_size_benchmark": {
+        "command": "LENCODE_SIZE_RUNS=101 LENCODE_SIZE_REPEATS=3 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-receiver-canonical-1_5-400ms.bin",
+        "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218,
+        "baseline_binary_sha256": "a11f0933ac956111ea09ea86aea962700a239f39b4f2c090f1783968280b4096",
+        "candidate_binary_sha256": "358a6b826ef81f99f04690419fa328e57fd3ca9d29ed9f594356428de14e2628",
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 35386926,
+            "baseline_lencode": 21374636,
+            "candidate_wincode": 35356675,
+            "candidate_lencode": 20714404,
+            "absolute_lencode_improvement_pct": 3.088857,
+            "control_normalized_improvement_pct": 3.005941
+          },
+          {
+            "baseline_wincode": 35467797,
+            "baseline_lencode": 21386847,
+            "candidate_wincode": 35417886,
+            "candidate_lencode": 20707014,
+            "absolute_lencode_improvement_pct": 3.178743,
+            "control_normalized_improvement_pct": 3.042303
+          }
+        ],
+        "decision": "retained above the 1% gate; both exact-final pairs improve focused lencode sizing by at least 3% after control normalization"
+      },
+      "end_to_end_guardrail": {
+        "command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/lencode-batch-sweep-9_5.bin",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "baseline_binary_sha256": "8ab8ba519d62c0a291889081cdf362da9da07e9e17a72cd010552a008b76bac2",
+        "candidate_binary_sha256": "11abe3b3886a217cdec53c3ffb72999fac24d85932fa8b70df3fbad5f7aa10ee",
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode_leader": 302618930,
+            "baseline_lencode_leader": 238731312,
+            "baseline_wincode_validator": 20871314,
+            "baseline_lencode_validator": 23388934,
+            "candidate_wincode_leader": 301072674,
+            "candidate_lencode_leader": 238707701,
+            "candidate_wincode_validator": 20956725,
+            "candidate_lencode_validator": 23468444,
+            "leader_control_normalized_regression_pct": 0.503641,
+            "validator_control_normalized_improvement_pct": 0.068997
+          },
+          {
+            "baseline_wincode_leader": 301926767,
+            "baseline_lencode_leader": 239082353,
+            "baseline_wincode_validator": 20952145,
+            "baseline_lencode_validator": 23390243,
+            "candidate_wincode_leader": 302432789,
+            "candidate_lencode_leader": 239574735,
+            "candidate_wincode_validator": 20872374,
+            "candidate_lencode_validator": 23379083,
+            "leader_control_normalized_regression_pct": 0.038285,
+            "validator_control_normalized_regression_pct": 0.334290
+          }
+        ],
+        "wire_identity": {
+          "wincode_payload_bytes": 66597215,
+          "canonical_lz4_payload_bytes": 32684660,
+          "wincode_wire_bytes": 195024544,
+          "canonical_lz4_wire_bytes": 117621504,
+          "canonical_data_shreds": 48384,
+          "canonical_coding_shreds": 48384,
+          "payload_reduction_pct": 50.92,
+          "turbine_wire_reduction_pct": 39.69
+        },
+        "decision": "both exact-final pairs remain inside the 2% guardrail; no end-to-end gain is claimed"
+      },
+      "blockstore_guardrail": {
+        "command": "LENCODE_BLOCKSTORE_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-broadcast-batches.bin",
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "baseline_binary_sha256": "f52f4e20939e3adf10703ca143b978887d6d42a67f0184ecd9889b14d70b964d",
+        "candidate_binary_sha256": "ba459fffb75efc2f9a1db90b9194309f8f7416763727792dd5b11b8b239ebc5c",
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 27661509,
+            "baseline_lencode": 28003180,
+            "candidate_wincode": 27282768,
+            "candidate_lencode": 27411927,
+            "control_normalized_improvement_pct": 0.752482
+          },
+          {
+            "baseline_wincode": 27579368,
+            "baseline_lencode": 27769920,
+            "candidate_wincode": 27284408,
+            "candidate_lencode": 27438348,
+            "control_normalized_improvement_pct": 0.125848
+          }
+        ],
+        "decision": "the timed read path does not execute canonical sizing; both pairs confirm no guardrail regression, and no Blockstore gain is claimed"
+      },
+      "rejected_screens": [
+        {
+          "change": "add a normal inline hint to the transaction-size helper",
+          "candidate_binary_sha256": "deb4a9f9db676f3f95c0d689832382cff3a7beb7de8e3dc3946a8485b764fc67",
+          "absolute_lencode_regression_pct": 3.075322,
+          "control_normalized_regression_pct": 2.908839,
+          "decision": "inverse-reverted because expanding the helper into the entry loop crossed the 2% ceiling"
+        },
+        {
+          "change": "encode both public error variants plus successful sizes directly in one usize",
+          "candidate_binary_sha256": "2cbc4062f16b50738390457c4557ab81ada8c227bea42559c3262356492f5258",
+          "absolute_lencode_regression_pct": 2.089766,
+          "control_normalized_regression_pct": 2.227588,
+          "decision": "inverse-reverted because the added success and error branches outweighed the smaller return ABI"
+        }
+      ],
+      "compatibility": "public APIs, public error variants, canonical bytes, frame tags, compressed blocks, component boundaries, and decoder behavior are unchanged",
+      "security": [
+        "the candidate is safe Rust and adds no unsafe block, FFI call, dependency, wire offset, sidecar, or cross-frame state",
+        "the helper consumes already parsed official Solana types and does not weaken any hostile-input or expansion bound",
+        "existing tests cover successful Legacy, V0, and V1 sizes plus InvalidData and IncorrectLength boundaries"
+      ],
+      "zero_copy": "the retained borrowed selected-frame slice, caller-owned compression and decompression arenas, exact-size decode, and BytesMut split-and-freeze parser handoff are unchanged",
+      "validation": {
+        "rust": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+        "lencode_all_features": "220 unit tests, 8 integration tests, and 5 doctests passed; 1 doctest ignored",
+        "lencode_no_default_features": "162 unit tests, 8 integration tests, and 5 doctests passed; 1 doctest ignored",
+        "lencode_checks": "formatting, all-feature all-target clippy with warnings denied, and no-default all-target check passed",
+        "agave_tests": "13 ledger block_component_codec tests and 12 Turbine broadcast_utils tests passed",
+        "agave_checks": "ledger library plus all three relevant benches and the Turbine library passed clippy with warnings denied; all three release benches rebuilt"
+      },
+      "source_sha256": {
+        "lencode_solana_wire": "807d1fbeebd896b2ad23d151868e7cf5c4cded7b2f4a4c631a1f5f710839e8d4",
         "lencode_bytes": "2ce0922fca68359292ac9cf872b941ffec1cfc565a6f5122249201f4688facea",
         "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
         "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",

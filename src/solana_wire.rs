@@ -220,7 +220,9 @@ pub fn canonical_solana_entry_serialized_size(entry: SolanaEntryRef<'_>) -> Resu
     for transaction in entry.transactions {
         checked_add_canonical_size(
             &mut size,
-            canonical_solana_transaction_serialized_size_inner(transaction).map_err(Error::from)?,
+            canonical_solana_transaction_serialized_size_inner(transaction)
+                .map(core::num::NonZeroUsize::get)
+                .ok_or_else(|| canonical_solana_transaction_size_error(transaction))?,
         )?;
     }
     Ok(size)
@@ -721,23 +723,13 @@ impl<'a> SolanaCanonicalLz4EntryBatchDecoder<'a> {
 }
 
 #[cfg(feature = "solana-types")]
-// Keep the hot per-transaction result payload-free. The public `Error` owns
-// `std::io::Error`, which makes this result use an indirect return ABI. Public
-// sizing functions convert this private error at their boundary.
+// Keep the hot per-transaction return to one word. Every supported transaction
+// has nonzero fixed header and hash bytes, so `None` can represent a sizing
+// failure. The cold boundary recovers the existing public error variant.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CanonicalSizeError {
     InvalidData,
     IncorrectLength,
-}
-
-#[cfg(feature = "solana-types")]
-impl From<CanonicalSizeError> for Error {
-    fn from(error: CanonicalSizeError) -> Self {
-        match error {
-            CanonicalSizeError::InvalidData => Self::InvalidData,
-            CanonicalSizeError::IncorrectLength => Self::IncorrectLength,
-        }
-    }
 }
 
 #[cfg(feature = "solana-types")]
@@ -751,15 +743,41 @@ impl From<Error> for CanonicalSizeError {
     }
 }
 
+#[cfg(feature = "solana-types")]
+#[cold]
+fn canonical_solana_transaction_size_error(transaction: &VersionedTransaction) -> Error {
+    match &transaction.message {
+        VersionedMessage::V1(message)
+            if usize::from(message.header.num_required_signatures)
+                != transaction.signatures.len() =>
+        {
+            Error::InvalidData
+        }
+        _ => Error::IncorrectLength,
+    }
+}
+
 #[cfg(all(feature = "solana-types", test))]
 fn canonical_solana_transaction_serialized_size(
     transaction: &VersionedTransaction,
 ) -> Result<usize> {
-    canonical_solana_transaction_serialized_size_inner(transaction).map_err(Error::from)
+    canonical_solana_transaction_serialized_size_inner(transaction)
+        .map(core::num::NonZeroUsize::get)
+        .ok_or_else(|| canonical_solana_transaction_size_error(transaction))
 }
 
 #[cfg(feature = "solana-types")]
 fn canonical_solana_transaction_serialized_size_inner(
+    transaction: &VersionedTransaction,
+) -> Option<core::num::NonZeroUsize> {
+    canonical_solana_transaction_serialized_size_fallible(transaction)
+        .ok()
+        .and_then(core::num::NonZeroUsize::new)
+}
+
+#[cfg(feature = "solana-types")]
+#[inline(always)]
+fn canonical_solana_transaction_serialized_size_fallible(
     transaction: &VersionedTransaction,
 ) -> core::result::Result<usize, CanonicalSizeError> {
     match &transaction.message {
