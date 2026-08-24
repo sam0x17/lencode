@@ -1,12 +1,12 @@
 {
-  "version": 131,
+  "version": 132,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T00:58:45Z",
+  "updated_at": "2026-08-24T01:34:07Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 85,
+    "version": 86,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -4055,6 +4055,127 @@
         "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
         "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
         "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b"
+      }
+    },
+    "iteration_68_9_5_batching_with_wider_fast_retry": {
+      "status": "retained one lencode encoder policy and one direct canonical-lencode Agave batching update",
+      "scope": "screen decompression-oriented standard-LZ4 encoders and bounded retry work, then pair the existing 9/5 canonical batching fixture with a lencode-only retry window that removes its wire giveback",
+      "rejected_candidates": {
+        "favor_decompression_speed_audit": {
+          "safe_api": "lzzzz 2.0.0 exposes FavorDecSpeed through its HC streaming compressor",
+          "upstream_behavior": "libLZ4 1.10.0 consults favorDecSpeed only for the lz4opt strategy used by HC levels 10 through 12; retained HC(2) uses lz4mid and HC(3) uses the hash-chain strategy, so the flag cannot change their output",
+          "independent_block_constraint": "reusing the streaming compressor would make later frames depend on earlier dictionary state; constructing it per frame allocates a context and saves a 64 KiB history after each call",
+          "decision": "rejected before dependency or source changes because the retained levels ignore the flag and cross-frame state would violate independent decoding"
+        },
+        "hc10_boundary_retry": {
+          "change": "raise only the retained HC(3) fallback to HC(10) through lz4's existing safe standard-block API",
+          "baseline_binary_sha256": "04573dfd2a6a78c0977514e5747ac3a45236f9902b299178e2a83a4ddbb6875d",
+          "candidate_binary_sha256": "cd5e8307b789c293e7b366762ba42e9380f5b9a91c45d5a5d2c20e1ec429a06f",
+          "baseline_wire_bytes": 118243840,
+          "candidate_wire_bytes": 118166048,
+          "wire_improvement_pct": 0.065789,
+          "absolute_leader_regression_pct": 5.169005,
+          "wincode_control_normalized_leader_regression_pct": 4.502827,
+          "absolute_validator_improvement_pct": 0.172201,
+          "decision": "rejected after the first same-source screen because wire and validator gains missed 1% while leader latency exceeded the 2% ceiling"
+        },
+        "bounded_hc_destination": {
+          "change": "limit selective HC output storage to the largest frame that can remove one wire block, allowing failed attempts to stop at the decision boundary and avoiding unused arena tail",
+          "baseline_binary_sha256": "04573dfd2a6a78c0977514e5747ac3a45236f9902b299178e2a83a4ddbb6875d",
+          "candidate_binary_sha256": "840f24287210a644fe005fa842d03fc1748ffcd438e9945c23fb2dcae48c02e7",
+          "payload_and_wire_changed": false,
+          "control_normalized_leader_improvement_pct_by_pair": [-0.583318, 0.080462],
+          "decision": "inverse-reverted because one reverse-order pair regressed and the other was flat, leaving the more complex error-as-miss path below the 1% gate"
+        }
+      },
+      "retained_combination": {
+        "lencode_change": "widen the FAST(1) boundary retry window from 1/13 to 1/10",
+        "agave_replacement_site": "raise only CanonicalLz4V1 coalescing from 7/4 to 9/5 of a typical uncompressed FEC input; LegacyWincode remains unchanged",
+        "baseline_fixture": {
+          "path": "/tmp/agave-shred-broadcast-receiver-canonical-1_75-400ms.bin",
+          "sha256": "2cd65446fdd0fa4b1df7895d0a835f20648d003ce0faf9059b0112524e66007b",
+          "components": 1316,
+          "payload_bytes": 32957717,
+          "data_shreds": 46016,
+          "coding_shreds": 46016,
+          "wire_bytes": 111864896
+        },
+        "candidate_fixture": {
+          "path": "/tmp/lencode-batch-sweep-9_5.bin",
+          "sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+          "components": 1283,
+          "payload_bytes": 32827312,
+          "data_shreds": 46016,
+          "coding_shreds": 46016,
+          "wire_bytes": 111864896
+        },
+        "deterministic_change": {
+          "component_reduction_pct": 2.507599,
+          "payload_reduction_pct": 0.395674,
+          "wire_change_pct": 0.0,
+          "overall_component_reduction_vs_production_wincode_pct": 35.005066
+        },
+        "exact_mixed_slot_binaries": {
+          "baseline_sha256": "7e18b485a6e0ef09419e89743771cf303c1368725559c4831af79f776973f533",
+          "candidate_sha256": "e9a765b08393b7606a1a3f9363518867a9d904dda51be418cfbfcc7d4df37d92"
+        },
+        "seven_trial_reverse_order_pairs": [
+          {
+            "baseline_lencode_leader_ns": 215846270,
+            "candidate_lencode_leader_ns": 219647004,
+            "leader_regression_pct": 1.760852,
+            "baseline_lencode_validator_ns": 23061710,
+            "candidate_lencode_validator_ns": 23068510,
+            "validator_regression_pct": 0.029486
+          },
+          {
+            "baseline_lencode_leader_ns": 217171205,
+            "candidate_lencode_leader_ns": 218948821,
+            "leader_regression_pct": 0.818532,
+            "baseline_lencode_validator_ns": 23011210,
+            "candidate_lencode_validator_ns": 23097140,
+            "validator_regression_pct": 0.373427
+          }
+        ],
+        "thirty_one_trial_reverse_order_pairs": [
+          {
+            "baseline_lencode_leader_ns": 217181967,
+            "candidate_lencode_leader_ns": 218978302,
+            "leader_regression_pct": 0.827111,
+            "baseline_lencode_validator_ns": 23123931,
+            "candidate_lencode_validator_ns": 23046930,
+            "validator_improvement_pct": 0.332993
+          },
+          {
+            "baseline_lencode_leader_ns": 215550432,
+            "candidate_lencode_leader_ns": 219267035,
+            "leader_regression_pct": 1.724238,
+            "baseline_lencode_validator_ns": 23139981,
+            "candidate_lencode_validator_ns": 23114360,
+            "validator_improvement_pct": 0.110722
+          }
+        ],
+        "production_jemalloc_blockstore": {
+          "baseline_binary_sha256": "f6889d572a1ee2ba6a9f9eea14ef4166f1d42d20696f9f0dd07f1d49681ff18d",
+          "candidate_binary_sha256": "bf3e3c49b35e78d1d64ff8b36e0114413db95107fabb61f5e56d29e4ce79c859",
+          "trials_per_process": 101,
+          "absolute_lencode_change_pct_by_pair": [0.074829, -0.663318],
+          "interpretation": "one pair improved by 0.075% and the reverse pair regressed by 0.663%; both are below the 2% ceiling and consistent with a flat validator path"
+        },
+        "decision": "retain because the exact component count improves by more than 1%, payload also falls, wire output stays exact, and every short, long, and Blockstore CPU movement remains inside the 2% ceiling"
+      },
+      "zero_copy": "the borrowed selected-frame slice, retained encoder arena, caller-owned decode arena, and BytesMut split-and-freeze handoff are unchanged; neither retained constant adds a copy or side buffer",
+      "wire_compatibility": "FAST(4), selective FAST(1), HC(2), and HC(3) continue to emit standard size-prefixed LZ4 blocks inside the unchanged LCSH version-1 flag-1 frame; the combined policy preserves the prior exact Turbine wire total",
+      "security": "only trusted reference-Solana encoder batching and compression selection changed; the decoder, frame identity, signed-length conversion, caller maximum, expansion-ratio bound, exact decompressed-length check, and official parser are unchanged. No unsafe block, unchecked offset, sidecar, private layout, dependency, or cross-frame dictionary was added",
+      "validation": "Rust 1.98.0 passed 220 lencode unit tests, 8 integration tests, and 5 doctests with 1 ignored; no-default, std-only, and all-feature all-target checks plus strict lencode Clippy passed. All 48 solana-turbine library tests, strict turbine library Clippy, formatting, and diff whitespace checks passed",
+      "source_sha256": {
+        "lencode_solana_wire": "38e57030cd00029fcbbf5e2b607edc855d018ad27555333acd8f233dac007ec1",
+        "lencode_manifest": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_broadcast_utils": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "agave_codec": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "agave_blockstore": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_lockfile": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3"
       }
     },
     "production_batch_benchmark": {

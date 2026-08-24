@@ -80,7 +80,7 @@ pub const SOLANA_ENTRY_BATCH_HEADER_BYTES: usize =
 pub const SOLANA_CANONICAL_LZ4_HEADER_BYTES: usize = SOLANA_ENTRY_BATCH_MAGIC.len() + 1 + 1;
 
 #[cfg(feature = "solana-types")]
-const STRONG_RECOMPRESSION_WINDOW_DIVISOR: usize = 13;
+const STRONG_RECOMPRESSION_WINDOW_DIVISOR: usize = 10;
 #[cfg(feature = "solana-types")]
 const EXTREME_OVERSIZED_FAST2_MULTIPLIER: usize = 11;
 #[cfg(feature = "solana-types")]
@@ -534,7 +534,7 @@ const fn wire_block_count(len: usize, blocks: SolanaCanonicalLz4WireBlocks) -> O
 #[cfg(feature = "solana-types")]
 fn should_recompress(len: usize, blocks: SolanaCanonicalLz4WireBlocks) -> bool {
     // FAST(1) averaged 4.3% smaller than FAST(4) on production-sized
-    // components. A 1/13 window bounds second passes while covering that gain.
+    // components. A 1/10 window covers larger batches while bounding second passes.
     should_recompress_with_divisor(len, blocks, STRONG_RECOMPRESSION_WINDOW_DIVISOR)
 }
 
@@ -2952,8 +2952,8 @@ mod tests {
         assert!(!should_recompress(90, blocks));
         assert!(should_recompress(181, blocks));
         assert!(should_recompress(190, blocks));
-        assert!(should_recompress(195, blocks));
-        assert!(!should_recompress(196, blocks));
+        assert!(should_recompress(200, blocks));
+        assert!(!should_recompress(201, blocks));
         assert_eq!(
             wire_block_count(181, SolanaCanonicalLz4WireBlocks::new(0, 80)),
             None
