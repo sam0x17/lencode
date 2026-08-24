@@ -1,12 +1,12 @@
 {
-  "version": 150,
+  "version": 151,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T08:27:09Z",
+  "updated_at": "2026-08-24T08:36:07Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 104,
+    "version": 105,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -2139,6 +2139,58 @@
       },
       "security": "all candidates used safe Rust and retained the existing shred size, index ordering, completion, frame identity, decoder bounds, and official parser checks. The raw-policy candidate still required trusted canonical encoder output and equal valid wire-block counts. No unsafe block, unchecked offset, private layout, sidecar, dependency, or cross-frame state was added.",
       "validation": "Rust 1.98 touched-file formatting passed for every candidate. The first-fragment and result-capacity candidates passed both raw/framed Blockstore tests and strict Clippy for the ledger library and measured jemalloc bench. The final raw-policy candidate passed all 15 codec tests. End-to-end builds were skipped after each primary Blockstore gate failed.",
+      "restoration": {
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_87_forced_inline_raw_deshred_boundary": {
+      "status": "no production source change; the forced-inline candidate was inverse-reverted after it regressed the canonical-lencode Blockstore path",
+      "scope": "test whether removing the call boundary around the lencode-only BytesMut deshred loop improves direct raw-canonical receive without changing the legacy wincode path",
+      "baseline_head": "2ca3fc961abd737d29cc953eb9b28d4e0777d9bd",
+      "baseline_blockstore_binary_sha256": "37ca642c6938cc631f515e2863bca3fe5d7d478a7288baa30ec2dc519126ea51",
+      "candidate": {
+        "change": "add inline(always) only to DeshredState::push_bytes_mut, which is called after the canonical-lencode reader classifies a component as raw canonical bytes",
+        "binary_sha256": "c0b5977404270508bfc6f89a9dbf2f10530b78a9d826d185849ec77179e32d25",
+        "unsafe_code_added": false,
+        "wire_bytes_changed": false
+      },
+      "blockstore_guard": {
+        "trials_per_process": 101,
+        "reverse_order_pairs_ns": [
+          {
+            "baseline_wincode": 27591217,
+            "baseline_lencode": 22553550,
+            "candidate_wincode": 27548718,
+            "candidate_lencode": 22989252
+          },
+          {
+            "baseline_wincode": 27453737,
+            "baseline_lencode": 22478370,
+            "candidate_wincode": 27424718,
+            "candidate_lencode": 22859032
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [-1.931856, -1.693459],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [-2.089104, -1.801064],
+        "baseline_speedup_vs_wincode_by_pair": [1.223365, 1.221340],
+        "candidate_speedup_vs_wincode_by_pair": [1.198330, 1.199732],
+        "decision": "rejected because both process orders regressed and one crossed the 2% normalized regression guardrail"
+      },
+      "end_to_end_guard": "skipped because the production Blockstore gate failed decisively",
+      "interpretation": "forcing the loop into its caller enlarged or rearranged the receive path enough to lose about 1.8-2.1%; the retained out-of-line boundary remains faster in this binary",
+      "security": "the candidate changed only an inlining attribute. Existing payload-size, consecutive-index, completion, frame-identity, decoder-bound, and official-parser checks were unchanged. It added no unsafe block, unchecked offset, private layout, sidecar, dependency, or cross-frame state.",
+      "validation": "Rust 1.98 touched-file formatting passed. Both data-shredder matrix cases and both framed/raw Blockstore integration tests passed. Strict Clippy passed for the solana-ledger library and measured jemalloc bench.",
+      "full_reset": {
+        "triggered": false,
+        "reason": "the retained iteration-85 direct raw deshred path remains 7.10-8.22% faster than its prior Blockstore baseline; this annotation was removed independently"
+      },
       "restoration": {
         "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
         "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
