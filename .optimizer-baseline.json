@@ -1,14 +1,14 @@
 {
-  "version": 163,
+  "version": 164,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T12:21:26Z",
+  "updated_at": "2026-08-24T12:44:17Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 117,
+    "version": 118,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T12:21:26Z",
+    "updated_at": "2026-08-24T12:44:17Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -3339,6 +3339,85 @@
         "protected_blockstore_benchmark_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
         "temporary_candidate_source_removed": true,
         "temporary_benchmark_dispatch_removed": true,
+        "agave_production_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_100_private_decoder_pointer_screen": {
+      "status": "no production source change; the private raw-pointer decoder boundary was inverse-reverted after reverse-order Blockstore trials disagreed and both control-normalized results were negative",
+      "scope": "remove one destination-slice construction and redundant length check inside lencode's existing caller-storage LZ4 decoder without changing Agave production source, frame bytes, or hostile-input validation",
+      "candidate": {
+        "change": "after the safe Vec or BytesMut API proved writable spare capacity, pass its destination pointer to a private unsafe helper and expose output only after LZ4_decompress_safe returned the exact advertised canonical length",
+        "safety_proof": [
+          "successful Vec::try_reserve proves capacity for the complete append range",
+          "the BytesMut path checks capacity minus initialized length before taking its spare pointer",
+          "safe ownership keeps the immutable compressed frame disjoint from each mutable destination",
+          "the validated signed source and destination lengths are passed to LZ4_decompress_safe, which bounds malformed-input reads and writes",
+          "set_len remains after exact return-value validation, so failed decompression exposes no uninitialized bytes"
+        ],
+        "unsafe_code_added": true,
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false
+      },
+      "focused_validation": "cargo +1.98.0 test --offline --all-features solana_wire::tests::canonical_lz4_matches_current_wincode_and_enforces_limits -- --exact passed; it covers Vec and BytesMut append success, insufficient BytesMut capacity, truncated compressed input, initialized-prefix preservation, and exact canonical bytes",
+      "exact_binaries": {
+        "retained_end_to_end_sha256": "036c8839066db6c48a47821b997bd66c97d9ad9ac2827696112a30f98e414232",
+        "candidate_end_to_end_sha256": "d0590040f18d6dd6f8a5c2493e028918962c807c5d05c33a09c0b4c8ee7e91db",
+        "retained_blockstore_sha256": "37ca642c6938cc631f515e2863bca3fe5d7d478a7288baa30ec2dc519126ea51",
+        "candidate_blockstore_sha256": "ba56d60f56286204c65f9d556e764069b2ed01678225461726ddc7943fed4849",
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5"
+      },
+      "stale_end_to_end_harness_diagnostic": {
+        "result": "the protected end-to-end source rejected the candidate before timing because it calls the LZ4-only transcode helper for a valid raw canonical fallback",
+        "gdb_evidence": "the candidate completed exactly 50 LZ4_decompress_safe calls, then exited before a 51st call at the same known raw-component boundary; the production Blockstore dispatcher reconstructed all 1,982 components successfully",
+        "security_conclusion": "this reproduces the previously identified benchmark dispatch defect and is not compressed-output corruption"
+      },
+      "blockstore_101_trial_pairs": [
+        {
+          "baseline_wincode_ns": 28018429,
+          "baseline_lencode_ns": 22886849,
+          "candidate_wincode_ns": 27425926,
+          "candidate_lencode_ns": 22471927,
+          "absolute_lencode_latency_improvement_pct": 1.812928,
+          "control_normalized_lencode_latency_improvement_pct": -0.308282
+        },
+        {
+          "baseline_wincode_ns": 27521106,
+          "baseline_lencode_ns": 22350388,
+          "candidate_wincode_ns": 27434366,
+          "candidate_lencode_ns": 22579258,
+          "absolute_lencode_latency_improvement_pct": -1.024009,
+          "control_normalized_lencode_latency_improvement_pct": -1.343419
+        }
+      ],
+      "decision": "rejected because the first apparent 1.813% absolute gain disappeared after normalization to a faster wincode control, while the reverse-order pair regressed lencode latency by 1.024% absolutely and 1.343% after normalization",
+      "security": "the temporary unsafe boundary had a complete capacity, non-aliasing, signed-length, exact-return, and delayed-set_len proof, but it was removed because it did not establish a repeatable performance gain. The retained safe slice boundary, frame checks, expansion bound, official parser, independent-block format, and raw dispatcher are unchanged.",
+      "restored_validation": {
+        "lencode": "cargo +1.98.0 test --offline --all-features passed 220 unit tests, 8 integration tests, and 5 doctests; one doctest remained ignored",
+        "blockstore_31_trial_refresh_ns": {
+          "wincode_validator": 29288440,
+          "lencode_validator": 23974250,
+          "lencode_throughput_vs_wincode": 1.22166
+        },
+        "result": "the rebuilt production dispatcher reconstructed all 1,982 components after restoration"
+      },
+      "restoration": {
+        "lencode_head_before_audit": "27797f8cb7ad77f12c4a9729edf40ae199c49a72",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_root_manifest_sha256": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "agave_broadcast_run_sha256": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "protected_blockstore_benchmark_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "temporary_unsafe_candidate_removed": true,
         "agave_production_source_changed": false,
         "lencode_production_source_changed": false
       }
@@ -10312,6 +10391,14 @@
         "payload_bytes_changed": false,
         "wire_bytes_changed": false,
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "pass proven caller-owned LZ4 destinations through a private raw pointer instead of an exact MaybeUninit slice",
+        "reason": "One 101-trial Blockstore pair improved absolute lencode latency by 1.813% but regressed 0.308% after its faster wincode control was accounted for. The reverse-order pair regressed 1.024% absolutely and 1.343% after normalization, so the private unsafe helper was removed.",
+        "candidate_binary_sha256": "ba56d60f56286204c65f9d556e764069b2ed01678225461726ddc7943fed4849",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": true
       }
     ],
     "full_resets": [
