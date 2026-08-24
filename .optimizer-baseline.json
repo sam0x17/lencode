@@ -1,12 +1,12 @@
 {
-  "version": 147,
+  "version": 148,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T07:08:48Z",
+  "updated_at": "2026-08-24T07:37:05Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 101,
+    "version": 102,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1775,6 +1775,164 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "temporary_mixed_representation_benchmark_patch_removed": true,
         "agave_source_changed": false
+      }
+    },
+    "iteration_84_retained_frontier_refresh": {
+      "status": "no production source change; three sizing candidates were inverse-reverted to the retained clean checkpoint",
+      "scope": "lencode-owned canonical sizing over official Solana types, followed by a retained end-to-end profile; Agave production sources and wire behavior were unchanged",
+      "focused_profile": {
+        "data_path": "/tmp/lencode-iter84-sizing-current-perf.data",
+        "data_sha256": "e784e1b63b57a717168cd57cf96507eaf89d2c518a6a7eebefc20d14dd41d592",
+        "samples": 27769,
+        "lost_samples": 0,
+        "rounds": 501,
+        "repeats": 3,
+        "wincode_median_ns": 35907959,
+        "lencode_median_ns": 20793684,
+        "speedup_vs_wincode": 1.7269,
+        "time_reduction_vs_wincode_pct": 42.092,
+        "self_cycles_pct": {
+          "wincode_entry_size": 65.93,
+          "lencode_transaction_size": 26.85,
+          "benchmark_driver": 5.03,
+          "lencode_entry_wrapper": 0.37
+        },
+        "transaction_sizer_bytes": 1316
+      },
+      "read_only_corpus_census": {
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "entries_by_transaction_count_0_1_2_3_4plus": [6400, 54175, 1209, 459, 6149],
+        "instruction_prefix_shapes": {
+          "accounts_and_data_below_128": 224925,
+          "accounts_below_128_and_data_below_16384": 80051,
+          "other": 0
+        },
+        "legacy": {
+          "transactions": 86326,
+          "transactions_in_single_transaction_entries": 18014,
+          "one_signature": 84404,
+          "instruction_count_0_1_2_3_4plus": [0, 76685, 605, 2300, 6736]
+        },
+        "v0": {
+          "transactions": 37892,
+          "transactions_in_single_transaction_entries": 36161,
+          "one_signature": 33773,
+          "instruction_count_0_1_2_3_4plus": [0, 330, 594, 8987, 27981]
+        },
+        "v1_transactions": 0,
+        "temporary_diagnostic_removed": true
+      },
+      "rejected_candidates": {
+        "direct_v0_helper_for_single_transaction_entries": {
+          "change": "move V0 sizing into a one-word non-inlined helper and call it directly for single-transaction V0 entries",
+          "candidate_binary_sha256": "1ae9379d69ba027005f445abdf23a51a565bd66d699c9be3bb2c13cbd58ffd3c",
+          "candidate_function_bytes": {
+            "shared_transaction": 693,
+            "v0_helper": 682
+          },
+          "reverse_order_pairs_ns": [
+            {
+              "baseline_wincode": 35499168,
+              "baseline_lencode": 20567834,
+              "candidate_wincode": 35215747,
+              "candidate_lencode": 20932376
+            },
+            {
+              "baseline_wincode": 35463757,
+              "baseline_lencode": 20562414,
+              "candidate_wincode": 35306767,
+              "candidate_lencode": 20971016
+            }
+          ],
+          "control_normalized_lencode_latency_improvement_pct_by_pair": [-2.591467, -2.440612],
+          "decision": "rejected because both process orders regressed by more than 2% after normalization"
+        },
+        "combined_message_count_validation": {
+          "change": "validate short account-key and instruction counts through one branch and split the instruction payload subtotal",
+          "candidate_binary_sha256": "e3ac42693e3400e085609abe749acb55e90f90ef596406c8697306452528be3c",
+          "candidate_transaction_sizer_bytes": 1361,
+          "reverse_order_pairs_ns": [
+            {
+              "baseline_wincode": 35729598,
+              "baseline_lencode": 20741265,
+              "candidate_wincode": 35572817,
+              "candidate_lencode": 20689464
+            },
+            {
+              "baseline_wincode": 35668898,
+              "baseline_lencode": 20632904,
+              "candidate_wincode": 35643358,
+              "candidate_lencode": 20582854
+            }
+          ],
+          "control_normalized_lencode_latency_improvement_pct_by_pair": [-0.189883, 0.171093],
+          "decision": "rejected because the process orders disagreed and both changes were below 1%"
+        },
+        "second_short_u16_instruction_tier": {
+          "change": "use one bounded instruction-size branch when both payload lengths are below 16,384 bytes",
+          "candidate_binary_sha256": "82cc9d95d8110a48d2c98b090280a6978ba791c9769c47cab293cdcff9af895e",
+          "candidate_transaction_sizer_bytes": 1396,
+          "reverse_order_pairs_ns": [
+            {
+              "baseline_wincode": 35608898,
+              "baseline_lencode": 20692475,
+              "candidate_wincode": 35320797,
+              "candidate_lencode": 20715035
+            },
+            {
+              "baseline_wincode": 35775229,
+              "baseline_lencode": 20744325,
+              "candidate_wincode": 35639829,
+              "candidate_lencode": 20883545
+            }
+          ],
+          "control_normalized_lencode_latency_improvement_pct_by_pair": [-0.925584, -1.053585],
+          "decision": "rejected because both process orders regressed and the hot function grew by 80 bytes"
+        }
+      },
+      "retained_end_to_end_profile": {
+        "data_path": "/tmp/lencode-iter84-e2e-current-perf.data",
+        "data_sha256": "96418a99332d23c23941a4b9a08a39e89356efd5040c97f7d6d5ff9c703677d4",
+        "samples": 26128,
+        "lost_samples": 0,
+        "trials": 31,
+        "wincode_leader_ns": 458547377,
+        "lencode_leader_ns": 275756870,
+        "wincode_validator_ns": 22400510,
+        "lencode_validator_ns": 23544395,
+        "lencode_leader_speedup_vs_wincode": 1.6629,
+        "lencode_validator_throughput_vs_wincode": 0.9514,
+        "payload_bytes": 34879635,
+        "turbine_wire_bytes": 157139840,
+        "payload_reduction_vs_wincode_pct": 47.63,
+        "wire_reduction_vs_wincode_pct": 48.48,
+        "relevant_total_self_cycles_pct": {
+          "lz4_compress_fast_ext_state": 2.82,
+          "memmove_all_paths": 2.02,
+          "lz4_decompress_safe": 0.70,
+          "canonical_short_u16": 0.65,
+          "canonical_addresses": 0.55,
+          "canonical_instructions": 0.35,
+          "canonical_transaction_writer": 0.30
+        }
+      },
+      "consecutive_reverts": 3,
+      "full_reset": {
+        "triggered": true,
+        "result": "all iteration-84 source patches were inverse-reverted; the production source matches retained HEAD byte for byte"
+      },
+      "zero_copy": "the retained borrowed frame, caller-owned compression and decompression arenas, exact-size uninitialized decode, raw fallback, and BytesMut parser handoff are unchanged",
+      "security": "all three candidates used safe Rust over official Solana types and retained every width and overflow check. No parser, decoder, unsafe block, unchecked offset, private layout, sidecar, dependency, or cross-frame state changed.",
+      "validation": "all 19 focused lencode Solana wire tests passed for each candidate. The restored source matches the retained hash, and both profiles reconstructed 68,392 entries and 124,218 transactions with the retained payload and wire totals.",
+      "restoration": {
+        "lencode_head": "7cc2b0f8f6a533b7e5290bbeffa6c0370d119b3e",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "focused_baseline_binary_sha256": "b1168b544c3425049659605ad88074398b03e5cb37059cf1b4466da16e7bce6b",
+        "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "agave_production_source_changed": false,
+        "lencode_production_worktree_clean_before_audit": true
       }
     },
     "post_iteration_35_profile": {
