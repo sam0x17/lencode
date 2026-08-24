@@ -1,14 +1,14 @@
 {
-  "version": 161,
+  "version": 162,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T11:31:42Z",
+  "updated_at": "2026-08-24T11:59:40Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 115,
+    "version": 116,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T11:31:42Z",
+    "updated_at": "2026-08-24T11:59:40Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -3048,7 +3048,7 @@
       }
     },
     "iteration_97_decoder_codegen_and_retry_selection_frontier": {
-      "status": "no production source change; the compiler route was rejected read-only, the retry-selection candidate failed the production-fixture correctness gate, and the retained Rust 1.98 checkpoint is clean",
+      "status": "superseded in part by iteration 98: the compiler route remained rejected, but the reported retry-selection correctness failure was a benchmark dispatch defect rather than an invalid frame",
       "scope": "audit libLZ4 decode code generation and screen one lencode-only selection policy over standard independent LZ4 blocks without changing Agave production sources",
       "decoder_codegen_audit": {
         "registry_check": "crates.io still reports lz4 1.28.1 and lz4-sys 1.11.1+lz4-1.10.0 as the latest releases",
@@ -3081,8 +3081,8 @@
           "lencode_wire_bytes": 117621504,
           "changed_from_retained": false
         },
-        "production_guardrail": "the candidate returned Error::InvalidData on /tmp/agave-shred-broadcast-batches.bin before timing, while the retained checkpoint accepts the fixture",
-        "decision": "rejected on valid-fixture correctness before paired timing; no retry frame that the retained selector discards is assumed safe to emit"
+        "initial_production_harness_result": "the candidate returned Error::InvalidData because the benchmark called an LZ4-only transcode helper after the candidate made the existing raw canonical fallback eligible; libLZ4 itself reported no decode error",
+        "decision": "the correctness rejection is withdrawn; iteration 98 retested the valid candidate through the production frame dispatcher and rejected it on measured value"
       },
       "restored_validation": "cargo +1.98.0 test --offline --all-features passed 220 unit tests, 8 integration tests, and 5 doctests; one doctest remained ignored",
       "security": "the temporary candidate used safe Rust and changed only which already-computed standard LZ4 frame was emitted. Frame identity, signed-length conversion, caller maximum, expansion-ratio bound, exact decompressed length, hostile-input rejection, and the official Solana parser were unchanged. No unsafe block, private layout, sidecar, dependency, partial decoder, or cross-frame state was added.",
@@ -3102,6 +3102,139 @@
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "protected_blockstore_benchmark_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
         "temporary_candidate_source_removed": true,
+        "agave_production_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_98_retry_dispatch_and_writer_frontier": {
+      "status": "no production source change; the corrected retry candidate and the safe bulk-Pubkey writer were valid but stayed below the 1% keep gate, and both were inverse-reverted",
+      "scope": "correct the replacement benchmark's frame dispatch, finish the retained retry-selection screen, and test one lencode-only canonical writer copy reduction over official Solana types",
+      "stale_harness_correction": {
+        "cause": "the end-to-end benchmark unconditionally called the LZ4-only transcode helper even though CanonicalLz4V1 may validly select the existing raw canonical fallback at equal wire cost",
+        "proof": "GDB reached the first non-LCSH component at transcode call 51, where the 28,761-byte payload began with the canonical entry count; LZ4_decompress_safe never returned an error, and the production Blockstore dispatcher accepted the same candidate",
+        "temporary_fix": "route benchmark reconstruction through block_component_codec::reconstruct_into with the CanonicalLz4V1 format, matching the production replacement adapter",
+        "baseline_dispatch_binary_sha256": "7a8694418993581aca41d919dae11491ffb0bc7e833b83a8fd2ac2b2cb681386",
+        "temporary_benchmark_sha256": "b277971c5db297bba46e1ada4c2e5e7c7af2c444b899fc0702d99f914eccb139",
+        "decision": "iteration 97's InvalidData result did not identify corrupt output and is not a security finding"
+      },
+      "smallest_existing_hc_band_retry_retest": {
+        "change": "select the smallest already-computed FAST(1) or HC retry inside the retained HC band even when it does not remove another Turbine wire block",
+        "extra_compression_work": false,
+        "candidate_binary_sha256": {
+          "end_to_end_with_production_dispatch": "70dfe259008e2ec8aea94e3aa7bcee1b4ec8cbed9580c5e78225fc2ce2f7c25f",
+          "blockstore": "30d4cab6d250028b4a1a55f7344e831eae24ef3f6b42a57ca448f232e491aace"
+        },
+        "production_fixture": {
+          "path": "/tmp/agave-shred-broadcast-batches.bin",
+          "sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+          "baseline_payload_bytes": 34879635,
+          "candidate_payload_bytes": 34872826,
+          "payload_reduction_bytes": 6809,
+          "payload_reduction_pct": 0.019521,
+          "turbine_wire_bytes": 157139840,
+          "wire_bytes_changed": false
+        },
+        "exact_9_5_fixture": {
+          "path": "/tmp/lencode-batch-sweep-9_5.bin",
+          "sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false
+        },
+        "stable_end_to_end_31_trial_pair_ns": {
+          "baseline": {
+            "wincode_leader": 456428443,
+            "lencode_leader": 273101906,
+            "wincode_validator": 22200079,
+            "lencode_validator": 23489583
+          },
+          "candidate": {
+            "wincode_leader": 452760110,
+            "lencode_leader": 271494519,
+            "wincode_validator": 22276878,
+            "lencode_validator": 23424413
+          },
+          "absolute_lencode_leader_improvement_pct": 0.588567,
+          "control_normalized_leader_improvement_pct": -0.21688,
+          "absolute_lencode_validator_improvement_pct": 0.277442,
+          "control_normalized_validator_improvement_pct": 0.621233
+        },
+        "production_blockstore_101_trial_pairs": [
+          {
+            "baseline_wincode_ns": 27625618,
+            "baseline_lencode_ns": 22566300,
+            "candidate_wincode_ns": 27905878,
+            "candidate_lencode_ns": 22713660,
+            "absolute_lencode_regression_pct": 0.653009,
+            "control_normalized_improvement_pct": 0.357854
+          },
+          {
+            "baseline_wincode_ns": 27611518,
+            "baseline_lencode_ns": 22526960,
+            "candidate_wincode_ns": 27877498,
+            "candidate_lencode_ns": 22649620,
+            "absolute_lencode_regression_pct": 0.544503,
+            "control_normalized_improvement_pct": 0.414795
+          },
+          {
+            "baseline_wincode_ns": 27606098,
+            "baseline_lencode_ns": 22623080,
+            "candidate_wincode_ns": 27750798,
+            "candidate_lencode_ns": 22760471,
+            "absolute_lencode_regression_pct": 0.607305,
+            "control_normalized_improvement_pct": -0.082711
+          }
+        ],
+        "decision": "rejected because the payload gain was 0.020%, Turbine wire was unchanged, normalized leader movement was negative, and absolute Blockstore latency regressed by 0.54-0.65% in all three long pairs"
+      },
+      "bulk_official_pubkey_write": {
+        "change": "enable the official solana-pubkey bytemuck contract temporarily and append each contiguous Pubkey slice through one checked bytemuck::cast_slice call",
+        "layout_contract": "solana-pubkey 4.3.0 re-exports solana-address 2.7.0, whose Address is repr(transparent) over [u8; 32] and derives Pod under its bytemuck feature",
+        "unsafe_code_added": false,
+        "focused_validation": "19 solana_wire tests passed under Rust 1.98.0",
+        "candidate_binary_sha256": "1b09a4dc5fc65ce7c2b2c4c55292dedf0f9ae3a2c9ef0628e36dbc734fc4abb7",
+        "production_output": {
+          "payload_bytes_changed": false,
+          "wire_bytes_changed": false
+        },
+        "stable_end_to_end_31_trial_pair_ns": {
+          "baseline": {
+            "wincode_leader": 454860474,
+            "lencode_leader": 272603567,
+            "wincode_validator": 22122119,
+            "lencode_validator": 23417523
+          },
+          "candidate": {
+            "wincode_leader": 454118291,
+            "lencode_leader": 272330206,
+            "wincode_validator": 22132278,
+            "lencode_validator": 23387583
+          },
+          "absolute_lencode_leader_improvement_pct": 0.100278,
+          "control_normalized_leader_improvement_pct": -0.062992,
+          "absolute_lencode_validator_improvement_pct": 0.127853,
+          "control_normalized_validator_improvement_pct": 0.173696
+        },
+        "decision": "rejected because the safe bulk copy improved absolute leader latency by only 0.10% and regressed slightly after normalization; the dependency and feature additions were removed"
+      },
+      "security": "both candidates used safe Rust and official Solana type contracts. The retry emitted only the existing raw canonical form or an independent standard LZ4 block, while the production dispatcher retained exact frame classification, signed-length conversion, caller maximum, expansion-ratio, decompressed-length, and parser checks. No unsafe block, private layout, sidecar, unchecked hostile offset, partial decoder, or cross-frame state was added.",
+      "restoration": {
+        "lencode_head_before_audit": "82f42b7edf7bb3f674e15f73f0d4ceff1dde39c9",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "agave_root_manifest_sha256": "1946212d4769858dd88de18af23d31a82d412afe8290a9f9a90c15947912b8c3",
+        "agave_lockfile_sha256": "b083013ffd36c2abc9350569bb941be7225a5ee00065bb47de3bdeb4bfff08a3",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "agave_broadcast_run_sha256": "67fc670a08c81621b22aa9823c4b87cb167ba18e6c12ad4fd3f787aa5a222a0c",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "protected_blockstore_benchmark_sha256": "1819bc89cb33bf77cb813dde30909e152a6461d2508253de2c47d3858a9e6a4d",
+        "temporary_candidate_source_removed": true,
+        "temporary_benchmark_dispatch_removed": true,
         "agave_production_source_changed": false,
         "lencode_production_source_changed": false
       }
@@ -10060,6 +10193,21 @@
         "reason": "Two reverse-order pairs regressed normalized leader latency by 0.572% and 0.673% while payload grew 1.585%. The early raw selector and wider replacement-site range were removed.",
         "candidate_binary_sha256": "691baf9f522f04fbac1181c3e21bb1f9360bccc65b153f0f35412650cf635b98",
         "unsafe_code_added": false
+      },
+      {
+        "optimization": "select the smallest already-computed FAST(1) or HC retry even when it does not remove another wire block",
+        "reason": "The valid standard-frame policy reduced production payload by 0.020% and kept Turbine wire exact. Its stable end-to-end pair improved absolute leader latency by 0.589% but regressed 0.217% after wincode normalization, while all three 101-trial Blockstore pairs regressed absolute lencode latency by 0.54-0.65%. The retained wire-block selector was restored.",
+        "candidate_binary_sha256": "70dfe259008e2ec8aea94e3aa7bcee1b4ec8cbed9580c5e78225fc2ce2f7c25f",
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
+      },
+      {
+        "optimization": "append official Solana Pubkey slices through one checked bytemuck cast",
+        "reason": "The safe reference-type contract preserved exact output and improved absolute leader latency by only 0.100%, with a 0.063% regression after wincode normalization. The bytemuck dependency, solana-pubkey feature, and bulk writer were removed below the 1% gate.",
+        "candidate_binary_sha256": "1b09a4dc5fc65ce7c2b2c4c55292dedf0f9ae3a2c9ef0628e36dbc734fc4abb7",
+        "payload_bytes_changed": false,
+        "wire_bytes_changed": false,
+        "unsafe_code_added": false
       }
     ],
     "full_resets": [
@@ -10294,6 +10442,12 @@
         "reason": "the fallible VecWriter short pairs moved normalized leader latency from a 1.377% gain to a 0.892% regression, and the cold-path candidate's unchanged wincode validator ran 5.7% above its paired baseline",
         "reruns": 2,
         "resolution": "used a 31-trial VecWriter pair, which measured a sub-threshold 0.422% normalized leader gain; ignored the validator outlier for the encoder-only cold-path decision, whose paired normalized leader result regressed 0.552%"
+      },
+      {
+        "at_iteration": 98,
+        "reason": "the first retry-selection end-to-end pair put the unchanged baseline wincode validator at about 25.64 ms versus 22.32 ms for the candidate binary",
+        "reruns": 1,
+        "resolution": "discarded the contaminated pair and used a reverse-order 31-trial replacement whose controls returned to the established range; the candidate remained below the 1% gate"
       }
     ]
   },
