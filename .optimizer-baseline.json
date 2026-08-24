@@ -1,12 +1,12 @@
 {
-  "version": 140,
+  "version": 141,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T04:20:07Z",
+  "updated_at": "2026-08-24T04:38:24Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 94,
+    "version": 95,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -895,6 +895,131 @@
         "lencode_head": "94883722659fd9146e8c5c4a4bfcf980e6512f32",
         "lencode_solana_wire_sha256": "807d1fbeebd896b2ad23d151868e7cf5c4cded7b2f4a4c631a1f5f710839e8d4",
         "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "lencode_production_worktree_clean": true
+      }
+    },
+    "iteration_77_acceleration_and_sizing_frontier": {
+      "status": "no production source change; five compression-policy candidates and three sizing forms were rejected, inverse-reverted, and restored to committed HEAD",
+      "scope": "lencode-owned canonical LZ4 effort selection and exact sizing over official Solana types; no Agave source was edited",
+      "compression_screens": {
+        "retained_full_slot": {
+          "fixture_sha256": "34b0f4c0c5a8fc5efa994a235a3412b2ab02f56324dbdf7c789df90d3d69e895",
+          "payload_bytes": 30613707,
+          "turbine_wire_bytes": 81448224
+        },
+        "candidates": [
+          {
+            "change": "raise normal canonical LZ4 acceleration from FAST(4) to FAST(6)",
+            "binary_sha256": "28c0cc0904515693022ae769b3c4e6dfb41d278385aead543e5f3e993a3bc7b0",
+            "fixture": "retained 9/5 batch sweep",
+            "baseline_payload_bytes": 32684660,
+            "candidate_payload_bytes": 33768657,
+            "payload_regression_pct": 3.316531,
+            "baseline_wire_bytes": 117621504,
+            "candidate_wire_bytes": 123222528,
+            "wire_regression_pct": 4.761905,
+            "decision": "removed before timing because deterministic wire growth exceeded the 2% ceiling"
+          },
+          {
+            "change": "replace retained extreme-frame FAST(2) with FAST(5)",
+            "binary_sha256": "7443fa6e7405a53e5323f0e9ae99c2854a1ad0f997574cbd89d3b8d3bfa834ca",
+            "payload_bytes": 31500845,
+            "turbine_wire_bytes": 83859776,
+            "wire_regression_pct": 2.960840,
+            "decision": "removed before timing because deterministic wire growth exceeded the 2% ceiling"
+          },
+          {
+            "change": "use FAST(5) only above 12 times the canonical wire target",
+            "binary_sha256": "7649a5ff01fc690b887467cd7a27189f86e801f234d74fc0a4f263386b09ac39",
+            "payload_bytes": 31271130,
+            "turbine_wire_bytes": 83159648,
+            "wire_regression_pct": 2.101242,
+            "decision": "removed before timing because deterministic wire growth exceeded the 2% ceiling"
+          },
+          {
+            "change": "use FAST(5) only above 13 times the canonical wire target",
+            "binary_sha256": "bbb2546ad67bd367ce2ff47340793f7e5d79f95f12603d5b83afc8b4d12115d6",
+            "payload_bytes": 31035750,
+            "turbine_wire_bytes": 82615104,
+            "wire_regression_pct": 1.432665,
+            "control_normalized_improvement_pct_by_pair": {
+              "leader": [0.188971, -0.635357],
+              "validator": [0.319267, -1.031834]
+            },
+            "decision": "removed because both reverse-order pairs stayed below the 1% gate and the second regressed"
+          },
+          {
+            "change": "use FAST(8) only above 13 times the canonical wire target",
+            "binary_sha256": "18b6500baf5860f6618f6a4d59e1d162f3327afe7769bd965475125ad396e9a6",
+            "payload_bytes": 31174309,
+            "turbine_wire_bytes": 82926272,
+            "wire_regression_pct": 1.814709,
+            "control_normalized_improvement_pct_by_pair": {
+              "leader": [0.085123, 0.383205],
+              "validator": [1.312805, -0.135553]
+            },
+            "decision": "removed because the validator result did not repeat in reverse order and leader gains stayed below 0.4%"
+          }
+        ],
+        "fresh_retained_confirmation_ns": {
+          "trials": 7,
+          "wincode_leader": 277030157,
+          "canonical_lz4_leader": 175437747,
+          "wincode_validator": 21885089,
+          "canonical_lz4_validator": 23666416
+        }
+      },
+      "sizing_screens": {
+        "fixture_sha256": "0c5889c52b760a31b471e34eb0f623aa3fab003c5261c7849321f4f4e3867837",
+        "components": 1533,
+        "entries": 68392,
+        "transactions": 124218,
+        "baseline_binary_sha256": "358a6b826ef81f99f04690419fa328e57fd3ca9d29ed9f594356428de14e2628",
+        "candidates": [
+          {
+            "change": "special-case entries containing one transaction with checked final addition",
+            "binary_sha256": "de63b6be90006050f1c004a4e28ce8f6ee851ccfc7cd6e1a8c14a8cbd36bca62",
+            "control_normalized_improvement_pct_by_pair": [0.742289, 0.340132]
+          },
+          {
+            "change": "special-case entries containing one transaction with direct 64-bit final addition and checked 32-bit fallback",
+            "binary_sha256": "bb19256336a853fe3c8d50e776d77eb1dd57b4df5e72645132a7582a17a58f48",
+            "control_normalized_improvement_pct_by_pair": [0.887040, 0.680580]
+          },
+          {
+            "change": "compute canonical short-u16 width from comparison results after a common u16 conversion",
+            "binary_sha256": "6a02824c9277a2a799b4f93235fb603f24c4962f9b1230ab4d7d8d8364fc89ea",
+            "baseline_wincode_ns": 35408618,
+            "baseline_lencode_ns": 20721125,
+            "candidate_wincode_ns": 35370599,
+            "candidate_lencode_ns": 24560989,
+            "control_normalized_regression_pct": 18.658562
+          }
+        ],
+        "decision": "all three forms were removed; the single-transaction gains stayed below 1% and the short-u16 form exceeded the 2% regression ceiling"
+      },
+      "focused_profile": {
+        "trials": 101,
+        "wincode_median_ns": 35284647,
+        "lencode_median_ns": 20700225,
+        "cycles": 22764541049,
+        "instructions": 14156597362,
+        "instructions_per_cycle": 0.62,
+        "branches": 2142782487,
+        "branch_misses": 74031475,
+        "branch_miss_pct": 3.45,
+        "finding": "canonical transaction sizing remains instruction-distributed; the measured function boundary and return sequence are material, and prior split, paired-loop, and forced-inline forms already regressed"
+      },
+      "compatibility": "rejected compression candidates emitted the existing size-prefixed standard LZ4 block; rejected sizing candidates changed no bytes, boundaries, flags, or public API",
+      "security": "all candidates used safe Rust or changed encode-side libLZ4 effort only. Decoder bounds, hostile-frame checks, exact decompressed-length checks, and the audited libLZ4 call remained unchanged.",
+      "zero_copy": "the borrowed selected-frame slice, caller-owned compression and decompression arenas, exact-size uninitialized decode, and BytesMut split-and-freeze parser handoff remain unchanged",
+      "validation": "each candidate was screened with CPU-28 frozen binaries; the restored Rust 1.98 focused benchmark rebuilt byte for byte to the retained binary",
+      "restoration": {
+        "lencode_head": "de993a4a2f5d478cc95df82881ad07cc6706c804",
+        "lencode_solana_wire_sha256": "807d1fbeebd896b2ad23d151868e7cf5c4cded7b2f4a4c631a1f5f710839e8d4",
+        "agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "restored_focused_binary_sha256": "358a6b826ef81f99f04690419fa328e57fd3ca9d29ed9f594356428de14e2628",
+        "restored_end_to_end_binary_sha256": "11abe3b3886a217cdec53c3ffb72999fac24d85932fa8b70df3fbad5f7aa10ee",
         "lencode_production_worktree_clean": true
       }
     },
@@ -7985,6 +8110,25 @@
         },
         "security_result": "all candidate code was removed; bounded growth, clear-on-error behavior, hostile-frame checks, and the audited libLZ4 decoder boundary remain exact",
         "result": "the protected lencode and Agave sources and the frozen Rust 1.98 all-final baseline were re-established"
+      },
+      {
+        "after": "FAST(6), targeted extreme FAST(5) and FAST(8), one-transaction sizing, and branchless short-u16 sizing reverts",
+        "restored_lencode_solana_wire_sha256": "807d1fbeebd896b2ad23d151868e7cf5c4cded7b2f4a4c631a1f5f710839e8d4",
+        "restored_lencode_manifest_sha256": "3a6858c76460ca679ad0d58975ea60702b98ed0af27cfa5689092c69eb634bfb",
+        "restored_lencode_lockfile_sha256": "938ef038073e87b61d7b267576508942b32a3365cc44d2d81b11f97df2a44991",
+        "restored_agave_codec_sha256": "1365cc44f0f2a37b8210851e8c205ff668c479781d4a0c075491ce5e6beeae3b",
+        "restored_focused_binary_sha256": "358a6b826ef81f99f04690419fa328e57fd3ca9d29ed9f594356428de14e2628",
+        "fresh_full_slot_confirmation": {
+          "trials": 7,
+          "wincode_leader_ns": 277030157,
+          "canonical_lz4_leader_ns": 175437747,
+          "wincode_validator_ns": 21885089,
+          "canonical_lz4_validator_ns": 23666416,
+          "canonical_lz4_payload_bytes": 30613707,
+          "canonical_lz4_wire_bytes": 81448224
+        },
+        "security_result": "all candidate code was removed; no unsafe code was added and every retained hostile-input boundary remains exact",
+        "result": "the exact lencode source and Rust 1.98 focused binary were restored before checkpointing the compression and sizing frontier"
       }
     ],
     "contention_events": [
