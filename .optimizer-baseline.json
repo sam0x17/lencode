@@ -1,12 +1,12 @@
 {
-  "version": 145,
+  "version": 146,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T06:20:39Z",
+  "updated_at": "2026-08-24T06:45:44Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 99,
+    "version": 100,
     "created_at": "2026-08-22T06:19:02Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
@@ -1501,6 +1501,173 @@
         "lencode_solana_wire_sha256": "392397990f866a58550a6d6e46752b2996da2c589d849bf3472a0b56a53340cd",
         "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "lencode_production_worktree_clean_before_audit": true
+      }
+    },
+    "iteration_82_raw_receive_frontier": {
+      "status": "no production source change; three direct canonical-lencode receive candidates were inverse-reverted below the 1% gate",
+      "scope": "test raw-helper placement, bounded deshred allocation, and smaller equal-wire-block raw components while preserving the retained shared parser arena",
+      "binary_sha256": {
+        "retained_end_to_end": "5025c4c43d5c6e65d5e3d62e2a22720b22e1673834d8ee15d1254caf75948a12",
+        "retained_blockstore": "f10fd84c348212d97984f00b362cc05a163258659e74f528e2c9761fd48950e8"
+      },
+      "raw_helper_normal_placement": {
+        "change": "retain the raw-copy helper out of line while removing its cold code-placement hint",
+        "candidate_blockstore_binary_sha256": "2210e536d1da12264241ec506456a0171bbcc613fc9e5d94a38dbf6436ce14c5",
+        "trials_per_process": 7,
+        "pairs_ns": [
+          {
+            "retained_wincode": 27865877,
+            "retained_lencode": 24658955,
+            "candidate_wincode": 27542155,
+            "candidate_lencode": 24271934
+          },
+          {
+            "retained_wincode": 27992577,
+            "retained_lencode": 24593835,
+            "candidate_wincode": 27550245,
+            "candidate_lencode": 24392974
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [1.569495, 0.816713],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [0.412573, -0.775721],
+        "decision": "rejected because reverse order changed the normalized result from a 0.413% gain to a 0.776% regression"
+      },
+      "raw_bound_deshred_capacity": {
+        "change": "start only the canonical-lencode Blockstore deshred Vec with the retained 32 KiB raw-policy bound",
+        "candidate_blockstore_binary_sha256": "d880c72a1a7ef4bb2c7af63231a676c176367a63d50c026505e1a2e0d08c4781",
+        "trials_per_process": 31,
+        "contention_discard": {
+          "retained_wincode_ns": 30641577,
+          "retained_lencode_ns": 26968934,
+          "candidate_wincode_ns": 27531656,
+          "candidate_lencode_ns": 24099573,
+          "reason": "both paths shifted by about 10% across binaries; the normalized movement was 0.546%, and two stable reverse-order pairs were used for the decision"
+        },
+        "stable_pairs_ns": [
+          {
+            "retained_wincode": 28074398,
+            "retained_lencode": 24722376,
+            "candidate_wincode": 27610646,
+            "candidate_lencode": 24174114
+          },
+          {
+            "retained_wincode": 28031488,
+            "retained_lencode": 24751197,
+            "candidate_wincode": 27576366,
+            "candidate_lencode": 24257795
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [2.217675, 1.993447],
+        "wincode_control_latency_improvement_pct_by_pair": [1.651868, 1.623610],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [0.575311, 0.375941],
+        "decision": "rejected because both stable normalized gains stayed below 0.6%; binary-wide layout movement accounted for most of the absolute change"
+      },
+      "equal_wire_raw_census": {
+        "method": "a temporary Rust 1.98 diagnostic used official Solana types, the retained lencode compressor policy, and exact final-block geometry; it was removed before timing",
+        "production_fixture": {
+          "sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+          "components": 1982,
+          "bands": {
+            "0_24_kib": {
+              "eligible_components": 79,
+              "raw_bytes": 986505,
+              "frame_bytes": 632705,
+              "payload_delta_bytes": 353800
+            },
+            "24_28_kib": {
+              "eligible_components": 16,
+              "raw_bytes": 435833,
+              "frame_bytes": 236706,
+              "payload_delta_bytes": 199127
+            },
+            "56_60_kib": {
+              "eligible_components": 19,
+              "raw_bytes": 1132147,
+              "frame_bytes": 645947,
+              "payload_delta_bytes": 486200
+            }
+          }
+        },
+        "retained_9_5_fixture": {
+          "sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+          "components": 1283,
+          "bands": {
+            "0_24_kib": {
+              "eligible_components": 48,
+              "raw_bytes": 576373,
+              "frame_bytes": 364772,
+              "payload_delta_bytes": 211601
+            },
+            "24_28_kib": {
+              "eligible_components": 11,
+              "raw_bytes": 294223,
+              "frame_bytes": 164633,
+              "payload_delta_bytes": 129590
+            },
+            "56_60_kib": {
+              "eligible_components": 0,
+              "payload_delta_bytes": 0
+            }
+          }
+        }
+      },
+      "small_raw_band": {
+        "change": "add a lencode disjoint-range API, select canonical entry batches from 56 bytes through 24 KiB in addition to the retained 28-32 KiB band, and copy both bands into shared parser storage",
+        "candidate_binary_sha256": {
+          "end_to_end": "c3a2f396a9edc72a09fce4d4d39a8a65dac7677d59c7c7f7066da0ebb0d1423c",
+          "blockstore": "91d81a2731ac7ebee376b850bfef3ea215747c390c42e9d57f9d4fdc0cc9f39c"
+        },
+        "production_exactness": {
+          "retained_payload_bytes": 34879635,
+          "candidate_payload_bytes": 35233435,
+          "payload_regression_pct": 1.014345,
+          "candidate_data_shreds": 64640,
+          "candidate_coding_shreds": 64640,
+          "candidate_wire_bytes": 157139840,
+          "wire_bytes_changed": false
+        },
+        "retained_9_5_exactness": {
+          "retained_payload_bytes": 32684660,
+          "candidate_payload_bytes": 32896261,
+          "payload_regression_pct": 0.647402,
+          "candidate_data_shreds": 48384,
+          "candidate_coding_shreds": 48384,
+          "candidate_wire_bytes": 117621504,
+          "wire_bytes_changed": false
+        },
+        "blockstore_pairs_ns": [
+          {
+            "retained_wincode": 27968779,
+            "retained_lencode": 24497557,
+            "candidate_wincode": 27810819,
+            "candidate_lencode": 24490416
+          },
+          {
+            "retained_wincode": 27963419,
+            "retained_lencode": 24686098,
+            "candidate_wincode": 27760879,
+            "candidate_lencode": 24426856
+          }
+        ],
+        "absolute_lencode_latency_improvement_pct_by_pair": [0.029150, 1.050154],
+        "control_normalized_lencode_latency_improvement_pct_by_pair": [-0.538665, 0.328228],
+        "decision": "rejected because reverse-order normalized results disagreed and both missed 1%; the additional payload produced no stable receive gain"
+      },
+      "consecutive_reverts": 7,
+      "full_reset": {
+        "triggered": false,
+        "reason": "the retained source remains materially faster than the immutable original baseline; each iteration-82 patch was removed independently"
+      },
+      "security": "all candidates used safe Rust. Raw selection still required trusted canonical encoder output and equal valid wire-block counts. The existing parser validated every selected raw payload. Decoder length bounds, the audited LZ4 boundary, feature gating, and legacy fallback were unchanged.",
+      "validation": "all 19 focused lencode solana_wire tests and all 16 focused Agave codec tests passed with the disjoint small-band candidate; both fixtures reconstructed all 68,392 entries and 124,218 transactions, and the temporary mixed-representation diagnostic was restored byte for byte",
+      "restoration": {
+        "lencode_head": "be617b36927bd7658a97ab0255c928fe9a404a7a",
+        "lencode_solana_wire_sha256": "392397990f866a58550a6d6e46752b2996da2c589d849bf3472a0b56a53340cd",
+        "agave_blockstore_sha256": "a128b6beac8f3ab40a3147889de86693b672fb265ccb92224dca0bb9c8eb9286",
+        "agave_codec_sha256": "46561544e272b9610573952943fc24e5943f994de3802b9a122028c0eaa597bc",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_census_removed": true,
         "lencode_production_worktree_clean_before_audit": true
       }
     },
