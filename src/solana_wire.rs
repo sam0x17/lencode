@@ -92,6 +92,10 @@ const HC_RECOMPRESSION_LEVEL: i32 = 3;
 const MID_HC_RECOMPRESSION_WINDOW_DIVISOR: usize = 58;
 #[cfg(feature = "solana-types")]
 const MID_HC_RECOMPRESSION_LEVEL: i32 = 2;
+#[cfg(feature = "solana-types")]
+const PAYLOAD_FAST1_MIN_INPUT: usize = 28 * 1024 + 256;
+#[cfg(feature = "solana-types")]
+const PAYLOAD_FAST1_MAX_INPUT: usize = 28 * 1024 + 576;
 // The LZ4 block format's maximum achievable compression ratio is about 250.
 // Keep a little margin while rejecting impossible output sizes before allocation.
 #[cfg(feature = "solana-types")]
@@ -339,10 +343,10 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
     /// Encodes one batch and selectively spends more compression work when it
     /// removes a complete wire block.
     ///
-    /// Near a boundary, FAST(4) may retry with FAST(1). When the final wire block
-    /// is smaller, a narrower boundary window may retry with HC(2) or HC(3).
-    /// Every result uses the same standard LZ4 block format and the smallest
-    /// mode is selected only at wire-block granularity.
+    /// A narrow production-size band uses FAST(1) directly. Other FAST(4)
+    /// frames may retry with FAST(1), HC(2), or HC(3) near a wire boundary.
+    /// Every result uses the same standard LZ4 block format; retries are
+    /// selected only when they remove a complete wire block.
     pub fn encode_for_wire_blocks<'a>(
         &mut self,
         entries: impl ExactSizeIterator<Item = SolanaEntryRef<'a>>,
@@ -439,7 +443,11 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
             .checked_add(SOLANA_CANONICAL_LZ4_HEADER_BYTES)
             .and_then(|len| len.checked_add(compressed_capacity))
             .ok_or(Error::IncorrectLength)?;
-        let acceleration = if canonical_len
+        let acceleration = if wire_blocks.is_some()
+            && (PAYLOAD_FAST1_MIN_INPUT..PAYLOAD_FAST1_MAX_INPUT).contains(&canonical_len)
+        {
+            1
+        } else if canonical_len
             <= self
                 .config
                 .fast_acceleration_max_input
@@ -468,7 +476,8 @@ impl SolanaCanonicalLz4EntryBatchEncoder {
                 )
                 .map_err(|_| Error::InvalidData)?
         };
-        if canonical_len <= self.config.fast_acceleration_max_input
+        if acceleration != 1
+            && canonical_len <= self.config.fast_acceleration_max_input
             && wire_blocks.is_some_and(|blocks| should_recompress(frame_len, blocks))
         {
             let strong_offset = arena_len;
