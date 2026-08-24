@@ -1,14 +1,14 @@
 {
-  "version": 155,
+  "version": 156,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T09:44:20Z",
+  "updated_at": "2026-08-24T10:01:19Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 109,
+    "version": 110,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T09:44:20Z",
+    "updated_at": "2026-08-24T10:01:19Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -2531,6 +2531,118 @@
         "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
         "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
         "temporary_diagnostic_source_removed": true,
+        "agave_candidate_source_changed": false,
+        "lencode_production_source_changed": false
+      }
+    },
+    "iteration_92_receive_reserve_and_target_retry_screen": {
+      "status": "no production source change; both candidates were inverse-reverted and the retained Rust 1.98 checkpoint remains clean",
+      "scope": "screen the current Blockstore receive-allocation frontier at the direct canonical-lencode replacement site, then test a lencode-owned target-sized FAST(1) retry that falls back to the retained compressor unless it consumes the full canonical input",
+      "profile_frontier": {
+        "blockstore_profile_path": "/tmp/lencode-iter85-direct-raw-deshred-narrow.data",
+        "blockstore_profile_sha256": "24dd7fde32f685b5e51b9f4859fa6c4a467487f300da71133a380093b6de1442",
+        "end_to_end_profile_path": "/tmp/lencode-iter84-e2e-current-perf.data",
+        "end_to_end_profile_sha256": "96418a99332d23c23941a4b9a08a39e89356efd5040c97f7d6d5ff9c703677d4",
+        "sizing_profile_path": "/tmp/lencode-iter84-sizing-current-perf.data",
+        "sizing_profile_sha256": "e784e1b63b57a717168cd57cf96507eaf89d2c518a6a7eebefc20d14dd41d592",
+        "relevant_total_self_cycle_pct": {
+          "blockstore_lz4_decompress_safe": 2.33,
+          "blockstore_deshred_state_push": 1.92,
+          "blockstore_push_bytes_mut": 0.81,
+          "end_to_end_lz4_compress": 2.82,
+          "end_to_end_lz4_decompress_safe": 0.70,
+          "end_to_end_lencode_append_short": 0.65,
+          "end_to_end_lencode_append_addresses": 0.55,
+          "end_to_end_lencode_append_instructions": 0.35,
+          "end_to_end_lencode_encode_transaction": 0.30,
+          "sizing_lencode_transaction_sizer": 26.85
+        },
+        "interpretation": "libLZ4 is the largest remaining lencode-owned CPU target in the alternating end-to-end and Blockstore paths; the canonical writer pieces are individually below 1% of total cycles, while the focused sizing run remains dominated by wincode and lencode transaction sizing"
+      },
+      "canonical_receive_reserve": {
+        "change": "reserve compressed receive-buffer capacity only for CanonicalLz4V1 at the Agave Blockstore replacement site",
+        "fixture_path": "/tmp/agave-shred-broadcast-batches.bin",
+        "fixture_sha256": "19068e66a107dc29e9bc6feb2660eadd8347009b9d409f4e2774a2f5820663c5",
+        "trials_per_process": 101,
+        "baseline_binary_sha256": "37ca642c6938cc631f515e2863bca3fe5d7d478a7288baa30ec2dc519126ea51",
+        "baseline_ns": {
+          "wincode_blockstore": 27577652,
+          "lencode_blockstore": 22483495
+        },
+        "reserve_32k": {
+          "candidate_binary_sha256": "ea4924e7f40badde6fd12172e60ee379be8dde77826732747c1f52c9392b5cf5",
+          "wincode_blockstore_ns": 27662593,
+          "lencode_blockstore_ns": 22393306,
+          "absolute_lencode_improvement_pct": 0.401134,
+          "control_normalized_lencode_improvement_pct": 0.706963,
+          "decision": "rejected below the 1% keep gate"
+        },
+        "reserve_64k": {
+          "candidate_binary_sha256": "bd1f1d4bad9709e7cd173892af6ad710844badb809f45eea19553a8a8db9609a",
+          "runs_ns": [
+            {
+              "wincode_blockstore": 28349656,
+              "lencode_blockstore": 22660687,
+              "absolute_lencode_improvement_pct": -0.788098,
+              "control_normalized_lencode_improvement_pct": 1.956514
+            },
+            {
+              "wincode_blockstore": 28258476,
+              "lencode_blockstore": 22704507,
+              "absolute_lencode_improvement_pct": -0.982997,
+              "control_normalized_lencode_improvement_pct": 1.449960
+            }
+          ],
+          "decision": "rejected because both absolute lencode runs regressed; the positive normalized result came from the candidate binary's slower unchanged wincode control"
+        },
+        "wire_compatibility": "the reserve-only edit did not alter encoded frames, decode limits, or parser input"
+      },
+      "target_sized_fast1_retry": {
+        "change": "try LZ4_compress_destSize at the previous wire capacity, accept it only when it consumes the full canonical input, and otherwise run the retained full FAST(1) retry",
+        "fixture_path": "/tmp/lencode-batch-sweep-9_5.bin",
+        "fixture_sha256": "b0a7a56cf7ec2385e072b89f4e410e76b8504d2daabf58dab1871316f4cf15d1",
+        "trials_per_process": 7,
+        "baseline_binary_sha256": "036c8839066db6c48a47821b997bd66c97d9ad9ac2827696112a30f98e414232",
+        "candidate_binary_sha256": "f3ed1e69ed43eed033f026d869a9bda06ec2c4eab3c10f317652eac1820ed286",
+        "baseline_ns": {
+          "wincode_leader": 307207973,
+          "lencode_leader": 238380062,
+          "wincode_validator": 21087134,
+          "lencode_validator": 23392511
+        },
+        "candidate_ns": {
+          "wincode_leader": 302244585,
+          "lencode_leader": 243586520,
+          "wincode_validator": 20937974,
+          "lencode_validator": 23282962
+        },
+        "change_pct": {
+          "absolute_lencode_leader_improvement": -2.184100,
+          "control_normalized_lencode_leader_improvement": -3.862142,
+          "absolute_lencode_validator_improvement": 0.468308,
+          "control_normalized_lencode_validator_improvement": -0.240746
+        },
+        "wire_identity": {
+          "payload_bytes": 32684660,
+          "data_shreds": 48384,
+          "coding_shreds": 48384,
+          "wire_bytes": 117621504
+        },
+        "focused_test": "cargo +1.98.0 test --offline --all-features canonical_lz4_recompression_window_tracks_wire_blocks",
+        "decision": "rejected because exact wire identity came with a 2.184% absolute and 3.862% control-normalized leader regression"
+      },
+      "security": "the target-sized candidate placed its only unsafe call inside lencode. Checked i32 conversions bounded both C lengths, the mutable destination was limited to initialized scratch capacity, Rust borrows proved source and destination non-aliasing, and partial output was ignored before the full FAST(1) fallback. The unsafe block was removed with the rejected candidate. Hostile frame decoding, expansion limits, official Solana parsing, private layouts, sidecars, dependencies, and cross-frame state were unchanged.",
+      "restoration": {
+        "lencode_head_before_audit": "cff41f96229848f50a2d3113f3c09f591f058ab3",
+        "lencode_solana_wire_sha256": "438e39f15aadb64bab363d43708e2ade4c9e89d86296185a683f4239cda0f16c",
+        "agave_ledger_manifest_sha256": "e26efd36b047a95bd5d424333081c66f4613b62a841d2cde293644affafbd20d",
+        "agave_blockstore_sha256": "d16307b94ea1b96b465cbe859c7b61478457683140e7ad3eb1c6e416cde7b710",
+        "agave_blockstore_tests_sha256": "22dd2fee7aef37d1ba8d2e8ac848f90ecaa79dd5e184954b45fd75c0b4631e22",
+        "agave_codec_sha256": "fc2c34b231e84de6c6d91419a0671a8a261874871e6680731eb8901cbf6bcd2b",
+        "agave_shredder_sha256": "3ceee5c15094a538c881fe46d850d05041af88c06ec05b9816059399fabc23ae",
+        "agave_broadcast_utils_sha256": "1a97686194442b49ede3435f49ef0fd5338832fa2a17379b7340a9153d21604b",
+        "protected_end_to_end_benchmark_sha256": "6bef6eb38f59c5c8426522a73c51baeec10f5e72162f26efbe4730c6c8983c34",
+        "temporary_candidate_source_removed": true,
         "agave_candidate_source_changed": false,
         "lencode_production_source_changed": false
       }
