@@ -54,11 +54,14 @@ impl Pack for sol_pubkey::Pubkey {
         Ok(Self::new_from_array(buf))
     }
 }
+// Shred payload pubkeys are attacker-controlled. PubkeyHasherBuilder hashes a
+// single 8-byte window and explicitly does not provide collision-DoS
+// resistance, so dedupe maps use lencode's keyed full-value hasher instead.
 impl DedupeEncodeable for sol_pubkey::Pubkey {
-    type Hasher = sol_pubkey::PubkeyHasherBuilder;
+    type Hasher = crate::dedupe::DefaultDedupeHasher;
 }
 impl DedupeDecodeable for sol_pubkey::Pubkey {
-    type Hasher = sol_pubkey::PubkeyHasherBuilder;
+    type Hasher = crate::dedupe::DefaultDedupeHasher;
 }
 
 impl Encode for sol_hash::Hash {

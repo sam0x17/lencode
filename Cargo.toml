@@ -28,6 +28,7 @@ solana-instruction = { version = "3.5.0", optional = true }
 solana-hash = { version = "4.6.0", optional = true }
 solana-signature = { version = "3.5.2", optional = true }
 solana-pubkey = { version = "4.3.0", optional = true, features = ["rand"] }
+solana-sha256-hasher = { version = "3.1.0", optional = true, features = ["sha2"] }
 solana-reward-info = { version = "6.3.0", optional = true }
 solana-account-decoder-client-types = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
 ruint = { version = "1", default-features = false}
@@ -74,6 +75,7 @@ solana-types = [
     "dep:solana-hash",
     "dep:solana-signature",
     "dep:solana-pubkey",
+    "dep:solana-sha256-hasher",
 ]
 solana = [
     "solana-types",

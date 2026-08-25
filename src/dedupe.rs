@@ -153,6 +153,7 @@ type ClearTypeStore = fn(&mut (dyn Any + Send + Sync));
 
 struct TypeStore {
     type_id: TypeId,
+    hasher_type_id: TypeId,
     values: SmallBox<dyn Any + Send + Sync, S8>,
     clear: ClearTypeStore,
     active: bool,
@@ -499,9 +500,12 @@ impl DedupeEncoder {
         S: BuildHasher + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
+        let hasher_type_id = TypeId::of::<S>();
         self.type_stores
             .iter()
-            .find(|store| store.active && store.type_id == type_id)
+            .find(|store| {
+                store.active && store.type_id == type_id && store.hasher_type_id == hasher_type_id
+            })
             .and_then(|store| store.values.downcast_ref::<HashMap<T, usize, S>>())
             .map_or(0, |m| m.len())
     }
@@ -517,9 +521,12 @@ impl DedupeEncoder {
         S: BuildHasher + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
+        let hasher_type_id = TypeId::of::<S>();
         self.type_stores
             .iter()
-            .find(|store| store.active && store.type_id == type_id)
+            .find(|store| {
+                store.active && store.type_id == type_id && store.hasher_type_id == hasher_type_id
+            })
             .and_then(|store| store.values.downcast_ref::<HashMap<T, usize, S>>())
             .into_iter()
             .flat_map(|m| m.keys())
@@ -533,13 +540,7 @@ impl DedupeEncoder {
     #[inline]
     pub fn clear_type<T: Hash + Eq + Send + Sync + 'static>(&mut self) {
         let type_id = TypeId::of::<T>();
-        if let Some(pos) = self
-            .type_stores
-            .iter()
-            .position(|store| store.type_id == type_id)
-        {
-            self.type_stores.swap_remove(pos);
-        }
+        self.type_stores.retain(|store| store.type_id != type_id);
     }
 
     /// Returns an estimate of the heap memory (in bytes) used by the encoder's
@@ -581,6 +582,7 @@ impl DedupeEncoder {
         S: BuildHasher + Default + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<T>();
+        let hasher_type_id = TypeId::of::<S>();
 
         // Check frozen (immutable) state first, if present. Most real-world
         // hits for the horizon use case land here.
@@ -588,7 +590,7 @@ impl DedupeEncoder {
             && let Some(store) = frozen
                 .type_stores
                 .iter()
-                .find(|store| store.type_id == type_id)
+                .find(|store| store.type_id == type_id && store.hasher_type_id == hasher_type_id)
         {
             // SAFETY: same invariant as in scratch path — slot was inserted as
             // HashMap<T, usize, S>.
@@ -605,7 +607,7 @@ impl DedupeEncoder {
         let store = match self
             .type_stores
             .iter_mut()
-            .find(|store| store.type_id == type_id)
+            .find(|store| store.type_id == type_id && store.hasher_type_id == hasher_type_id)
         {
             Some(store) => {
                 if !store.active {
@@ -616,6 +618,7 @@ impl DedupeEncoder {
             None => {
                 self.type_stores.push(TypeStore {
                     type_id,
+                    hasher_type_id,
                     values: smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
                         self.initial_capacity,
                         S::default(),
@@ -627,10 +630,8 @@ impl DedupeEncoder {
             }
         };
 
-        // SAFETY: we just matched `type_id == TypeId::of::<T>()` in the linear
-        // scan, and this slot was originally inserted with a
-        // `HashMap::<T, usize, S>`. Skipping `downcast_mut` avoids a redundant
-        // vtable call to `type_id()`.
+        // SAFETY: the scan matched both the value and hasher TypeIds, and this
+        // slot was originally inserted as `HashMap::<T, usize, S>`.
         let typed_store: &mut HashMap<T, usize, S> = unsafe {
             &mut *(&mut **store as *mut (dyn Any + Send + Sync) as *mut HashMap<T, usize, S>)
         };
@@ -675,11 +676,12 @@ impl DedupeEncoder {
         }
 
         let type_id = TypeId::of::<T>();
+        let hasher_type_id = TypeId::of::<S>();
         let frozen_store = self.frozen.as_ref().and_then(|frozen| {
             frozen
                 .type_stores
                 .iter()
-                .find(|store| store.type_id == type_id)
+                .find(|store| store.type_id == type_id && store.hasher_type_id == hasher_type_id)
                 .map(|store| {
                     store
                         .values
@@ -692,12 +694,13 @@ impl DedupeEncoder {
         let store = match self
             .type_stores
             .iter_mut()
-            .find(|store| store.type_id == type_id)
+            .find(|store| store.type_id == type_id && store.hasher_type_id == hasher_type_id)
         {
             Some(store) => store,
             None => {
                 self.type_stores.push(TypeStore {
                     type_id,
+                    hasher_type_id,
                     values: smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
                         initial_capacity,
                         S::default(),
@@ -768,11 +771,12 @@ impl DedupeEncoder {
             "cannot prime an encoder that already has a frozen state"
         );
         let type_id = TypeId::of::<T>();
+        let hasher_type_id = TypeId::of::<S>();
 
         let store = match self
             .type_stores
             .iter_mut()
-            .find(|store| store.type_id == type_id)
+            .find(|store| store.type_id == type_id && store.hasher_type_id == hasher_type_id)
         {
             Some(store) => {
                 if !store.active {
@@ -783,6 +787,7 @@ impl DedupeEncoder {
             None => {
                 self.type_stores.push(TypeStore {
                     type_id,
+                    hasher_type_id,
                     values: smallbox::smallbox!(HashMap::<T, usize, S>::with_capacity_and_hasher(
                         self.initial_capacity,
                         S::default(),
@@ -1373,6 +1378,53 @@ mod tests {
 
     impl DedupeDecodeable for OtherBulkValue {
         type Hasher = H;
+    }
+
+    #[test]
+    fn encoder_separates_maps_with_different_hasher_types() {
+        #[derive(Default)]
+        struct OtherHasherState(u64);
+
+        impl core::hash::Hasher for OtherHasherState {
+            fn finish(&self) -> u64 {
+                self.0
+            }
+
+            fn write(&mut self, bytes: &[u8]) {
+                for &byte in bytes {
+                    self.0 = self.0.rotate_left(5) ^ u64::from(byte);
+                }
+            }
+        }
+
+        type OtherHasher = core::hash::BuildHasherDefault<OtherHasherState>;
+
+        let first = BulkValue(10);
+        let second = BulkValue(20);
+        let mut primer = DedupeEncoder::new();
+        assert_eq!(primer.prime::<BulkValue, H>(&first), 1);
+        assert_eq!(primer.prime::<BulkValue, OtherHasher>(&second), 2);
+        assert_eq!(primer.len_for_type::<BulkValue, H>(), 1);
+        assert_eq!(primer.len_for_type::<BulkValue, OtherHasher>(), 1);
+
+        let mut encoder = DedupeEncoder::with_frozen(Arc::new(primer.freeze()));
+        let mut output = Vec::new();
+        assert_eq!(
+            encoder.encode::<BulkValue, H>(&first, &mut output).unwrap(),
+            1
+        );
+        assert_eq!(
+            encoder
+                .encode::<BulkValue, OtherHasher>(&second, &mut output)
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            encoder
+                .encode::<BulkValue, OtherHasher>(&first, &mut output)
+                .unwrap(),
+            5
+        );
     }
 
     #[derive(Debug, Eq, Hash, PartialEq)]

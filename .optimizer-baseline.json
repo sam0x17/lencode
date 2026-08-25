@@ -1,14 +1,14 @@
 {
-  "version": 169,
+  "version": 170,
   "created_at": "2026-08-21T16:32:52Z",
-  "updated_at": "2026-08-24T15:00:47Z",
+  "updated_at": "2026-08-25T01:19:57Z",
   "benchmark_command": "cargo run --offline --release --features solana --example shred_wire_speed -- /tmp/lencode-shred-messages.bin",
   "original_baseline_commit": "eccbcbd8f31a3e8a63308901b7c40bc575fc79f7",
   "original_worktree_fingerprint": "tracked:0326e1168ae426d409e19f3b890fad9c7285e8627d7441b01bff47b3287e6328;examples/shred_wire_speed.rs:bbb0442443941385be6d9858bcf04bf6ac609d36fe9426656b1fae16f071a368",
   "agave_shred_optimizer": {
-    "version": 123,
+    "version": 124,
     "created_at": "2026-08-22T06:19:02Z",
-    "updated_at": "2026-08-24T15:00:47Z",
+    "updated_at": "2026-08-25T01:19:57Z",
     "benchmark_command": "LENCODE_SHRED_RUNS=31 taskset -c 28 <exact-binary> /tmp/agave-shred-corpus.bin",
     "lencode_baseline_commit": "7a0b1ea4acacaf31f1391d60ba32e4ae01373a8c",
     "lencode_worktree_fingerprint": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -4160,6 +4160,72 @@
         "measurement_edits_removed": true,
         "agave_production_source_changed": false
       }
+    },
+    "iteration_106_semantic_lz4_held_out_frontier": {
+      "status": "retained in lencode; Agave changes remain a diagnostic replacement-site prototype pending the new shred wire-format crate and feature activation",
+      "scope": "isolate lencode-specific contextual pubkey deduplication against wincode serialization followed by the exact same canonical LZ4 retry and raw-fallback policy",
+      "protocol": "logical CPU 2; opposite 50-slot dictionary train/test folds; 31 alternating warmed trials per codec and fold; fold medians summed to 100 source slots; official public Solana transaction types on both paths",
+      "exact_binary": {
+        "path": "/tmp/agave-lencode-fair-worktree/target/release/deps/lencode_fair_agave-e57aaa5c0088b2c1",
+        "sha256": "191d04d99a2bae5f2bc40bffff7c5e53c9a4669f795a6d0146ca692876cc14ba"
+      },
+      "fair_baseline": {
+        "description": "wincode serializes each BlockComponent, then the benchmark applies lencode's complete FAST(4), FAST(1), HC, boundary, and raw-fallback policy",
+        "parity": "the fair baseline and direct canonical lencode path produced identical payload bytes, data shreds, coding shreds, FEC sets, and wire bytes on every measured component shape"
+      },
+      "dictionary_cross_validation": {
+        "train_first_test_last_coverage_pct": {
+          "top_4096": 86.3353,
+          "top_8192": 89.4658,
+          "top_16384": 91.5629,
+          "full_33921": 93.2008
+        },
+        "train_last_test_first_coverage_pct": {
+          "top_4096": 83.6848,
+          "top_8192": 86.3325,
+          "top_16384": 89.1139,
+          "full_32286": 90.3831
+        },
+        "combined_fec_sets_by_dictionary_size": {
+          "baseline": { "observed_50ms": 1995, "coalesced_200ms": 1437, "coalesced_400ms": 1475 },
+          "top_4096": { "observed_50ms": 1964, "coalesced_200ms": 1289, "coalesced_400ms": 1191 },
+          "top_8192": { "observed_50ms": 1964, "coalesced_200ms": 1287, "coalesced_400ms": 1190 },
+          "top_16384": { "observed_50ms": 1963, "coalesced_200ms": 1287, "coalesced_400ms": 1188 },
+          "full_split_dictionary": { "observed_50ms": 1963, "coalesced_200ms": 1287, "coalesced_400ms": 1187 }
+        },
+        "selection": "top 16,384 is the retained frontier: a 512 KiB artifact preserves every 50 ms and 200 ms FEC win from the roughly 1 MiB full split dictionaries and gives up one FEC set on the 400 ms shape"
+      },
+      "results_per_100_source_slots": {
+        "observed_50ms": {
+          "components": 1963,
+          "baseline": { "fec_sets": 1995, "wire_bytes": 155195040, "leader_ns": 275991254, "codec_ns": 44140054, "validator_ns": 20546971 },
+          "semantic_hybrid": { "fec_sets": 1963, "wire_bytes": 152705696, "leader_ns": 275308001, "codec_ns": 46707623, "validator_ns": 21135214 },
+          "change_pct": { "wire": -1.604, "leader": -0.248, "codec": 5.817, "validator": 2.863 }
+        },
+        "coalesced_200ms_9_5": {
+          "components": 1278,
+          "baseline": { "fec_sets": 1437, "wire_bytes": 111787104, "leader_ns": 220825682, "codec_ns": 53236406, "validator_ns": 22994901 },
+          "semantic_hybrid": { "fec_sets": 1287, "wire_bytes": 100118304, "leader_ns": 213385065, "codec_ns": 62294568, "validator_ns": 24594836 },
+          "change_pct": { "wire": -10.438, "leader": -3.369, "codec": 17.015, "validator": 6.958 }
+        },
+        "coalesced_400ms": {
+          "components": 1167,
+          "baseline": { "fec_sets": 1475, "wire_bytes": 114743200, "leader_ns": 224710844, "codec_ns": 52782525, "validator_ns": 22983421 },
+          "semantic_hybrid": { "fec_sets": 1188, "wire_bytes": 92416896, "leader_ns": 209989093, "codec_ns": 70216795, "validator_ns": 26191422 },
+          "change_pct": { "wire": -19.458, "leader": -6.551, "codec": 33.030, "validator": 13.958 }
+        }
+      },
+      "lencode_changes": [
+        "paired SolanaPubkeyDictionary construction rejects malformed and duplicate artifacts and derives a domain-separated SHA-256 dictionary ID",
+        "the semantic encoder skips one-FEC baselines and exposes an alternative only when it removes a complete wire block",
+        "the unified decoder rejects unknown versions, flags, and dictionary IDs and keeps compressed, expanded, sequence, and allocation limits separate",
+        "pubkey maps use keyed full-value hashing instead of the SDK single-window hasher, and TypeStore records the hasher TypeId so its erased-map casts remain valid even if callers mix hash builders"
+      ],
+      "zero_copy": "selected canonical and semantic frames remain borrowed from retained arenas; semantic decompression writes into reusable spare capacity; the unified decoder owns and reuses compact scratch",
+      "security": "no new unsafe block was added. Existing LZ4 decompression remains bounded by LZ4_decompress_safe, an explicit caller maximum, a possible-expansion check, and an exact written-length check. Dictionary ID, version, and flag mismatches fail closed, partial outputs are cleared, and crafted same-window pubkeys no longer create the SDK hasher's trivial collision class",
+      "wire_compatibility": "canonical flag-1 frames are unchanged. Semantic flag-16 frames are a new dictionary-versioned representation and require explicit network feature activation; they must not be sent to validators that only accept the canonical format",
+      "verdict": "lencode has a meaningful conditional advantage beyond ordinary LZ4: selective semantic pubkey IDs reduce physical wire and end-to-end leader CPU at 200-400 ms coalescing. At observed 50 ms sends, the one-FEC floor limits the win to 1.6% wire and effectively neutral leader CPU. If a frozen dictionary and validator decode cost are unacceptable, wincode plus the same LZ4 policy is the simpler fallback",
+      "validation": "223 unit tests, 8 integration tests, and 5 doctests passed with one ignored; strict all-feature all-target Clippy passed; no-default all-target, std-only library, all-feature all-target, documentation, formatting, and diff checks passed; the exact Agave diagnostic built and round-tripped canonical and semantic production lencode frames"
     },
     "post_iteration_35_profile": {
       "command": "perf record -F 999 -o /tmp/lencode-shred-spare-decode-perf.data -- env LENCODE_SHRED_RUNS=21 taskset -c 28 /tmp/lencode-unsafe-spare-decode-screen-rust-1.98.0 /tmp/agave-shred-broadcast-batches.bin",
@@ -11561,6 +11627,19 @@
   },
   "final_summary": {
     "qualifying_scope": "lencode-owned changes and Agave replacement-call-site adapters only; general Agave optimizations are historical and excluded",
+    "current_adoption_verdict": "selective semantic lencode has a meaningful conditional advantage over wincode plus the same LZ4 policy at 200-400 ms coalescing; ordinary wincode plus LZ4 remains the simpler fallback when a dictionary-versioned wire format or added validator cost is unacceptable",
+    "fair_semantic_dictionary_entries": 16384,
+    "fair_semantic_dictionary_artifact_bytes": 524288,
+    "fair_semantic_50ms_wire_reduction_pct": 1.604,
+    "fair_semantic_50ms_leader_time_reduction_pct": 0.248,
+    "fair_semantic_50ms_validator_time_regression_pct": 2.863,
+    "fair_semantic_200ms_wire_reduction_pct": 10.438,
+    "fair_semantic_200ms_leader_time_reduction_pct": 3.369,
+    "fair_semantic_200ms_validator_time_regression_pct": 6.958,
+    "fair_semantic_400ms_wire_reduction_pct": 19.458,
+    "fair_semantic_400ms_leader_time_reduction_pct": 6.551,
+    "fair_semantic_400ms_validator_time_regression_pct": 13.958,
+    "historical_comparison_note": "the older 23.99% leader and 37.41% wire fields below compare the complete canonical-LZ4 and batching path with uncompressed legacy wincode; they are not the lencode-specific semantic advantage",
     "agave_real_200ms_reference_slots": 100,
     "agave_real_200ms_component_reduction_pct": 34.895568,
     "agave_real_200ms_leader_time_reduction_pct": 23.990447,

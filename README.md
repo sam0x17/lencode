@@ -194,8 +194,15 @@ so both formats can remain explicitly versioned without ambiguous decoding.
 
 `SolanaSemanticLz4EntryBatchEncoder` combines contextual LEB128 pubkey IDs with LZ4 compression.
 It keeps the compact batch as arena scratch and returns the compressed frame by borrow, avoiding a
-final frame copy. `SolanaSemanticLz4EntryBatchDecoder` validates the version, dictionary ID, output
-limit, and possible LZ4 expansion before decompressing directly into reusable vector capacity.
+final frame copy. Its selective entry point skips one-FEC batches and returns a semantic frame only
+when it removes a complete wire block. `SolanaPubkeyDictionary` constructs the encoder and decoder
+states together from one ordered artifact, rejects duplicates, and derives the 16-byte wire ID from
+a domain-separated SHA-256 digest. Pubkey lookups use a keyed full-value hash instead of the SDK's
+single-window hasher because shred payload keys are untrusted.
+
+`SolanaLz4EntryBatchDecoder` dispatches canonical and semantic frames without fallback, applies
+separate compressed, expanded, sequence, and allocation limits, and reuses its semantic scratch
+buffer. Unknown versions, flags, and dictionary IDs fail closed.
 
 This is a bridge into Agave's existing zero-copy parser, not a drop-in Turbine wire change. Putting
 the compact representation into shreds changes Merkle roots and shred signatures, so a network
