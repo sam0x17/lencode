@@ -27,21 +27,21 @@ exclude = [
 [dependencies]
 endian-cast = "2"
 generic-array = "1"
-agave-geyser-plugin-interface = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
-solana-message = { version = "4.5.0", optional = true }
-solana-transaction = { version = "4.3.0", optional = true }
-solana-transaction-status = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
-solana-transaction-context = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
-solana-transaction-error = { version = "3.4.0", optional = true }
-solana-instruction = { version = "3.5.0", optional = true }
-solana-address = { version = "1", optional = true }
+agave-geyser-plugin-interface = { version = "4.2.2", optional = true, features = ["agave-unstable-api"] }
+solana-message = { version = "4.4.1", optional = true }
+solana-transaction = { version = "4.1.6", optional = true }
+solana-transaction-status = { version = "4.2.2", optional = true, features = ["agave-unstable-api"] }
+solana-transaction-context = { version = "4.2.2", optional = true, features = ["agave-unstable-api"] }
+solana-transaction-error = { version = "3.3.2", optional = true }
+solana-instruction = { version = "3.4.1", optional = true }
+solana-address = { version = "2.6.1", optional = true }
 solana-hash = { version = "4", optional = true }
 solana-signature = { version = "3", optional = true }
-solana-pubkey = { version = "4.3.0", optional = true, features = ["rand"] }
+solana-pubkey = { version = "4.2.1", optional = true, features = ["rand"] }
 solana-sha256-hasher = { version = "3.1.0", optional = true, features = ["sha2"] }
-solana-reward-info = { version = "6.3.0", optional = true }
-solana-account-decoder-client-types = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
-ruint = { version = "1", default-features = false}
+solana-reward-info = { version = "6.2.0", optional = true }
+solana-account-decoder-client-types = { version = "4.2.2", optional = true, features = ["agave-unstable-api"] }
+ruint = { version = "1.20", default-features = false }
 newt-hype = { version = "0", default-features = false }
 hashbrown = "0.16"
 ahash = { version = "0.8", default-features = false, features = ["compile-time-rng"] }
@@ -53,9 +53,6 @@ lz4-sys = { version = "1.11.1", optional = true }
 
 lencode-macros = { path = "macros", version = "2.0.0" }
 
-# Serialization helpers: keep bincode only for benches/examples
-bincode = { version = "2", features = ["serde"], optional = true }
-
 [dev-dependencies]
 rayon = "1"
 rand = "0.10"
@@ -63,13 +60,13 @@ criterion = { version = "0.7", git = "https://github.com/sam0x17/criterion.rs", 
 borsh = { version = ">= 1.5", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
-wincode = { version = "0.6.1", features = ["derive"] }
-solana-short-vec = { version = "3.3.0", features = ["wincode"] }
-solana-hash = { version = "4.6.0", features = ["atomic"] }
-solana-message = { version = "4.5.0", features = ["wincode"] }
-solana-pubkey = { version = "4.3.0" }
-solana-signature = { version = "3.5.2" }
-solana-transaction = { version = "4.3.0", features = ["wincode"] }
+wincode = { version = "0.5.5", features = ["derive"] }
+solana-short-vec = { version = "3.2.2", features = ["wincode"] }
+solana-hash = { version = "4.5.0", features = ["atomic"] }
+solana-message = { version = "4.4.1", features = ["wincode"] }
+solana-pubkey = { version = "4.2.1" }
+solana-signature = { version = "3.4.1" }
+solana-transaction = { version = "4.1.6", features = ["wincode"] }
 
 [features]
 default = []

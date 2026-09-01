@@ -7,7 +7,7 @@ Versioning.
 
 ### Breaking changes
 
-- The `solana` feature now targets the current Solana v4 and Agave 4.x beta
+- The `solana` feature now targets the current Solana v4 and stable Agave 4.2
   crates instead of the v3 type family. Downstream users must upgrade their
   Solana dependencies or use `solana-primitives` for the stable address, hash,
   and signature implementations.
@@ -50,6 +50,9 @@ Versioning.
   growth, and decoded blob size are checked before allocation or mutation.
 - Failed diff and Solana frame decodes leave reusable state and caller output
   unchanged.
+- The minimum `ruint` version is 1.20.0, which includes the fixes for
+  RUSTSEC-2026-0220. The release lockfile also uses the patched
+  `crossbeam-epoch` 0.9.20.
 
 ### Wire compatibility
 

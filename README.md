@@ -53,7 +53,7 @@ lencode = { version = "2", features = ["solana"] }
 ## Upgrading from 1.x
 
 Version 2 moves the `solana` feature from the Solana v3 type family to current
-Solana v4 and Agave 4.x beta crates, and raises the minimum Rust version to
+Solana v4 and stable Agave 4.2 crates, and raises the minimum Rust version to
 1.98.0. Canonical 1.x lencode integers and diff modes remain decodable, but
 decoders now reject non-canonical inputs. See the [changelog](CHANGELOG.md) for
 the complete compatibility notes.
