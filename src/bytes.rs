@@ -31,9 +31,9 @@ pub(crate) const MIN_COMPRESS_LEN: usize = 512;
 /// A fast pre‑check inspects the byte range (max − min) of the first 8 bytes.
 /// Random/encrypted data almost always spans > 200 of the 256 byte values, so
 /// a wide range is a strong signal of incompressibility and lets us skip the
-/// full 32‑byte bitmap scan. The pre‑check uses only min/max — no bitmap, no
-/// popcount, no array indexing — so it adds negligible overhead (~3 ns) to the
-/// fallthrough path for genuinely compressible data.
+/// full 32-byte bitmap scan. The pre-check uses only min/max, with no bitmap,
+/// popcount, or array indexing, so it adds negligible overhead (about 3 ns) to the
+/// fallthrough path for compressible data.
 #[inline(always)]
 pub(crate) fn looks_incompressible(data: &[u8]) -> bool {
     if data.len() < 32 {
@@ -141,7 +141,7 @@ pub(crate) fn compress_and_write(
     {
         ZSTD_STATE.with(|cell| {
             let mut state = cell.borrow_mut();
-            // `Vec::reserve` is relative to `len`, not `capacity` — clear
+            // `Vec::reserve` is relative to `len`, not `capacity`; clear
             // first so `reserve(bound)` guarantees `capacity >= bound`. The
             // previous arithmetic (`reserve(bound - capacity)`) under-reserved
             // whenever an earlier smaller-bound call had left `len < capacity`:
@@ -175,7 +175,7 @@ pub(crate) fn compress_and_write(
     }
     #[cfg(not(feature = "std"))]
     {
-        // SAFETY: same as `zstd_compress` — zstd writes into the buffer and we
+        // SAFETY: same as `zstd_compress`; Zstd writes into the buffer and we
         // only slice up to the reported `comp_len`.
         #[allow(clippy::uninit_vec)]
         let mut scratch: Vec<u8> = unsafe {
@@ -231,7 +231,7 @@ pub fn zstd_compress(input: &[u8]) -> Result<Vec<u8>> {
 
 /// Decompresses `compressed` into a new Vec<u8> with expected `original_len`.
 ///
-/// `#[inline(never)]` is deliberate — same reasoning as [`zstd_compress`].
+/// `#[inline(never)]` is deliberate for the same reason as [`zstd_compress`].
 /// The raw-bytes decode path inside `Vec<u8>::decode_ext` is the hot path,
 /// and inlining the thread-local DCtx lookup + borrow machinery here
 /// measurably regressed the `solana_message_decode` bench (~+6%) by bloating
@@ -243,12 +243,28 @@ pub fn zstd_decompress(compressed: &[u8], original_len: usize) -> Result<Vec<u8>
     Ok(out)
 }
 
+/// Rejects trailing zstd frames or skippable frames inside a declared payload.
+///
+/// The one-shot zstd decompressor is allowed to stop after the first complete
+/// frame. Lencode byte payloads contain exactly one frame, so accepting a valid
+/// frame followed by another frame would make two distinct wire encodings
+/// decode to the same value.
+#[inline]
+fn validate_exact_zstd_frame(compressed: &[u8]) -> Result<()> {
+    let frame_len =
+        zstd_safe::find_frame_compressed_size(compressed).map_err(|_| Error::InvalidData)?;
+    if frame_len != compressed.len() {
+        return Err(Error::InvalidData);
+    }
+    Ok(())
+}
+
 /// [`zstd_decompress`] into a caller-provided buffer whose capacity is
-/// reused — the allocation-free variant for callers that decompress in a
+/// reused. This is the allocation-free variant for callers that decompress in a
 /// loop (e.g. the diff decoder's borrowed path). `out` is cleared first and
 /// holds exactly the decompressed bytes on success (cleared on error).
 ///
-/// `#[inline(never)]` — same i-cache reasoning as [`zstd_decompress`].
+/// `#[inline(never)]` uses the same instruction-cache reasoning as [`zstd_decompress`].
 #[inline(never)]
 pub fn zstd_decompress_into(
     compressed: &[u8],
@@ -256,6 +272,7 @@ pub fn zstd_decompress_into(
     out: &mut Vec<u8>,
 ) -> Result<()> {
     out.clear();
+    validate_exact_zstd_frame(compressed)?;
     out.reserve(original_len);
     // SAFETY: `out` is immediately passed to `zstd_safe::decompress` which
     // writes exactly `original_len` bytes (verified below). On every error
@@ -376,6 +393,21 @@ mod tests {
     use crate::io::VecWriter;
     use crate::prelude::Encode;
 
+    fn zstd_frame_with_checksum(input: &[u8]) -> Vec<u8> {
+        let mut compressed = vec![0u8; zstd_safe::compress_bound(input.len())];
+        let mut context = zstd_safe::CCtx::create();
+        context
+            .set_parameter(zstd_safe::CParameter::ChecksumFlag(true))
+            .unwrap();
+        let written = context.compress2(&mut compressed[..], input).unwrap();
+        compressed.truncate(written);
+        assert_eq!(
+            zstd_safe::find_frame_compressed_size(&compressed).unwrap(),
+            compressed.len()
+        );
+        compressed
+    }
+
     #[test]
     fn structured_prefix_does_not_hide_incompressible_remainder() {
         let mut payload = vec![0u8; 148];
@@ -452,6 +484,42 @@ mod tests {
     }
 
     #[test]
+    fn byte_decoder_rejects_concatenated_valid_zstd_frames() {
+        let payload = vec![0x2au8; 1024];
+        let first = zstd_frame_with_checksum(&payload);
+        let second = zstd_frame_with_checksum(b"valid trailing frame");
+        assert_eq!(zstd_decompress(&first, payload.len()).unwrap(), payload);
+        let mut concatenated = first.clone();
+        concatenated.extend_from_slice(&second);
+
+        assert_eq!(
+            zstd_safe::find_frame_compressed_size(&concatenated).unwrap(),
+            first.len(),
+            "the trailing bytes form a second frame, not a corrupt first frame"
+        );
+
+        let mut encoded = VecWriter::new();
+        write_flagged_raw(&mut encoded, &concatenated, 1).unwrap();
+        let mut cursor = crate::io::Cursor::new(encoded.as_slice());
+        let decoded: Result<Vec<u8>> = crate::decode(&mut cursor);
+        assert!(matches!(decoded, Err(Error::InvalidData)));
+
+        #[cfg(feature = "std")]
+        {
+            let mut streaming = std::io::Cursor::new(encoded.as_slice());
+            let decoded: Result<Vec<u8>> = crate::decode(&mut streaming);
+            assert!(matches!(decoded, Err(Error::InvalidData)));
+        }
+
+        let mut reused = vec![0xff; payload.len()];
+        assert!(matches!(
+            zstd_decompress_into(&concatenated, payload.len(), &mut reused),
+            Err(Error::InvalidData)
+        ));
+        assert!(reused.is_empty(), "the output is cleared on rejection");
+    }
+
+    #[test]
     fn compression_cutoff_preserves_older_short_frames() {
         let payload = vec![0x2Au8; MIN_COMPRESS_LEN - 1];
 
@@ -488,7 +556,7 @@ mod tests {
     }
 
     /// Encoding the same payload twice in a row must produce identical output
-    /// — the thread-local CCtx must not retain state across calls that affects
+    /// because the thread-local `CCtx` must not retain state across calls that affects
     /// compressed output.
     #[test]
     fn wire_format_repeated_encode_stable() {

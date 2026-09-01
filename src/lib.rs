@@ -3,7 +3,7 @@
 //!
 //! This crate provides two core traits, [`Encode`] and [`Decode`], for serializing types to a
 //! [`Write`] and deserializing from a [`Read`] without relying on `std`. Integer types use a
-//! compact variable‑length scheme (see [`Lencode`]) that encodes small values in a single byte
+//! compact variable-length scheme (see [`Lencode`]) that encodes small values in a single byte
 //! while remaining efficient for large values.
 //!
 //! Optional deduplication can be enabled per encode/decode call via
@@ -11,18 +11,18 @@
 //! reduce size for data with many duplicates.
 //!
 //! Derive macros for [`Encode`], [`Decode`], and [`Pack`] are available from the companion
-//! crate [`lencode_macros`] and re‑exported in [`prelude`]. `#[derive(Pack)]` on a
-//! `#[repr(transparent)]` single‑field struct automatically generates bulk `pack_slice`
-//! and `unpack_vec` overrides for zero‑copy I/O.
+//! crate [`lencode_macros`] and re-exported in [`prelude`]. `#[derive(Pack)]` on a
+//! `#[repr(transparent)]` single-field struct automatically generates bulk `pack_slice`
+//! and `unpack_vec` overrides for zero-copy I/O.
 //!
 //! Bytes and strings are compacted using a flagged header with opportunistic zstd compression:
 //!
 //! - Formats: `&[u8]`, `Vec<u8>`, `VecDeque<u8>`, `&str`, `String`
 //! - Wire: `varint((payload_len << 1) | flag) + payload`
-//!   - `flag = 1` → `payload` is a zstd frame (original size is stored in the frame)
-//!   - `flag = 0` → `payload` is raw bytes/UTF‑8
+//!   - `flag = 1`: `payload` is a Zstd frame (original size is stored in the frame)
+//!   - `flag = 0`: `payload` is raw bytes/UTF-8
 //! - The encoder picks whichever is smaller per value.
-//! - High‑entropy data (random bytes) is detected via a fast entropy check and skips
+//! - High-entropy data (random bytes) is detected via a fast entropy check and skips
 //!   compression entirely, avoiding wasted work.
 //!
 //! This keeps headers minimal while improving size significantly for repetitive content, and
@@ -36,6 +36,12 @@
 //!
 //! - **RLE patches** (mode 1): run-length-encoded list of changed regions
 //! - **XOR + zstd** (mode 2): XOR old and new blobs, then zstd-compress the result
+//! - **Raw XOR** (mode 3): intended only for a versioned, outer-compressed format
+//!
+//! [`DiffEncoder::new`] and [`DiffDecoder::new`] use modes 0 through 2. Select
+//! [`DiffPolicy::OuterCompressed`] and construct the decoder with
+//! [`DiffDecoder::with_max_supported_mode`] to opt into mode 3. A containing
+//! format must version that choice.
 //!
 //! Supported byte types: `Vec<u8>`, `&[u8]`, `[u8; N]`, `VecDeque<u8>`. Enable via
 //! [`EncoderContext::with_diff`] / [`DecoderContext::with_diff`] and call `set_key()`
@@ -45,13 +51,34 @@
 //! methods (`len()`, `num_keys()`, `memory_usage()`, etc.) and granular state management
 //! (`clear()`, `clear_type::<T>()`, `remove_key()`).
 //!
+//! [`DedupeIdCodec`] controls the integer codec for deduplication IDs. Existing
+//! formats use native lencode integers by default. A versioned outer format can
+//! explicitly select canonical unsigned LEB128 IDs.
+//!
+//! ## Bounded decoding
+//!
+//! [`decode_exact`] rejects trailing data. For untrusted input,
+//! [`decode_exact_with_limits`] also bounds encoded bytes, sequence lengths,
+//! blob lengths, and cumulative allocation through [`DecodeLimits`]. Failed
+//! stateful decodes do not commit partial diff or deduplication state.
+//!
 //! ## Bulk encoding
 //!
-//! Collections of fixed‑size elements (e.g. `Vec<[u8; 32]>`) are encoded via bulk
-//! `memcpy` when possible, avoiding per‑element overhead. This is handled automatically
+//! Collections of fixed-size elements (e.g. `Vec<[u8; 32]>`) are encoded via bulk
+//! `memcpy` when possible, avoiding per-element overhead. This is handled automatically
 //! through [`Encode::encode_slice`] and [`Decode::decode_vec`], which types can override
 //! for optimized batch operations. The [`Pack`] trait provides analogous
 //! [`Pack::pack_slice`]/[`Pack::unpack_vec`] methods for deduplicated types.
+//!
+//! ## Solana features
+//!
+//! - `solana-primitives` implements lencode traits for the official lightweight
+//!   address, hash, and signature types.
+//! - `solana-types` adds current reference messages and transactions plus the
+//!   versioned canonical and semantic LZ4 entry-batch codecs in [`solana`].
+//! - `solana` adds the broader current Agave runtime, status, and Geyser types.
+//! - `std` exposes the bounded canonical transaction reconstruction APIs in
+//!   [`solana_wire`].
 //!
 //! Quick start:
 //!
@@ -146,10 +173,12 @@ pub mod varint;
 
 #[cfg(feature = "solana-types")]
 pub mod solana;
+#[cfg(all(feature = "solana-primitives", not(feature = "solana-types")))]
+mod solana_primitives;
 #[cfg(feature = "std")]
 pub mod solana_wire;
 
-/// Convenience re‑exports for common traits, modules and derive macros.
+/// Convenience re-exports for common traits, modules and derive macros.
 pub mod prelude {
     pub use super::*;
     pub use crate::context::*;
@@ -798,9 +827,7 @@ impl Decode for f32 {
             return Ok(f32::from_le_bytes(val));
         }
         let mut buf = [0u8; 4];
-        if reader.read(&mut buf)? != 4 {
-            return Err(Error::ReaderOutOfData);
-        }
+        crate::io::read_exact_bytes(reader, &mut buf)?;
         Ok(f32::from_le_bytes(buf))
     }
 
@@ -843,9 +870,7 @@ impl Decode for f64 {
             return Ok(f64::from_le_bytes(val));
         }
         let mut buf = [0u8; 8];
-        if reader.read(&mut buf)? != 8 {
-            return Err(Error::ReaderOutOfData);
-        }
+        crate::io::read_exact_bytes(reader, &mut buf)?;
         Ok(f64::from_le_bytes(buf))
     }
 
@@ -927,7 +952,7 @@ impl Decode for String {
                 let orig_len = bytes::zstd_content_size(
                     &reader.buf().expect("buffer was checked above")[..payload_len],
                 )?;
-                reader.claim_sequence(orig_len, 1)?;
+                reader.claim_blob(orig_len)?;
                 let out = bytes::zstd_decompress(
                     &reader.buf().expect("buffer was checked above")[..payload_len],
                     orig_len,
@@ -937,16 +962,13 @@ impl Decode for String {
             }
             reader.claim_allocation(payload_len)?;
             let mut comp = vec![0u8; payload_len];
-            let mut read = 0usize;
-            while read < payload_len {
-                read += reader.read(&mut comp[read..])?;
-            }
+            crate::io::read_exact_bytes(reader, &mut comp)?;
             let orig_len = bytes::zstd_content_size(&comp)?;
-            reader.claim_sequence(orig_len, 1)?;
+            reader.claim_blob(orig_len)?;
             let out = bytes::zstd_decompress(&comp, orig_len)?;
             String::from_utf8(out).map_err(|_| Error::InvalidData)
         } else {
-            reader.claim_sequence(payload_len, 1)?;
+            reader.claim_blob(payload_len)?;
             // Zero-copy fast path
             if let Some(slice) = reader.buf()
                 && slice.len() >= payload_len
@@ -959,10 +981,7 @@ impl Decode for String {
                 return String::from_utf8(buf).map_err(|_| Error::InvalidData);
             }
             let mut buf = vec![0u8; payload_len];
-            let mut read = 0usize;
-            while read < payload_len {
-                read += reader.read(&mut buf[read..])?;
-            }
+            crate::io::read_exact_bytes(reader, &mut buf)?;
             String::from_utf8(buf).map_err(|_| Error::InvalidData)
         }
     }
@@ -1116,7 +1135,10 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
                 return Ok(unsafe { arr.assume_init() });
             }
 
-            let mut arr = MaybeUninit::<[T; N]>::uninit();
+            // This branch is reachable only for T == u8, so the zeroed
+            // representation is valid and can safely be exposed to a custom
+            // reader during the streaming fallback below.
+            let mut arr = MaybeUninit::<[T; N]>::zeroed();
             if let Some(buf) = reader.buf() {
                 if buf.len() >= N {
                     unsafe {
@@ -1133,10 +1155,7 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
             }
             // Fallback: read through the trait
             let dst = unsafe { core::slice::from_raw_parts_mut(arr.as_mut_ptr() as *mut u8, N) };
-            let mut read = 0;
-            while read < N {
-                read += reader.read(&mut dst[read..])?;
-            }
+            crate::io::read_exact_bytes(reader, dst)?;
             return Ok(unsafe { arr.assume_init() });
         }
 
@@ -1171,7 +1190,7 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
     #[inline(always)]
     fn decode_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
-            let total = N * count;
+            let total = N.checked_mul(count).ok_or(Error::DecodeLimitExceeded)?;
             if let Some(buf) = reader.buf() {
                 if buf.len() >= total {
                     let mut vec: Vec<Self> = Vec::with_capacity(count);
@@ -1190,13 +1209,15 @@ impl<const N: usize, T: Decode + 'static> Decode for [T; N] {
             }
             // Fallback: read through trait
             let mut vec: Vec<Self> = Vec::with_capacity(count);
+            // T == u8 in this branch, so an all-zero Self is valid. Initialize
+            // the allocation before constructing a mutable byte slice over it.
+            unsafe {
+                core::ptr::write_bytes(vec.as_mut_ptr().cast::<u8>(), 0, total);
+                vec.set_len(count);
+            }
             let dst =
                 unsafe { core::slice::from_raw_parts_mut(vec.as_mut_ptr() as *mut u8, total) };
-            let mut read = 0;
-            while read < total {
-                read += reader.read(&mut dst[read..])?;
-            }
-            unsafe { vec.set_len(count) };
+            crate::io::read_exact_bytes(reader, dst)?;
             return Ok(vec);
         }
         let mut vec = Vec::with_capacity(count);
@@ -1231,7 +1252,7 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                     let orig_len = bytes::zstd_content_size(
                         &reader.buf().expect("buffer was checked above")[..payload_len],
                     )?;
-                    reader.claim_sequence(orig_len, 1)?;
+                    reader.claim_blob(orig_len)?;
                     let out = bytes::zstd_decompress(
                         &reader.buf().expect("buffer was checked above")[..payload_len],
                         orig_len,
@@ -1242,17 +1263,14 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                 }
                 reader.claim_allocation(payload_len)?;
                 let mut comp = vec![0u8; payload_len];
-                let mut read = 0usize;
-                while read < payload_len {
-                    read += reader.read(&mut comp[read..])?;
-                }
+                crate::io::read_exact_bytes(reader, &mut comp)?;
                 let orig_len = bytes::zstd_content_size(&comp)?;
-                reader.claim_sequence(orig_len, 1)?;
+                reader.claim_blob(orig_len)?;
                 let out = bytes::zstd_decompress(&comp, orig_len)?;
                 let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                 return Ok(vec_t);
             } else {
-                reader.claim_sequence(payload_len, 1)?;
+                reader.claim_blob(payload_len)?;
                 // Zero-copy fast path for raw data
                 if let Some(slice) = reader.buf()
                     && slice.len() >= payload_len
@@ -1271,10 +1289,7 @@ impl<T: Decode + 'static> Decode for Vec<T> {
                     return Ok(vec_t);
                 }
                 let mut out = vec![0u8; payload_len];
-                let mut read = 0usize;
-                while read < payload_len {
-                    read += reader.read(&mut out[read..])?;
-                }
+                crate::io::read_exact_bytes(reader, &mut out)?;
                 let vec_t: Vec<T> = unsafe { core::mem::transmute::<Vec<u8>, Vec<T>>(out) };
                 return Ok(vec_t);
             }
@@ -1455,7 +1470,7 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
                 && diff.current_key.is_some()
             {
                 let out = diff.decode_blob(reader)?;
-                reader.claim_sequence(out.len(), core::mem::size_of::<V>())?;
+                reader.claim_blob(out.len())?;
                 let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
                 let mut deque = collections::VecDeque::with_capacity(out_v.len());
                 deque.extend(out_v);
@@ -1468,28 +1483,22 @@ impl<V: Decode + 'static> Decode for collections::VecDeque<V> {
             if is_compressed {
                 reader.claim_allocation(payload_len)?;
                 let mut comp = vec![0u8; payload_len];
-                let mut read = 0usize;
-                while read < payload_len {
-                    read += reader.read(&mut comp[read..])?;
-                }
+                crate::io::read_exact_bytes(reader, &mut comp)?;
                 let orig_len = bytes::zstd_content_size(&comp)?;
-                reader.claim_sequence(orig_len, 1)?;
+                reader.claim_blob(orig_len)?;
                 let out = bytes::zstd_decompress(&comp, orig_len)?;
                 // SAFETY: V == u8, so reinterpretation is sound
                 let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
-                reader.claim_sequence(orig_len, core::mem::size_of::<V>())?;
+                reader.claim_blob(orig_len)?;
                 let mut deque = collections::VecDeque::with_capacity(orig_len);
                 deque.extend(out_v);
                 return Ok(deque);
             } else {
-                reader.claim_sequence(payload_len, 1)?;
+                reader.claim_blob(payload_len)?;
                 let mut out = vec![0u8; payload_len];
-                let mut read = 0usize;
-                while read < payload_len {
-                    read += reader.read(&mut out[read..])?;
-                }
+                crate::io::read_exact_bytes(reader, &mut out)?;
                 let out_v: Vec<V> = unsafe { core::mem::transmute::<Vec<u8>, Vec<V>>(out) };
-                reader.claim_sequence(payload_len, core::mem::size_of::<V>())?;
+                reader.claim_blob(payload_len)?;
                 let mut deque = collections::VecDeque::with_capacity(payload_len);
                 deque.extend(out_v);
                 return Ok(deque);

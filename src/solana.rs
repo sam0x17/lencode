@@ -48,9 +48,7 @@ impl Pack for sol_pubkey::Pubkey {
     #[inline(always)]
     fn unpack(reader: &mut impl Read) -> Result<Self> {
         let mut buf = [0u8; 32];
-        if reader.read(&mut buf)? != 32 {
-            return Err(Error::ReaderOutOfData);
-        }
+        crate::io::read_exact_bytes(reader, &mut buf)?;
         Ok(Self::new_from_array(buf))
     }
 }

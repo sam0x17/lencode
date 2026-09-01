@@ -153,6 +153,42 @@ pub trait Read {
     fn claim_sequence(&mut self, _len: usize, _element_size: usize) -> Result<()> {
         Ok(())
     }
+
+    /// Validates one variable-length byte blob and charges its bytes against
+    /// an optional reader-owned allocation budget. Byte blobs have a distinct
+    /// per-value limit from collection element counts: a valid large account
+    /// data value must not force a decoder to also accept millions of entries
+    /// in an unrelated collection.
+    ///
+    /// Readers without a distinct blob limit retain the historical behavior
+    /// by treating bytes as one-byte sequence elements.
+    #[inline(always)]
+    fn claim_blob(&mut self, len: usize) -> Result<()> {
+        self.claim_sequence(len, 1)
+    }
+}
+
+/// Fills an initialized destination buffer, tolerating legitimate short reads.
+///
+/// A non-empty read that makes no progress is treated as end-of-input. Custom
+/// [`Read`] implementations that claim to have written beyond the supplied
+/// destination are rejected before their count can be used for indexing or
+/// accounting.
+#[inline(always)]
+pub(crate) fn read_exact_bytes(reader: &mut impl Read, dest: &mut [u8]) -> Result<()> {
+    let mut offset = 0usize;
+    while offset < dest.len() {
+        let remaining = dest.len() - offset;
+        let read = reader.read(&mut dest[offset..])?;
+        if read == 0 {
+            return Err(Error::ReaderOutOfData);
+        }
+        if read > remaining {
+            return Err(Error::InvalidData);
+        }
+        offset += read;
+    }
+    Ok(())
 }
 
 /// Reader adapter that bounds input consumption, collection lengths, and
@@ -160,6 +196,7 @@ pub trait Read {
 pub struct LimitedReader<R> {
     inner: R,
     limits: DecodeLimits,
+    max_blob_bytes: usize,
     remaining_input: usize,
     claimed_allocation: usize,
 }
@@ -171,9 +208,19 @@ impl<R> LimitedReader<R> {
         Self {
             inner,
             limits,
+            max_blob_bytes: limits.max_sequence_len,
             remaining_input: limits.max_input_bytes,
             claimed_allocation: 0,
         }
+    }
+
+    /// Sets the maximum size of any one decoded byte blob independently of
+    /// `max_sequence_len`. The default equals `max_sequence_len`, preserving
+    /// the behavior of existing callers until they opt into a wider blob cap.
+    #[inline(always)]
+    pub const fn with_max_blob_bytes(mut self, max_blob_bytes: usize) -> Self {
+        self.max_blob_bytes = max_blob_bytes;
+        self
     }
 
     /// Returns the wrapped reader.
@@ -212,10 +259,13 @@ impl<R: Read> Read for LimitedReader<R> {
         }
         let len = buf.len().min(self.remaining_input);
         let read = self.inner.read(&mut buf[..len])?;
-        self.remaining_input = self
-            .remaining_input
-            .checked_sub(read)
-            .ok_or(Error::DecodeLimitExceeded)?;
+        if read == 0 {
+            return Err(Error::ReaderOutOfData);
+        }
+        if read > len {
+            return Err(Error::InvalidData);
+        }
+        self.remaining_input -= read;
         Ok(read)
     }
 
@@ -257,6 +307,14 @@ impl<R: Read> Read for LimitedReader<R> {
             .ok_or(Error::DecodeLimitExceeded)?;
         self.claim_allocation(bytes)
     }
+
+    #[inline(always)]
+    fn claim_blob(&mut self, len: usize) -> Result<()> {
+        if len > self.max_blob_bytes {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        self.claim_allocation(len)
+    }
 }
 
 /// Minimal write abstraction used by this crate in both std and no‑std modes.
@@ -293,7 +351,7 @@ pub trait Write {
 impl<R: std::io::Read> Read for R {
     #[inline(always)]
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.read(buf).map_err(Error::from)
+        std::io::Read::read(self, buf).map_err(Error::from)
     }
 }
 
@@ -301,12 +359,13 @@ impl<R: std::io::Read> Read for R {
 impl<W: std::io::Write> Write for W {
     #[inline(always)]
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.write(buf).map_err(Error::from)
+        std::io::Write::write_all(self, buf).map_err(Error::from)?;
+        Ok(buf.len())
     }
 
     #[inline(always)]
     fn flush(&mut self) -> Result<()> {
-        self.flush().map_err(Error::from)
+        std::io::Write::flush(self).map_err(Error::from)
     }
 }
 
@@ -491,4 +550,129 @@ fn test_vec_writer_rounds_bounded_initial_reserve() {
     Write::reserve(&mut writer, 521);
     assert!(writer.0.capacity() >= 1024);
     assert!(writer.0.is_empty());
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    struct ChunkedReader<'a> {
+        input: &'a [u8],
+        position: usize,
+        chunk_size: usize,
+    }
+
+    impl Read for ChunkedReader<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+            if buf.is_empty() {
+                return Ok(0);
+            }
+            let remaining = &self.input[self.position..];
+            if remaining.is_empty() {
+                return Ok(0);
+            }
+            let len = remaining.len().min(buf.len()).min(self.chunk_size);
+            buf[..len].copy_from_slice(&remaining[..len]);
+            self.position += len;
+            Ok(len)
+        }
+    }
+
+    struct ZeroReader;
+
+    impl Read for ZeroReader {
+        fn read(&mut self, _buf: &mut [u8]) -> Result<usize> {
+            Ok(0)
+        }
+    }
+
+    struct OverreportReader;
+
+    impl Read for OverreportReader {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+            Ok(buf.len().saturating_add(1))
+        }
+    }
+
+    #[test]
+    fn exact_read_accepts_chunks_and_rejects_invalid_progress() {
+        let mut output = [0u8; 5];
+        let mut chunked = ChunkedReader {
+            input: b"hello",
+            position: 0,
+            chunk_size: 1,
+        };
+        read_exact_bytes(&mut chunked, &mut output).unwrap();
+        assert_eq!(&output, b"hello");
+
+        assert!(matches!(
+            read_exact_bytes(&mut ZeroReader, &mut output),
+            Err(Error::ReaderOutOfData)
+        ));
+        assert!(matches!(
+            read_exact_bytes(&mut OverreportReader, &mut output),
+            Err(Error::InvalidData)
+        ));
+
+        let mut truncated = ChunkedReader {
+            input: b"no",
+            position: 0,
+            chunk_size: 1,
+        };
+        assert!(matches!(
+            read_exact_bytes(&mut truncated, &mut output),
+            Err(Error::ReaderOutOfData)
+        ));
+    }
+
+    #[test]
+    fn limited_reader_rejects_zero_and_overreported_reads_without_accounting_them() {
+        let limits = DecodeLimits::new(8, 8, 8);
+        let mut output = [0u8; 4];
+
+        let mut zero = LimitedReader::new(ZeroReader, limits);
+        assert!(matches!(
+            Read::read(&mut zero, &mut output),
+            Err(Error::ReaderOutOfData)
+        ));
+        assert_eq!(zero.consumed(), 0);
+
+        let mut overreported = LimitedReader::new(OverreportReader, limits);
+        assert!(matches!(
+            Read::read(&mut overreported, &mut output),
+            Err(Error::InvalidData)
+        ));
+        assert_eq!(overreported.consumed(), 0);
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn std_write_adapter_retries_short_writes() {
+        #[derive(Default)]
+        struct ShortWriter {
+            output: Vec<u8>,
+            calls: usize,
+        }
+
+        impl std::io::Write for ShortWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                if buf.is_empty() {
+                    return Ok(0);
+                }
+                let len = buf.len().min(2);
+                self.output.extend_from_slice(&buf[..len]);
+                self.calls += 1;
+                Ok(len)
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let mut writer = ShortWriter::default();
+        assert_eq!(Write::write(&mut writer, b"short writes").unwrap(), 12);
+        assert_eq!(writer.output, b"short writes");
+        assert!(writer.calls > 1);
+    }
 }

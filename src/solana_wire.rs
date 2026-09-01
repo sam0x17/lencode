@@ -41,7 +41,7 @@ use std::mem::{MaybeUninit, size_of};
 use crate::{
     Decode, Lencode, Result,
     bytes::{zstd_content_size, zstd_decompress_into},
-    dedupe::{DedupeDecoder, FrozenDecoderState},
+    dedupe::{DedupeDecoder, FrozenDecoderState, decode_unsigned_leb128_usize},
     io::{Cursor, DecodeLimits, Error, LimitedReader, Read},
 };
 
@@ -49,7 +49,7 @@ use crate::{
 use crate::{
     Encode,
     context::EncoderContext,
-    dedupe::{DedupeEncoder, DefaultDedupeHasher, FrozenEncoderState},
+    dedupe::{DedupeEncoder, DedupeIdCodec, DefaultDedupeHasher, FrozenEncoderState},
     io::{VecWriter, Write},
 };
 #[cfg(feature = "solana-types")]
@@ -1443,7 +1443,10 @@ impl SolanaEntryBatchEncoder {
         Self {
             dictionary_id,
             context: EncoderContext {
-                dedupe: Some(DedupeEncoder::with_frozen_leb128(frozen)),
+                dedupe: Some(DedupeEncoder::with_frozen_codec(
+                    frozen,
+                    DedupeIdCodec::UnsignedLeb128,
+                )),
                 diff: None,
             },
             contextual: true,
@@ -2380,7 +2383,7 @@ impl SolanaTransactionTranscoder {
             let mut novel_count = 0usize;
             for _ in 0..count {
                 let id = if LEB128 {
-                    decode_leb128_usize(&mut input)?
+                    decode_unsigned_leb128_usize(&mut input)?
                 } else {
                     usize::try_from(Lencode::decode_varint_u64(&mut input)?)
                         .map_err(|_| Error::DecodeLimitExceeded)?
@@ -2504,7 +2507,7 @@ fn append_short_raw_instruction(
     };
 
     reader.claim_sequence(accounts_len, 1)?;
-    reader.claim_sequence(data_len, 1)?;
+    reader.claim_blob(data_len)?;
     reader.advance(consumed);
     Ok(true)
 }
@@ -2528,7 +2531,7 @@ fn append_byte_payload(
             }
             zstd_content_size(&available[..payload_len])?
         };
-        reader.claim_sequence(original_len, 1)?;
+        reader.claim_blob(original_len)?;
         {
             let available = reader.buf().ok_or(Error::InvalidData)?;
             zstd_decompress_into(&available[..payload_len], original_len, decompressed)?;
@@ -2541,7 +2544,7 @@ fn append_byte_payload(
         }
         Ok(original_len)
     } else {
-        reader.claim_sequence(payload_len, 1)?;
+        reader.claim_blob(payload_len)?;
         {
             let available = reader.buf().ok_or(Error::InvalidData)?;
             if available.len() < payload_len {
@@ -2609,44 +2612,6 @@ fn read_header(reader: &mut impl Read) -> Result<[u8; 3]> {
 
 fn read_len(reader: &mut impl Read) -> Result<usize> {
     usize::try_from(Lencode::decode_varint_u64(reader)?).map_err(|_| Error::DecodeLimitExceeded)
-}
-
-#[inline(always)]
-fn decode_leb128_usize(reader: &mut impl Read) -> Result<usize> {
-    let input = reader.buf().ok_or(Error::InvalidData)?;
-    let first = *input.first().ok_or(Error::ReaderOutOfData)?;
-    if first < 0x80 {
-        reader.advance(1);
-        return Ok(usize::from(first));
-    }
-
-    let second = *input.get(1).ok_or(Error::ReaderOutOfData)?;
-    let mut value = usize::from(first & 0x7f) | (usize::from(second & 0x7f) << 7);
-    if second < 0x80 {
-        reader.advance(2);
-        return Ok(value);
-    }
-
-    let third = *input.get(2).ok_or(Error::ReaderOutOfData)?;
-    value |= usize::from(third & 0x7f) << 14;
-    if third < 0x80 {
-        reader.advance(3);
-        return Ok(value);
-    }
-
-    for (index, &byte) in input.iter().enumerate().skip(3) {
-        let shift = index * 7;
-        let payload = usize::from(byte & 0x7f);
-        if shift >= usize::BITS as usize || payload > usize::MAX >> shift {
-            return Err(Error::DecodeLimitExceeded);
-        }
-        value |= payload << shift;
-        if byte < 0x80 {
-            reader.advance(index + 1);
-            return Ok(value);
-        }
-    }
-    Err(Error::ReaderOutOfData)
 }
 
 #[cfg(feature = "solana-types")]
@@ -2848,6 +2813,7 @@ mod tests {
         (Arc::new(encoder.freeze()), Arc::new(decoder.freeze()))
     }
 
+    #[cfg(feature = "solana-types")]
     fn frozen_reference_dictionary(
         addresses: &[[u8; 32]],
     ) -> (
@@ -4064,10 +4030,16 @@ mod tests {
     }
 
     #[test]
-    fn leb128_address_ids_reject_truncation_and_overflow() {
-        for input in [&[0x80][..], &[0xff; 10][..]] {
+    fn leb128_address_ids_reject_noncanonical_truncation_and_overflow() {
+        for input in [
+            &[0x80][..],
+            &[0x80, 0x00][..],
+            &[0x81, 0x00][..],
+            &[0xff; 10][..],
+        ] {
             let mut reader = Cursor::new(input);
-            assert!(decode_leb128_usize(&mut reader).is_err());
+            assert!(decode_unsigned_leb128_usize(&mut reader).is_err());
+            assert_eq!(reader.position(), 0);
         }
     }
 

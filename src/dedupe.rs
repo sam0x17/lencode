@@ -1,6 +1,6 @@
 //! Dedupe-aware encoding: replaces repeated values with compact integer IDs.
 //!
-//! [`DedupeEncoder`] and [`DedupeDecoder`] maintain matching value→ID tables
+//! [`DedupeEncoder`] and [`DedupeDecoder`] maintain matching value-to-ID tables
 //! so that the second (and later) occurrences of a value are emitted as a
 //! short varint instead of the full payload. On the encoder side, the first
 //! occurrence writes a marker `0` followed by the packed value; later
@@ -11,8 +11,8 @@
 //! [`DedupeEncoder::prime`] (and its decoder counterpart) lets you pre-register
 //! a set of "known" values *without* placing them on the wire. Both sides
 //! must prime the same sequence. After priming, [`DedupeEncoder::encode`]
-//! calls for those values emit only the short ID — zero bytes of value
-//! payload — which is ideal for encoding domain values with a long tail of
+//! calls for those values emit only the short ID and zero bytes of value
+//! payload. This is useful for domain values with a long tail of
 //! global popularity (e.g. widely referenced pubkeys, program IDs, etc.).
 //!
 //! # Frozen state (two-layer design)
@@ -58,8 +58,8 @@
 //!
 //! // 3. Encode a mix of primed and novel values.
 //! let mut buffer = Vec::new();
-//! enc.encode::<u32, DefaultDedupeHasher>(&2000, &mut buffer).unwrap(); // primed → 1-byte ID
-//! enc.encode::<u32, DefaultDedupeHasher>(&99_999, &mut buffer).unwrap(); // novel → ID 0 + payload
+//! enc.encode::<u32, DefaultDedupeHasher>(&2000, &mut buffer).unwrap(); // primed: 1-byte ID
+//! enc.encode::<u32, DefaultDedupeHasher>(&99_999, &mut buffer).unwrap(); // novel: ID 0 + payload
 //!
 //! // 4. Between "slots", clear() resets scratch but keeps frozen.
 //! enc.clear();
@@ -87,20 +87,22 @@ use crate::prelude::*;
 const DEFAULT_INITIAL_CAPACITY: usize = 128;
 const DEFAULT_NUM_TYPES: usize = 4;
 
-#[derive(Clone, Copy)]
-enum DedupeIdEncoding {
+/// Integer codec used for deduplication IDs.
+///
+/// Encoder and decoder must use the same codec for a given frame. Existing
+/// constructors use [`Self::Lencode`]; alternate codecs must be selected
+/// explicitly and identified by the containing wire format.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DedupeIdCodec {
+    /// Lencode's native length-prefixed little-endian varint.
     Lencode,
-    #[cfg_attr(not(feature = "solana-types"), allow(dead_code))]
-    Leb128,
+    /// Canonical unsigned LEB128.
+    UnsignedLeb128,
 }
 
 #[inline(always)]
-fn encode_dedupe_id(
-    encoding: DedupeIdEncoding,
-    id: usize,
-    writer: &mut impl Write,
-) -> Result<usize> {
-    if matches!(encoding, DedupeIdEncoding::Lencode) {
+fn encode_dedupe_id(codec: DedupeIdCodec, id: usize, writer: &mut impl Write) -> Result<usize> {
+    if matches!(codec, DedupeIdCodec::Lencode) {
         return Lencode::encode_varint_u64(id as u64, writer);
     }
 
@@ -118,6 +120,65 @@ fn encode_dedupe_id(
     }
     writer.write(&bytes[..len])?;
     Ok(len)
+}
+
+/// Decodes one canonical unsigned-LEB128 `usize`.
+///
+/// The parser accepts at most `ceil(usize::BITS / 7)` bytes, rejects values
+/// that overflow `usize`, and rejects non-minimal encodings. When the reader
+/// exposes a contiguous buffer, failures leave its position unchanged.
+#[inline(always)]
+pub(crate) fn decode_unsigned_leb128_usize(reader: &mut impl Read) -> Result<usize> {
+    const MAX_BYTES: usize = (usize::BITS as usize).div_ceil(7);
+
+    if let Some(input) = reader.buf() {
+        let mut value = 0usize;
+        for index in 0..MAX_BYTES {
+            let byte = *input.get(index).ok_or(Error::ReaderOutOfData)?;
+            let shift = index * 7;
+            let payload = usize::from(byte & 0x7f);
+            if payload > usize::MAX >> shift {
+                return Err(Error::DecodeLimitExceeded);
+            }
+            value |= payload << shift;
+            if byte & 0x80 == 0 {
+                if index != 0 && payload == 0 {
+                    return Err(Error::InvalidData);
+                }
+                reader.advance(index + 1);
+                return Ok(value);
+            }
+        }
+        return Err(Error::DecodeLimitExceeded);
+    }
+
+    let mut value = 0usize;
+    for index in 0..MAX_BYTES {
+        let mut byte = [0u8; 1];
+        crate::io::read_exact_bytes(reader, &mut byte)?;
+        let shift = index * 7;
+        let payload = usize::from(byte[0] & 0x7f);
+        if payload > usize::MAX >> shift {
+            return Err(Error::DecodeLimitExceeded);
+        }
+        value |= payload << shift;
+        if byte[0] & 0x80 == 0 {
+            if index != 0 && payload == 0 {
+                return Err(Error::InvalidData);
+            }
+            return Ok(value);
+        }
+    }
+    Err(Error::DecodeLimitExceeded)
+}
+
+#[inline(always)]
+fn decode_dedupe_id(codec: DedupeIdCodec, reader: &mut impl Read) -> Result<usize> {
+    match codec {
+        DedupeIdCodec::Lencode => usize::try_from(Lencode::decode_varint_u64(reader)?)
+            .map_err(|_| Error::DecodeLimitExceeded),
+        DedupeIdCodec::UnsignedLeb128 => decode_unsigned_leb128_usize(reader),
+    }
 }
 
 trait TypedVecStore: Any + Send + Sync {
@@ -171,7 +232,7 @@ fn clear_type_store<T: 'static, S: 'static>(store: &mut (dyn Any + Send + Sync))
 ///
 /// Built by calling [`DedupeEncoder::freeze`] on an encoder that has been
 /// populated via [`DedupeEncoder::prime`]. Wrap in [`Arc`] to share across
-/// many encoder instances — each new encoder created via
+/// many encoder instances. Each new encoder created via
 /// [`DedupeEncoder::with_frozen`] looks up values in this shared state
 /// *before* its own scratch layer, paying zero per-instance setup cost.
 pub struct FrozenEncoderState {
@@ -334,7 +395,7 @@ pub struct DedupeEncoder {
     // branch-free.
     frozen_total_primed: usize,
     // Per-type hashmaps stored as a small Vec for linear-search lookup by TypeId.
-    // Typical workloads use 1–4 types, where a linear scan over a Vec is
+    // Typical workloads use one to four types, where a linear scan over a Vec is
     // significantly faster than hashing a TypeId through a HashMap.
     // Contains scratch (non-frozen) values only.
     type_stores: Vec<TypeStore>,
@@ -342,7 +403,7 @@ pub struct DedupeEncoder {
     // `frozen.total_primed + 1` when frozen.
     next_id: usize,
     initial_capacity: usize,
-    id_encoding: DedupeIdEncoding,
+    id_codec: DedupeIdCodec,
 }
 
 impl Default for DedupeEncoder {
@@ -362,7 +423,7 @@ impl DedupeEncoder {
             type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
             next_id: 1, // Start at 1 to match decoder
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
-            id_encoding: DedupeIdEncoding::Lencode,
+            id_codec: DedupeIdCodec::Lencode,
         }
     }
 
@@ -378,7 +439,7 @@ impl DedupeEncoder {
             type_stores: Vec::with_capacity(num_types),
             next_id: 1,
             initial_capacity,
-            id_encoding: DedupeIdEncoding::Lencode,
+            id_codec: DedupeIdCodec::Lencode,
         }
     }
 
@@ -386,7 +447,7 @@ impl DedupeEncoder {
     ///
     /// The encoder's lookup path checks the frozen state first, then its own
     /// scratch layer. Novel values are assigned IDs starting after the frozen
-    /// range, and [`Self::clear`] resets only the scratch layer — the frozen
+    /// range, and [`Self::clear`] resets only the scratch layer. The frozen
     /// state is untouched.
     ///
     /// Build the frozen state once at program startup by calling
@@ -394,6 +455,16 @@ impl DedupeEncoder {
     /// [`Arc`] across as many worker encoders as you need.
     #[inline(always)]
     pub fn with_frozen(frozen: Arc<FrozenEncoderState>) -> Self {
+        Self::with_frozen_codec(frozen, DedupeIdCodec::Lencode)
+    }
+
+    /// Creates an encoder backed by frozen state using an explicit ID codec.
+    ///
+    /// The paired decoder must be constructed with
+    /// [`DedupeDecoder::with_frozen_codec`] and the same `codec`. The codec is
+    /// not self-describing; the containing wire format must identify it.
+    #[inline(always)]
+    pub fn with_frozen_codec(frozen: Arc<FrozenEncoderState>, codec: DedupeIdCodec) -> Self {
         let total_primed = frozen.total_primed;
         Self {
             frozen: Some(frozen),
@@ -401,16 +472,8 @@ impl DedupeEncoder {
             type_stores: Vec::with_capacity(DEFAULT_NUM_TYPES),
             next_id: total_primed + 1,
             initial_capacity: DEFAULT_INITIAL_CAPACITY,
-            id_encoding: DedupeIdEncoding::Lencode,
+            id_codec: codec,
         }
-    }
-
-    #[inline(always)]
-    #[cfg(feature = "solana-types")]
-    pub(crate) fn with_frozen_leb128(frozen: Arc<FrozenEncoderState>) -> Self {
-        let mut encoder = Self::with_frozen(frozen);
-        encoder.id_encoding = DedupeIdEncoding::Leb128;
-        encoder
     }
 
     /// Consumes this encoder and produces an immutable snapshot suitable for
@@ -418,7 +481,7 @@ impl DedupeEncoder {
     ///
     /// Call this after priming a fresh encoder via [`Self::prime`]. Values
     /// added via [`Self::encode`] are captured into the snapshot too, which
-    /// is usually not what you want — prime before freezing.
+    /// is usually not what you want; prime before freezing.
     ///
     /// # Panics
     ///
@@ -592,17 +655,17 @@ impl DedupeEncoder {
                 .iter()
                 .find(|store| store.type_id == type_id && store.hasher_type_id == hasher_type_id)
         {
-            // SAFETY: same invariant as in scratch path — slot was inserted as
+            // SAFETY: same invariant as in the scratch path. The slot was inserted as
             // HashMap<T, usize, S>.
             let typed_store: &HashMap<T, usize, S> = unsafe {
                 &*(&*store.values as *const (dyn Any + Send + Sync) as *const HashMap<T, usize, S>)
             };
             if let Some(&existing_id) = typed_store.get(val) {
-                return encode_dedupe_id(self.id_encoding, existing_id, writer);
+                return encode_dedupe_id(self.id_codec, existing_id, writer);
             }
         }
 
-        // Linear scan for the type-specific scratch store. For the typical 1–4 types
+        // Linear scan for the type-specific scratch store. For the typical one to four types
         // this is faster than hashing a TypeId through a HashMap.
         let store = match self
             .type_stores
@@ -639,7 +702,7 @@ impl DedupeEncoder {
         // Check if we've already seen this value in scratch
         if let Some(&existing_id) = typed_store.get(val) {
             // Value has been seen before, encode its ID
-            return encode_dedupe_id(self.id_encoding, existing_id, writer);
+            return encode_dedupe_id(self.id_codec, existing_id, writer);
         }
 
         // New value - assign an ID and store it
@@ -651,7 +714,7 @@ impl DedupeEncoder {
 
         // Encode as new value (ID 0 followed by the actual value)
         let mut total_bytes = 0;
-        total_bytes += encode_dedupe_id(self.id_encoding, 0, writer)?; // Special ID for new values
+        total_bytes += encode_dedupe_id(self.id_codec, 0, writer)?; // Special ID for new values
         total_bytes += val.pack(writer)?;
         Ok(total_bytes)
     }
@@ -717,16 +780,16 @@ impl DedupeEncoder {
             .downcast_mut::<HashMap<T, usize, S>>()
             .expect("typed scratch map must match its TypeId");
         let next_id = &mut self.next_id;
-        let id_encoding = self.id_encoding;
+        let id_codec = self.id_codec;
 
         let mut total_bytes = 0;
         for value in values {
             if let Some(existing_id) = frozen_store.and_then(|store| store.get(value)).copied() {
-                total_bytes += encode_dedupe_id(id_encoding, existing_id, writer)?;
+                total_bytes += encode_dedupe_id(id_codec, existing_id, writer)?;
                 continue;
             }
             if let Some(existing_id) = scratch_store.get(value).copied() {
-                total_bytes += encode_dedupe_id(id_encoding, existing_id, writer)?;
+                total_bytes += encode_dedupe_id(id_codec, existing_id, writer)?;
                 continue;
             }
 
@@ -734,7 +797,7 @@ impl DedupeEncoder {
             let new_id = *next_id;
             *next_id += 1;
             scratch_store.insert(value.clone(), new_id);
-            total_bytes += encode_dedupe_id(id_encoding, 0, writer)?;
+            total_bytes += encode_dedupe_id(id_codec, 0, writer)?;
             total_bytes += value.pack(writer)?;
         }
         Ok(total_bytes)
@@ -745,7 +808,7 @@ impl DedupeEncoder {
     ///
     /// Priming lets encoder and decoder agree on a set of "known" values up
     /// front, so subsequent [`encode`](Self::encode) calls for those values
-    /// emit only their compact ID — the full value is never placed on the
+    /// emit only their compact ID; the full value is never placed on the
     /// wire. The caller is responsible for calling the matching
     /// [`DedupeDecoder::prime`] with the exact same sequence of values on the
     /// decode side so IDs line up.
@@ -758,7 +821,7 @@ impl DedupeEncoder {
     ///
     /// Panics if called on an encoder that was constructed via
     /// [`Self::with_frozen`]. Priming is intended to be done up-front on a
-    /// fresh encoder before calling [`Self::freeze`] — once a frozen state
+    /// fresh encoder before calling [`Self::freeze`]. Once a frozen state
     /// exists, subsequent primes would collide with the existing ID range.
     #[inline]
     pub fn prime<T, S>(&mut self, val: &T) -> usize
@@ -838,6 +901,8 @@ pub struct DedupeDecoder {
     boxed_values: Vec<Box<dyn Any + Send + Sync>>,
     // Count of values in the scratch layer only.
     scratch_count: usize,
+    // Integer codec used for IDs in this decoder's stream.
+    id_codec: DedupeIdCodec,
 }
 
 impl Default for DedupeDecoder {
@@ -868,6 +933,7 @@ impl DedupeDecoder {
             typed_vec: None,
             boxed_values: Vec::new(),
             scratch_count: 0,
+            id_codec: DedupeIdCodec::Lencode,
         }
     }
 
@@ -881,6 +947,7 @@ impl DedupeDecoder {
             typed_vec: None,
             boxed_values: Vec::new(),
             scratch_count: 0,
+            id_codec: DedupeIdCodec::Lencode,
         }
     }
 
@@ -891,6 +958,17 @@ impl DedupeDecoder {
     /// [`Self::clear`] resets only the scratch layer.
     #[inline(always)]
     pub fn with_frozen(frozen: Arc<FrozenDecoderState>) -> Self {
+        Self::with_frozen_codec(frozen, DedupeIdCodec::Lencode)
+    }
+
+    /// Creates a decoder backed by frozen state using an explicit ID codec.
+    ///
+    /// The paired encoder must be constructed with
+    /// [`DedupeEncoder::with_frozen_codec`] and the same `codec`. Unknown,
+    /// overflowing, and non-canonical IDs are rejected before values are added
+    /// to scratch state.
+    #[inline(always)]
+    pub fn with_frozen_codec(frozen: Arc<FrozenDecoderState>, codec: DedupeIdCodec) -> Self {
         let frozen_total_primed = frozen.total_primed;
         Self {
             frozen: Some(frozen),
@@ -898,6 +976,7 @@ impl DedupeDecoder {
             typed_vec: None,
             boxed_values: Vec::new(),
             scratch_count: 0,
+            id_codec: codec,
         }
     }
 
@@ -982,8 +1061,7 @@ impl DedupeDecoder {
         &mut self,
         reader: &mut impl Read,
     ) -> Result<T> {
-        let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
-            .map_err(|_| crate::io::Error::DecodeLimitExceeded)?;
+        let id = decode_dedupe_id(self.id_codec, reader)?;
         let type_id = TypeId::of::<T>();
         let total_primed = self.frozen_total_primed;
 
@@ -1054,8 +1132,7 @@ impl DedupeDecoder {
         &'a mut self,
         reader: &mut impl Read,
     ) -> Result<&'a T> {
-        let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
-            .map_err(|_| crate::io::Error::DecodeLimitExceeded)?;
+        let id = decode_dedupe_id(self.id_codec, reader)?;
         let type_id = TypeId::of::<T>();
         let total_primed = self.frozen_total_primed;
 
@@ -1172,6 +1249,7 @@ impl DedupeDecoder {
         }
 
         let total_primed = self.frozen_total_primed;
+        let id_codec = self.id_codec;
         let frozen_vec = if total_primed == 0 {
             None
         } else {
@@ -1202,8 +1280,7 @@ impl DedupeDecoder {
 
         let mut values = Vec::with_capacity(count);
         for _ in 0..count {
-            let id = usize::try_from(Lencode::decode_varint_u64(reader)?)
-                .map_err(|_| crate::io::Error::DecodeLimitExceeded)?;
+            let id = decode_dedupe_id(id_codec, reader)?;
             if id != 0 && id <= total_primed {
                 let value = frozen_vec
                     .and_then(|vec| vec.get(id - 1))
@@ -1378,6 +1455,214 @@ mod tests {
 
     impl DedupeDecodeable for OtherBulkValue {
         type Hasher = H;
+    }
+
+    fn frozen_bulk_states(count: u32) -> (Arc<FrozenEncoderState>, Arc<FrozenDecoderState>) {
+        let mut encoder = DedupeEncoder::new();
+        let mut decoder = DedupeDecoder::new();
+        for value in 0..count {
+            let value = BulkValue(value);
+            encoder.prime::<BulkValue, H>(&value);
+            decoder.prime(value);
+        }
+        (Arc::new(encoder.freeze()), Arc::new(decoder.freeze()))
+    }
+
+    #[test]
+    fn unsigned_leb128_thresholds_are_canonical() {
+        let cases: &[(usize, &[u8])] = &[
+            (0, &[0x00]),
+            (1, &[0x01]),
+            (127, &[0x7f]),
+            (128, &[0x80, 0x01]),
+            (255, &[0xff, 0x01]),
+            (256, &[0x80, 0x02]),
+            (16_383, &[0xff, 0x7f]),
+            (16_384, &[0x80, 0x80, 0x01]),
+            (65_535, &[0xff, 0xff, 0x03]),
+            (65_536, &[0x80, 0x80, 0x04]),
+        ];
+
+        for &(value, expected) in cases {
+            let mut encoded = Vec::new();
+            assert_eq!(
+                encode_dedupe_id(DedupeIdCodec::UnsignedLeb128, value, &mut encoded).unwrap(),
+                expected.len()
+            );
+            assert_eq!(encoded, expected, "value {value}");
+
+            let mut reader = Cursor::new(encoded.as_slice());
+            assert_eq!(decode_unsigned_leb128_usize(&mut reader).unwrap(), value);
+            assert_eq!(reader.position(), encoded.len());
+        }
+
+        let mut encoded_max = Vec::new();
+        encode_dedupe_id(DedupeIdCodec::UnsignedLeb128, usize::MAX, &mut encoded_max).unwrap();
+        assert_eq!(encoded_max.len(), (usize::BITS as usize).div_ceil(7));
+        let mut reader = Cursor::new(encoded_max.as_slice());
+        assert_eq!(
+            decode_unsigned_leb128_usize(&mut reader).unwrap(),
+            usize::MAX
+        );
+        assert_eq!(reader.position(), encoded_max.len());
+    }
+
+    #[test]
+    fn unsigned_leb128_rejects_malformed_values_without_advancing_cursor() {
+        let max_bytes = (usize::BITS as usize).div_ceil(7);
+        let final_shift = (max_bytes - 1) * 7;
+        let max_final_payload = (usize::MAX >> final_shift) as u8;
+        let mut overflowing = vec![0x80; max_bytes];
+        overflowing[max_bytes - 1] = max_final_payload + 1;
+        let too_long = vec![0x80; max_bytes + 1];
+
+        let malformed = [
+            Vec::new(),
+            vec![0x80],
+            vec![0x80, 0x00],
+            vec![0x81, 0x00],
+            vec![0xff, 0x00],
+            overflowing,
+            too_long,
+        ];
+        for input in malformed {
+            let mut reader = Cursor::new(input.as_slice());
+            assert!(
+                decode_unsigned_leb128_usize(&mut reader).is_err(),
+                "accepted {input:02x?}"
+            );
+            assert_eq!(reader.position(), 0, "advanced for {input:02x?}");
+        }
+    }
+
+    #[test]
+    fn unsigned_leb128_arbitrary_inputs_never_decode_noncanonical_prefixes() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        for sample in 0..20_000usize {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let len = sample % 13;
+            let mut input = vec![0u8; len];
+            for byte in &mut input {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                *byte = state as u8;
+            }
+
+            let mut reader = Cursor::new(input.as_slice());
+            if let Ok(value) = decode_unsigned_leb128_usize(&mut reader) {
+                let mut canonical = Vec::new();
+                encode_dedupe_id(DedupeIdCodec::UnsignedLeb128, value, &mut canonical).unwrap();
+                assert_eq!(canonical, input[..reader.position()]);
+            } else {
+                assert_eq!(reader.position(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn frozen_unsigned_leb128_codec_covers_all_generic_decode_paths() {
+        let (frozen_encoder, frozen_decoder) = frozen_bulk_states(300);
+        let mut encoder =
+            DedupeEncoder::with_frozen_codec(frozen_encoder, DedupeIdCodec::UnsignedLeb128);
+        let mut decoder = DedupeDecoder::with_frozen_codec(
+            Arc::clone(&frozen_decoder),
+            DedupeIdCodec::UnsignedLeb128,
+        );
+
+        // Owned decode of frozen IDs around both one- and two-byte cutoffs.
+        let frozen_values = [BulkValue(0), BulkValue(126), BulkValue(127), BulkValue(299)];
+        let mut encoded = Vec::new();
+        for value in &frozen_values {
+            encoder.encode::<BulkValue, H>(value, &mut encoded).unwrap();
+        }
+        let mut reader = Cursor::new(encoded.as_slice());
+        for expected in &frozen_values {
+            assert_eq!(decoder.decode::<BulkValue>(&mut reader).unwrap(), *expected);
+        }
+        assert_eq!(reader.position(), encoded.len());
+
+        // Borrowed decode returns a reference to frozen storage.
+        let mut encoded_ref = Vec::new();
+        encoder
+            .encode::<BulkValue, H>(&BulkValue(255), &mut encoded_ref)
+            .unwrap();
+        let mut ref_reader = Cursor::new(encoded_ref.as_slice());
+        assert_eq!(
+            decoder.decode_ref::<BulkValue>(&mut ref_reader).unwrap(),
+            &BulkValue(255)
+        );
+
+        // Seed one novel value so decode_many takes its homogeneous fast path,
+        // then mix scratch and frozen references in one batch.
+        let novel = BulkValue(10_000);
+        let mut seed = Vec::new();
+        encoder.encode::<BulkValue, H>(&novel, &mut seed).unwrap();
+        let mut seed_reader = Cursor::new(seed.as_slice());
+        assert_eq!(
+            decoder.decode::<BulkValue>(&mut seed_reader).unwrap(),
+            novel
+        );
+
+        let batch = [novel.clone(), BulkValue(1), novel.clone(), BulkValue(299)];
+        let mut batch_bytes = Vec::new();
+        for value in &batch {
+            encoder
+                .encode::<BulkValue, H>(value, &mut batch_bytes)
+                .unwrap();
+        }
+        let mut batch_reader = Cursor::new(batch_bytes.as_slice());
+        assert_eq!(
+            decoder
+                .decode_many::<BulkValue>(&mut batch_reader, batch.len())
+                .unwrap(),
+            batch
+        );
+        assert_eq!(batch_reader.position(), batch_bytes.len());
+
+        // A non-canonical ID fails before adding anything to scratch state.
+        let mut rejecting =
+            DedupeDecoder::with_frozen_codec(frozen_decoder, DedupeIdCodec::UnsignedLeb128);
+        let initial_len = rejecting.len();
+        let mut malformed = Cursor::new(&[0x80, 0x00][..]);
+        assert!(rejecting.decode::<BulkValue>(&mut malformed).is_err());
+        assert_eq!(rejecting.len(), initial_len);
+        assert_eq!(malformed.position(), 0);
+
+        // A canonical reference to the next scratch ID is still invalid until
+        // a novel value (ID 0 + payload) introduces it.
+        let mut forward_id = Vec::new();
+        encode_dedupe_id(
+            DedupeIdCodec::UnsignedLeb128,
+            initial_len + 1,
+            &mut forward_id,
+        )
+        .unwrap();
+        let mut forward_reader = Cursor::new(forward_id.as_slice());
+        assert!(rejecting.decode::<BulkValue>(&mut forward_reader).is_err());
+        assert_eq!(rejecting.len(), initial_len);
+        assert_eq!(forward_reader.position(), forward_id.len());
+    }
+
+    #[test]
+    fn native_id_128_is_not_accepted_as_unsigned_leb128() {
+        let (frozen_encoder, frozen_decoder) = frozen_bulk_states(128);
+        let mut native = DedupeEncoder::with_frozen_codec(frozen_encoder, DedupeIdCodec::Lencode);
+        let mut bytes = Vec::new();
+        native
+            .encode::<BulkValue, H>(&BulkValue(127), &mut bytes)
+            .unwrap();
+        assert_eq!(bytes, [0x81, 0x80]); // Native lencode ID 128.
+
+        let mut leb128 =
+            DedupeDecoder::with_frozen_codec(frozen_decoder, DedupeIdCodec::UnsignedLeb128);
+        let initial_len = leb128.len();
+        let mut reader = Cursor::new(bytes.as_slice());
+        assert!(leb128.decode::<BulkValue>(&mut reader).is_err());
+        assert_eq!(leb128.len(), initial_len);
+        assert_eq!(reader.position(), 0);
     }
 
     #[test]
@@ -1752,7 +2037,7 @@ mod tests {
 
     #[test]
     fn test_prime_writes_nothing() {
-        // prime() has no writer argument — this test just asserts that primed
+        // `prime()` has no writer argument; this test only asserts that primed
         // values don't affect any output by confirming a subsequent encode()
         // call is the *only* thing written when the encoded value was primed.
         let mut encoder = DedupeEncoder::new();
@@ -1761,7 +2046,7 @@ mod tests {
 
         let mut buffer = Vec::new();
         encoder.encode::<u32, H>(&42, &mut buffer).unwrap();
-        // Primed value → emits just the varint ID (1 byte for id=1)
+        // A primed value emits only the varint ID (one byte for ID 1).
         assert_eq!(buffer, vec![1]);
 
         buffer.clear();

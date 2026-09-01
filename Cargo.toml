@@ -1,6 +1,6 @@
 [workspace]
 members = ["macros", "."]
-package.version = "1.2.1"
+package.version = "2.0.0"
 package.rust-version = "1.98.0"
 
 [package]
@@ -14,6 +14,15 @@ keywords = ["encoding", "decoding", "bincode", "varint", "serde"]
 authors = ["sam0x17"]
 repository = "https://github.com/sam0x17/lencode"
 documentation = "https://docs.rs/lencode/latest/lencode/"
+exclude = [
+    ".cargo/",
+    ".github/",
+    ".optimizer-baseline.json",
+    ".vscode/",
+    "Cross.toml",
+    "comparison.sh",
+    "comparison_varint.sh",
+]
 
 [dependencies]
 endian-cast = "2"
@@ -25,15 +34,16 @@ solana-transaction-status = { version = "4.3.0-beta.2", optional = true, feature
 solana-transaction-context = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
 solana-transaction-error = { version = "3.4.0", optional = true }
 solana-instruction = { version = "3.5.0", optional = true }
-solana-hash = { version = "4.6.0", optional = true }
-solana-signature = { version = "3.5.2", optional = true }
+solana-address = { version = "1", optional = true }
+solana-hash = { version = "4", optional = true }
+solana-signature = { version = "3", optional = true }
 solana-pubkey = { version = "4.3.0", optional = true, features = ["rand"] }
 solana-sha256-hasher = { version = "3.1.0", optional = true, features = ["sha2"] }
 solana-reward-info = { version = "6.3.0", optional = true }
 solana-account-decoder-client-types = { version = "4.3.0-beta.2", optional = true, features = ["agave-unstable-api"] }
 ruint = { version = "1", default-features = false}
 newt-hype = { version = "0", default-features = false }
-hashbrown = "0"
+hashbrown = "0.16"
 ahash = { version = "0.8", default-features = false, features = ["compile-time-rng"] }
 smallbox = { version = "0.8", default-features = false }
 zstd-safe = { version = "7", default-features = false }
@@ -41,7 +51,7 @@ bytes = { version = "1", optional = true }
 lz4 = { version = "1.28", optional = true }
 lz4-sys = { version = "1.11.1", optional = true }
 
-lencode-macros = { path = "macros", version = "1.2.0" }
+lencode-macros = { path = "macros", version = "2.0.0" }
 
 # Serialization helpers: keep bincode only for benches/examples
 bincode = { version = "2", features = ["serde"], optional = true }
@@ -49,7 +59,7 @@ bincode = { version = "2", features = ["serde"], optional = true }
 [dev-dependencies]
 rayon = "1"
 rand = "0.10"
-criterion = { git = "https://github.com/sam0x17/criterion.rs", features = ["html_reports"] }
+criterion = { version = "0.7", git = "https://github.com/sam0x17/criterion.rs", features = ["html_reports"] }
 borsh = { version = ">= 1.5", features = ["derive"] }
 bincode = { version = "2", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
@@ -65,6 +75,12 @@ solana-transaction = { version = "4.3.0", features = ["wincode"] }
 default = []
 std = ["ruint/std"]
 comparison-bench = []
+solana-primitives = [
+    "std",
+    "dep:solana-address",
+    "dep:solana-hash",
+    "dep:solana-signature",
+]
 solana-types = [
     "std",
     "dep:bytes",
@@ -103,6 +119,9 @@ lto = true
 
 [lints.clippy]
 missing_const_for_fn = "warn"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [workspace.lints.clippy]
 missing_const_for_fn = "warn"

@@ -7,7 +7,7 @@ license = "MIT"
 authors = ["sam0x17"]
 description = "support macros for lencode"
 repository = "https://github.com/sam0x17/lencode"
-documentation = "https://docs.rs/lencode/latest"
+documentation = "https://docs.rs/lencode-macros/latest/lencode_macros/"
 
 [lib]
 proc-macro = true

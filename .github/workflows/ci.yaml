@@ -24,6 +24,16 @@ jobs:
         uses: actions/checkout@v4
       - name: cargo test
         run: cargo test --workspace --all-features
+  cargo-test-feature-matrix:
+    name: cargo test (feature matrix)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Lightweight Solana primitives
+        run: cargo test --workspace --features solana-primitives
+      - name: Reference Solana transaction types
+        run: cargo test --workspace --features solana-types
   cargo-fmt:
     name: cargo fmt
     runs-on: ubuntu-latest

@@ -91,7 +91,9 @@ impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
     fn unpack(reader: &mut impl Read) -> Result<Self> {
         // Fast path: bulk copy for u8 arrays
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
-            let mut arr: core::mem::MaybeUninit<[T; N]> = core::mem::MaybeUninit::uninit();
+            // This branch is reachable only for T == u8, so zero is a valid
+            // initialized representation for the streaming destination.
+            let mut arr: core::mem::MaybeUninit<[T; N]> = core::mem::MaybeUninit::zeroed();
             if let Some(buf) = reader.buf() {
                 if buf.len() >= N {
                     unsafe {
@@ -108,10 +110,7 @@ impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
             }
             // Fallback: read through the trait
             let dst = unsafe { core::slice::from_raw_parts_mut(arr.as_mut_ptr() as *mut u8, N) };
-            let mut read = 0;
-            while read < N {
-                read += reader.read(&mut dst[read..])?;
-            }
+            crate::io::read_exact_bytes(reader, dst)?;
             return Ok(unsafe { arr.assume_init() });
         }
 
@@ -143,7 +142,7 @@ impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
     #[inline(always)]
     fn unpack_vec(reader: &mut impl Read, count: usize) -> Result<Vec<Self>> {
         if core::any::TypeId::of::<T>() == core::any::TypeId::of::<u8>() {
-            let total = N * count;
+            let total = N.checked_mul(count).ok_or(Error::DecodeLimitExceeded)?;
             if let Some(buf) = reader.buf() {
                 if buf.len() >= total {
                     let mut vec: Vec<Self> = Vec::with_capacity(count);
@@ -162,13 +161,15 @@ impl<const N: usize, T: Pack + 'static> Pack for [T; N] {
             }
             // Fallback: read through trait
             let mut vec: Vec<Self> = Vec::with_capacity(count);
+            // T == u8 in this branch, so initialize every byte before lending
+            // the allocation to an arbitrary reader.
+            unsafe {
+                core::ptr::write_bytes(vec.as_mut_ptr().cast::<u8>(), 0, total);
+                vec.set_len(count);
+            }
             let dst =
                 unsafe { core::slice::from_raw_parts_mut(vec.as_mut_ptr() as *mut u8, total) };
-            let mut read = 0;
-            while read < total {
-                read += reader.read(&mut dst[read..])?;
-            }
-            unsafe { vec.set_len(count) };
+            crate::io::read_exact_bytes(reader, dst)?;
             return Ok(vec);
         }
         let mut vec = Vec::with_capacity(count);
@@ -247,9 +248,17 @@ macro_rules! impl_pack_for_endianness_types {
                     }
                     // Fallback: copy through a stack buffer.
                     let mut tmp = [0u8; core::mem::size_of::<Self>()];
-                    let bytes_read = reader.read(&mut tmp[..])?;
-                    if bytes_read != size {
-                        return Err($crate::io::Error::ReaderOutOfData);
+                    let mut offset = 0usize;
+                    while offset < size {
+                        let remaining = size - offset;
+                        let bytes_read = reader.read(&mut tmp[offset..])?;
+                        if bytes_read == 0 {
+                            return Err($crate::io::Error::ReaderOutOfData);
+                        }
+                        if bytes_read > remaining {
+                            return Err($crate::io::Error::InvalidData);
+                        }
+                        offset += bytes_read;
                     }
                     let mut ret = core::mem::MaybeUninit::<Self>::uninit();
                     let dst = ret.as_mut_ptr() as *mut u8;
@@ -280,6 +289,30 @@ mod tests {
     use super::*;
     use crate::io::Cursor;
 
+    struct ChunkedReader<'a> {
+        input: &'a [u8],
+        position: usize,
+    }
+
+    impl Read for ChunkedReader<'_> {
+        fn read(&mut self, dest: &mut [u8]) -> Result<usize> {
+            if dest.is_empty() || self.position == self.input.len() {
+                return Ok(0);
+            }
+            dest[0] = self.input[self.position];
+            self.position += 1;
+            Ok(1)
+        }
+    }
+
+    struct OverreportReader;
+
+    impl Read for OverreportReader {
+        fn read(&mut self, dest: &mut [u8]) -> Result<usize> {
+            Ok(dest.len().saturating_add(1))
+        }
+    }
+
     #[test]
     fn test_macro_usage() {
         // Test that the macro was used correctly for built-in types
@@ -294,6 +327,34 @@ mod tests {
         let mut read_cursor = Cursor::new(&buffer[..]);
         let unpacked: u32 = u32::unpack(&mut read_cursor).unwrap();
         assert_eq!(unpacked, value);
+    }
+
+    #[test]
+    fn streaming_unpack_accepts_chunks_and_rejects_overreporting() {
+        let bytes = 0x1234_5678_9abc_def0u64.to_le_bytes();
+        let mut chunked = ChunkedReader {
+            input: &bytes,
+            position: 0,
+        };
+        assert_eq!(
+            u64::unpack(&mut chunked).unwrap(),
+            u64::from_le_bytes(bytes)
+        );
+
+        let mut chunked = ChunkedReader {
+            input: &[1, 2, 3, 4],
+            position: 0,
+        };
+        assert_eq!(<[u8; 4]>::unpack(&mut chunked).unwrap(), [1, 2, 3, 4]);
+
+        assert!(matches!(
+            u64::unpack(&mut OverreportReader),
+            Err(Error::InvalidData)
+        ));
+        assert!(matches!(
+            <[u8; 4]>::unpack(&mut OverreportReader),
+            Err(Error::InvalidData)
+        ));
     }
 }
 

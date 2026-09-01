@@ -31,6 +31,27 @@ fn from_le_bytes<I: UnsignedInteger>(le: &[u8]) -> I {
     val
 }
 
+/// Validates a length-prefixed native lencode header for a target width.
+#[inline(always)]
+fn decode_payload_len(first: u8, max_bytes: usize) -> Result<usize> {
+    let len = usize::from(first & 0x7f);
+    if first & 0x80 == 0 || len == 0 || len > max_bytes {
+        return Err(Error::InvalidData);
+    }
+    Ok(len)
+}
+
+/// Rejects redundant high zero bytes and values that belong in the one-byte
+/// small-integer representation.
+#[inline(always)]
+fn validate_canonical_payload(payload: &[u8]) -> Result<()> {
+    let &last = payload.last().ok_or(Error::InvalidData)?;
+    if last == 0 || (payload.len() == 1 && last <= 0x7f) {
+        return Err(Error::InvalidData);
+    }
+    Ok(())
+}
+
 /// The Lencode integer encoding scheme is designed to encode integers in a variable‑length
 /// format that is efficient for both small and large values both in terms of space and speed.
 ///
@@ -51,7 +72,7 @@ pub enum Lencode {}
 impl Lencode {
     #[inline(always)]
     pub(crate) fn encode_varint_u16(val: u16, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path — single upfront length check covers all cases
+        // One upfront length check covers every zero-copy case.
         if let Some(dst) = writer.buf_mut() {
             if dst.len() >= 3 {
                 if val <= 0x7F {
@@ -108,7 +129,7 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u32(val: u32, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path — single upfront length check covers all cases
+        // One upfront length check covers every zero-copy case.
         if let Some(dst) = writer.buf_mut() {
             if dst.len() >= 5 {
                 if val <= 0x7F {
@@ -165,7 +186,7 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u64(val: u64, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path — single upfront length check covers all cases
+        // One upfront length check covers every zero-copy case.
         if let Some(dst) = writer.buf_mut() {
             if dst.len() >= 9 {
                 if val <= 0x7F {
@@ -222,7 +243,7 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn encode_varint_u128(val: u128, writer: &mut impl Write) -> Result<usize> {
-        // Zero-copy fast path — single upfront length check covers all cases
+        // One upfront length check covers every zero-copy case.
         if let Some(dst) = writer.buf_mut() {
             if dst.len() >= 17 {
                 if val <= 0x7F {
@@ -309,180 +330,149 @@ impl Lencode {
 
     #[inline(always)]
     pub(crate) fn decode_varint_u16(reader: &mut impl Read) -> Result<u16> {
-        // Zero-copy fast path — single upfront length check
         if let Some(slice) = reader.buf() {
-            if slice.len() >= 3 {
-                let first = unsafe { *slice.get_unchecked(0) };
-                if first & 0x80 == 0 {
-                    reader.advance(1);
-                    return Ok(first as u16);
-                }
-                let n = (first & 0x7F) as usize;
+            let first = *slice.first().ok_or(Error::ReaderOutOfData)?;
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(u16::from(first));
+            }
+            let n = decode_payload_len(first, 2)?;
+            let payload = slice.get(1..1 + n).ok_or(Error::ReaderOutOfData)?;
+            validate_canonical_payload(payload)?;
+
+            let value = if slice.len() >= 3 {
                 let raw =
                     u16::from_le(unsafe { (slice.as_ptr().add(1) as *const u16).read_unaligned() });
-                let val = if n < 2 {
+                if n < 2 {
                     raw & ((1u16 << (n << 3)) - 1)
                 } else {
                     raw
-                };
-                reader.advance(1 + n);
-                return Ok(val);
-            }
-            // Short buffer path
-            if slice.is_empty() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let first = unsafe { *slice.get_unchecked(0) };
-            if first & 0x80 == 0 {
-                reader.advance(1);
-                return Ok(first as u16);
-            }
-            let n = (first & 0x7F) as usize;
-            if 1 + n > slice.len() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let mut bytes = [0u8; 2];
-            unsafe {
-                core::ptr::copy_nonoverlapping(slice.as_ptr().add(1), bytes.as_mut_ptr(), n);
-            }
+                }
+            } else {
+                let mut bytes = [0u8; 2];
+                bytes[..n].copy_from_slice(payload);
+                u16::from_le_bytes(bytes)
+            };
             reader.advance(1 + n);
-            return Ok(u16::from_le_bytes(bytes));
+            return Ok(value);
         }
-        // Fallback
-        let mut first = 0u8;
-        reader.read(core::slice::from_mut(&mut first))?;
+
+        let mut first = [0u8; 1];
+        crate::io::read_exact_bytes(reader, &mut first)?;
+        let first = first[0];
         if first & 0x80 == 0 {
-            return Ok(first as u16);
+            return Ok(u16::from(first));
         }
-        let n = (first & 0x7F) as usize;
+        let n = decode_payload_len(first, 2)?;
         let mut bytes = [0u8; 2];
-        reader.read(&mut bytes[..n])?;
+        crate::io::read_exact_bytes(reader, &mut bytes[..n])?;
+        validate_canonical_payload(&bytes[..n])?;
         Ok(u16::from_le_bytes(bytes))
     }
 
     #[inline(always)]
     pub(crate) fn decode_varint_u32(reader: &mut impl Read) -> Result<u32> {
-        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(slice) = reader.buf() {
-            if slice.len() >= 5 {
-                let first = unsafe { *slice.get_unchecked(0) };
-                if first & 0x80 == 0 {
-                    reader.advance(1);
-                    return Ok(first as u32);
-                }
-                let n = (first & 0x7F) as usize;
+            let first = *slice.first().ok_or(Error::ReaderOutOfData)?;
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(u32::from(first));
+            }
+            let n = decode_payload_len(first, 4)?;
+            let payload = slice.get(1..1 + n).ok_or(Error::ReaderOutOfData)?;
+            validate_canonical_payload(payload)?;
+
+            let value = if slice.len() >= 5 {
                 let raw =
                     u32::from_le(unsafe { (slice.as_ptr().add(1) as *const u32).read_unaligned() });
-                let val = if n < 4 {
+                if n < 4 {
                     raw & ((1u32 << (n << 3)) - 1)
                 } else {
                     raw
-                };
-                reader.advance(1 + n);
-                return Ok(val);
-            }
-            // Short buffer path
-            if slice.is_empty() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let first = unsafe { *slice.get_unchecked(0) };
-            if first & 0x80 == 0 {
-                reader.advance(1);
-                return Ok(first as u32);
-            }
-            let n = (first & 0x7F) as usize;
-            if 1 + n > slice.len() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let mut bytes = [0u8; 4];
-            unsafe {
-                core::ptr::copy_nonoverlapping(slice.as_ptr().add(1), bytes.as_mut_ptr(), n);
-            }
+                }
+            } else {
+                let mut bytes = [0u8; 4];
+                bytes[..n].copy_from_slice(payload);
+                u32::from_le_bytes(bytes)
+            };
             reader.advance(1 + n);
-            return Ok(u32::from_le_bytes(bytes));
+            return Ok(value);
         }
-        // Fallback
-        let mut first = 0u8;
-        reader.read(core::slice::from_mut(&mut first))?;
+
+        let mut first = [0u8; 1];
+        crate::io::read_exact_bytes(reader, &mut first)?;
+        let first = first[0];
         if first & 0x80 == 0 {
-            return Ok(first as u32);
+            return Ok(u32::from(first));
         }
-        let n = (first & 0x7F) as usize;
+        let n = decode_payload_len(first, 4)?;
         let mut bytes = [0u8; 4];
-        reader.read(&mut bytes[..n])?;
+        crate::io::read_exact_bytes(reader, &mut bytes[..n])?;
+        validate_canonical_payload(&bytes[..n])?;
         Ok(u32::from_le_bytes(bytes))
     }
 
     #[inline(always)]
     pub(crate) fn decode_varint_u64(reader: &mut impl Read) -> Result<u64> {
-        // Zero-copy fast path — single upfront length check covers all cases
         if let Some(slice) = reader.buf() {
-            if slice.len() >= 9 {
-                let first = unsafe { *slice.get_unchecked(0) };
-                if first & 0x80 == 0 {
-                    reader.advance(1);
-                    return Ok(first as u64);
-                }
-                let n = (first & 0x7F) as usize;
+            let first = *slice.first().ok_or(Error::ReaderOutOfData)?;
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(u64::from(first));
+            }
+            let n = decode_payload_len(first, 8)?;
+            let payload = slice.get(1..1 + n).ok_or(Error::ReaderOutOfData)?;
+            validate_canonical_payload(payload)?;
+
+            let value = if slice.len() >= 9 {
                 let raw =
                     u64::from_le(unsafe { (slice.as_ptr().add(1) as *const u64).read_unaligned() });
-                let val = if n < 8 {
+                if n < 8 {
                     raw & ((1u64 << (n << 3)) - 1)
                 } else {
                     raw
-                };
-                reader.advance(1 + n);
-                return Ok(val);
-            }
-            // Short buffer path
-            if slice.is_empty() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let first = unsafe { *slice.get_unchecked(0) };
-            if first & 0x80 == 0 {
-                reader.advance(1);
-                return Ok(first as u64);
-            }
-            let n = (first & 0x7F) as usize;
-            if 1 + n > slice.len() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let mut bytes = [0u8; 8];
-            unsafe {
-                core::ptr::copy_nonoverlapping(slice.as_ptr().add(1), bytes.as_mut_ptr(), n);
-            }
+                }
+            } else {
+                let mut bytes = [0u8; 8];
+                bytes[..n].copy_from_slice(payload);
+                u64::from_le_bytes(bytes)
+            };
             reader.advance(1 + n);
-            return Ok(u64::from_le_bytes(bytes));
+            return Ok(value);
         }
-        // Fallback: 2-read path
-        let mut first = 0u8;
-        reader.read(core::slice::from_mut(&mut first))?;
+
+        let mut first = [0u8; 1];
+        crate::io::read_exact_bytes(reader, &mut first)?;
+        let first = first[0];
         if first & 0x80 == 0 {
-            return Ok(first as u64);
+            return Ok(u64::from(first));
         }
-        let n = (first & 0x7F) as usize;
+        let n = decode_payload_len(first, 8)?;
         let mut bytes = [0u8; 8];
-        reader.read(&mut bytes[..n])?;
+        crate::io::read_exact_bytes(reader, &mut bytes[..n])?;
+        validate_canonical_payload(&bytes[..n])?;
         Ok(u64::from_le_bytes(bytes))
     }
 
     #[inline(always)]
     pub(crate) fn decode_varint_u128(reader: &mut impl Read) -> Result<u128> {
-        // Zero-copy fast path — single upfront length check
         if let Some(slice) = reader.buf() {
-            if slice.len() >= 17 {
-                let first = unsafe { *slice.get_unchecked(0) };
-                if first & 0x80 == 0 {
-                    reader.advance(1);
-                    return Ok(first as u128);
-                }
-                let n = (first & 0x7F) as usize;
+            let first = *slice.first().ok_or(Error::ReaderOutOfData)?;
+            if first & 0x80 == 0 {
+                reader.advance(1);
+                return Ok(u128::from(first));
+            }
+            let n = decode_payload_len(first, 16)?;
+            let payload = slice.get(1..1 + n).ok_or(Error::ReaderOutOfData)?;
+            validate_canonical_payload(payload)?;
+
+            let value = if slice.len() >= 17 {
                 let ptr = unsafe { slice.as_ptr().add(1) };
                 let lo = unsafe { u64::from_le((ptr as *const u64).read_unaligned()) };
                 let hi = unsafe { u64::from_le((ptr.add(8) as *const u64).read_unaligned()) };
                 // Mask using u64 ops instead of u128 shifts. For the hot
                 // path (n=16, ~99.6% of random u128), no masking at all.
-                let val = if n >= 16 {
+                if n >= 16 {
                     (lo as u128) | ((hi as u128) << 64)
                 } else if n <= 8 {
                     let lo_masked = if n < 8 {
@@ -495,39 +485,26 @@ impl Lencode {
                     let hi_bytes = n - 8;
                     let hi_masked = hi & ((1u64 << (hi_bytes << 3)) - 1);
                     (lo as u128) | ((hi_masked as u128) << 64)
-                };
-                reader.advance(1 + n);
-                return Ok(val);
-            }
-            // Short buffer path
-            if slice.is_empty() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let first = unsafe { *slice.get_unchecked(0) };
-            if first & 0x80 == 0 {
-                reader.advance(1);
-                return Ok(first as u128);
-            }
-            let n = (first & 0x7F) as usize;
-            if 1 + n > slice.len() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let mut bytes = [0u8; 16];
-            unsafe {
-                core::ptr::copy_nonoverlapping(slice.as_ptr().add(1), bytes.as_mut_ptr(), n);
-            }
+                }
+            } else {
+                let mut bytes = [0u8; 16];
+                bytes[..n].copy_from_slice(payload);
+                u128::from_le_bytes(bytes)
+            };
             reader.advance(1 + n);
-            return Ok(u128::from_le_bytes(bytes));
+            return Ok(value);
         }
-        // Fallback: 2-read path
-        let mut first = 0u8;
-        reader.read(core::slice::from_mut(&mut first))?;
+
+        let mut first = [0u8; 1];
+        crate::io::read_exact_bytes(reader, &mut first)?;
+        let first = first[0];
         if first & 0x80 == 0 {
-            return Ok(first as u128);
+            return Ok(u128::from(first));
         }
-        let n = (first & 0x7F) as usize;
+        let n = decode_payload_len(first, 16)?;
         let mut bytes = [0u8; 16];
-        reader.read(&mut bytes[..n])?;
+        crate::io::read_exact_bytes(reader, &mut bytes[..n])?;
+        validate_canonical_payload(&bytes[..n])?;
         Ok(u128::from_le_bytes(bytes))
     }
 }
@@ -598,12 +575,13 @@ impl VarintEncodingScheme for Lencode {
 
     #[inline(always)]
     fn decode_varint<I: UnsignedInteger>(reader: &mut impl Read) -> Result<I> {
-        // Zero-copy fast path
+        let max_bytes = core::mem::size_of::<I>();
+        if max_bytes == 0 {
+            return Err(Error::InvalidData);
+        }
+
         if let Some(slice) = reader.buf() {
-            if slice.is_empty() {
-                return Err(Error::ReaderOutOfData);
-            }
-            let first = unsafe { *slice.get_unchecked(0) };
+            let first = *slice.first().ok_or(Error::ReaderOutOfData)?;
             if first & 0x80 == 0 {
                 reader.advance(1);
                 #[cfg(target_endian = "little")]
@@ -617,10 +595,10 @@ impl VarintEncodingScheme for Lencode {
                     return Ok(from_le_bytes::<I>(&[first]));
                 }
             }
-            let n = (first & 0x7F) as usize;
-            if 1 + n > slice.len() {
-                return Err(Error::ReaderOutOfData);
-            }
+            let n = decode_payload_len(first, max_bytes)?;
+            let payload = slice.get(1..1 + n).ok_or(Error::ReaderOutOfData)?;
+            validate_canonical_payload(payload)?;
+
             #[cfg(target_endian = "little")]
             {
                 let mut val = I::ZERO;
@@ -636,16 +614,15 @@ impl VarintEncodingScheme for Lencode {
             }
             #[cfg(target_endian = "big")]
             {
-                let mut buf = [0u8; 32];
-                unsafe {
-                    core::ptr::copy_nonoverlapping(slice.as_ptr().add(1), buf.as_mut_ptr(), n);
-                }
                 reader.advance(1 + n);
-                return Ok(from_le_bytes::<I>(&buf[..n]));
+                return Ok(from_le_bytes::<I>(payload));
             }
         }
 
-        // Fallback: 2-read path
+        let mut first = [0u8; 1];
+        crate::io::read_exact_bytes(reader, &mut first)?;
+        let first = first[0];
+
         #[cfg(target_endian = "little")]
         {
             let mut val: I = I::ZERO;
@@ -655,27 +632,26 @@ impl VarintEncodingScheme for Lencode {
                     core::mem::size_of::<I>(),
                 )
             };
-            reader.read(&mut val_bytes[..1])?;
-            let first = unsafe { *val_bytes.get_unchecked(0) };
             if first & 0x80 == 0 {
+                val_bytes[0] = first;
                 return Ok(val);
             }
-            let n = (first & 0x7F) as usize;
-            reader.read(&mut val_bytes[..n])?;
+            let n = decode_payload_len(first, max_bytes)?;
+            crate::io::read_exact_bytes(reader, &mut val_bytes[..n])?;
+            validate_canonical_payload(&val_bytes[..n])?;
             Ok(val)
         }
 
         #[cfg(target_endian = "big")]
         {
-            let mut first = 0u8;
-            reader.read(core::slice::from_mut(&mut first))?;
             if first & 0x80 == 0 {
                 return Ok(from_le_bytes::<I>(&[first]));
             }
-            let n = (first & 0x7F) as usize;
-            let mut buf = [0u8; 32];
-            reader.read(&mut buf[..n])?;
-            return Ok(from_le_bytes::<I>(&buf[..n]));
+            let n = decode_payload_len(first, max_bytes)?;
+            let mut bytes = I::ZERO.le_bytes();
+            crate::io::read_exact_bytes(reader, &mut bytes[..n])?;
+            validate_canonical_payload(&bytes[..n])?;
+            return Ok(from_le_bytes::<I>(&bytes[..n]));
         }
     }
 
@@ -707,7 +683,7 @@ impl VarintEncodingScheme for Lencode {
             return Ok(byte != 0);
         }
         let mut byte = 0u8;
-        reader.read(core::slice::from_mut(&mut byte))?;
+        crate::io::read_exact_bytes(reader, core::slice::from_mut(&mut byte))?;
         if byte > 1 {
             return Err(Error::InvalidData);
         }
@@ -750,7 +726,7 @@ impl Decode for u8 {
             return Ok(byte);
         }
         let mut buf = [0u8; 1];
-        reader.read(&mut buf)?;
+        crate::io::read_exact_bytes(reader, &mut buf)?;
         Ok(buf[0])
     }
 }
@@ -790,7 +766,7 @@ impl Decode for i8 {
             return Ok(byte as i8);
         }
         let mut buf = [0u8; 1];
-        reader.read(&mut buf)?;
+        crate::io::read_exact_bytes(reader, &mut buf)?;
         Ok(buf[0] as i8)
     }
 }
@@ -977,4 +953,253 @@ fn test_encode_decode_u256() {
         let decoded = Lencode::decode_varint::<U256>(&mut Cursor::new(&buf[..n])).unwrap();
         assert_eq!(decoded, val, "Failed for iteration {}", i);
     }
+}
+
+#[test]
+fn specialized_native_varints_preserve_canonical_boundaries() {
+    macro_rules! check {
+        ($ty:ty, $encode:ident, $decode:ident, [$($value:expr),+ $(,)?]) => {
+            $(
+                let value = $value as $ty;
+                let mut encoded = Vec::new();
+                Lencode::$encode(value, &mut encoded).unwrap();
+
+                let mut specialized = Cursor::new(encoded.as_slice());
+                assert_eq!(Lencode::$decode(&mut specialized).unwrap(), value);
+                assert_eq!(specialized.position(), encoded.len());
+
+                let mut generic = Cursor::new(encoded.as_slice());
+                assert_eq!(Lencode::decode_varint::<$ty>(&mut generic).unwrap(), value);
+                assert_eq!(generic.position(), encoded.len());
+            )+
+        };
+    }
+
+    check!(
+        u16,
+        encode_varint_u16,
+        decode_varint_u16,
+        [0, 1, 127, 128, 255, 256, u16::MAX]
+    );
+    check!(
+        u32,
+        encode_varint_u32,
+        decode_varint_u32,
+        [0, 1, 127, 128, 255, 256, 65_535, 65_536, u32::MAX]
+    );
+    check!(
+        u64,
+        encode_varint_u64,
+        decode_varint_u64,
+        [
+            0,
+            1,
+            127,
+            128,
+            255,
+            256,
+            65_535,
+            65_536,
+            1u64 << 32,
+            u64::MAX,
+        ]
+    );
+    check!(
+        u128,
+        encode_varint_u128,
+        decode_varint_u128,
+        [
+            0,
+            1,
+            127,
+            128,
+            255,
+            256,
+            65_535,
+            65_536,
+            1u128 << 64,
+            u128::MAX,
+        ]
+    );
+}
+
+#[cfg(test)]
+fn malformed_native_varints(max_bytes: usize) -> Vec<Vec<u8>> {
+    let mut oversized = vec![0x80 | (max_bytes as u8 + 1)];
+    oversized.extend(core::iter::repeat_n(1, max_bytes + 1));
+    let mut maximum_prefix = vec![0xff];
+    maximum_prefix.extend(core::iter::repeat_n(1, 127));
+    let mut truncated = vec![0x80 | max_bytes as u8];
+    truncated.extend(core::iter::repeat_n(1, max_bytes.saturating_sub(1)));
+
+    vec![
+        Vec::new(),
+        vec![0x80],          // Zero-length payload.
+        vec![0x81],          // Truncated one-byte payload.
+        vec![0x81, 0],       // Redundant high zero byte.
+        vec![0x81, 1],       // Value belongs in the small form.
+        vec![0x81, 127],     // Largest value belonging in small form.
+        vec![0x82, 0x80, 0], // Redundant high zero byte.
+        vec![0x82, 0xff, 0], // Another non-minimal two-byte value.
+        oversized,
+        maximum_prefix,
+        truncated,
+    ]
+}
+
+#[test]
+fn every_specialized_and_generic_decoder_rejects_malformed_native_varints() {
+    macro_rules! rejects {
+        ($max_bytes:expr, $decode:expr) => {
+            for input in malformed_native_varints($max_bytes) {
+                let mut reader = Cursor::new(input.as_slice());
+                assert!(($decode)(&mut reader).is_err(), "accepted {input:02x?}");
+                assert_eq!(reader.position(), 0, "advanced for {input:02x?}");
+            }
+        };
+    }
+
+    rejects!(2, Lencode::decode_varint_u16);
+    rejects!(4, Lencode::decode_varint_u32);
+    rejects!(8, Lencode::decode_varint_u64);
+    rejects!(16, Lencode::decode_varint_u128);
+    rejects!(1, Lencode::decode_varint::<u8>);
+    rejects!(2, Lencode::decode_varint::<u16>);
+    rejects!(4, Lencode::decode_varint::<u32>);
+    rejects!(8, Lencode::decode_varint::<u64>);
+    rejects!(16, Lencode::decode_varint::<u128>);
+    rejects!(32, Lencode::decode_varint::<crate::u256::U256>);
+
+    // Signed native decoding delegates to the same hardened unsigned parser.
+    rejects!(8, Lencode::decode_varint_signed::<i64>);
+}
+
+#[test]
+fn every_native_length_prefix_is_bounded_and_canonical() {
+    macro_rules! check_headers {
+        ($max_bytes:expr, $decode:expr, $encode:expr) => {
+            for first in 0x80u8..=0xff {
+                let payload_len = usize::from(first & 0x7f);
+                let mut input = vec![first];
+                input.extend(core::iter::repeat_n(0x80, 127));
+                if payload_len == 1 {
+                    input[1] = 0x80;
+                } else if payload_len > 1 {
+                    input[payload_len] = 1;
+                }
+
+                let mut reader = Cursor::new(input.as_slice());
+                if (1..=$max_bytes).contains(&payload_len) {
+                    let value = ($decode)(&mut reader).unwrap();
+                    assert_eq!(reader.position(), 1 + payload_len);
+                    let mut canonical = Vec::new();
+                    ($encode)(value, &mut canonical).unwrap();
+                    assert_eq!(canonical, input[..reader.position()]);
+                } else {
+                    assert!(($decode)(&mut reader).is_err());
+                    assert_eq!(reader.position(), 0);
+                }
+            }
+        };
+    }
+
+    check_headers!(2, Lencode::decode_varint_u16, Lencode::encode_varint_u16);
+    check_headers!(4, Lencode::decode_varint_u32, Lencode::encode_varint_u32);
+    check_headers!(8, Lencode::decode_varint_u64, Lencode::encode_varint_u64);
+    check_headers!(16, Lencode::decode_varint_u128, Lencode::encode_varint_u128);
+    check_headers!(
+        32,
+        Lencode::decode_varint::<crate::u256::U256>,
+        Lencode::encode_varint
+    );
+}
+
+#[test]
+fn arbitrary_native_inputs_only_decode_canonical_prefixes() {
+    macro_rules! fuzz_like {
+        ($decode:expr, $encode:expr) => {{
+            let mut state = 0xd1b5_4a32_d192_ed03u64;
+            for sample in 0..10_000usize {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                let len = sample % 40;
+                let mut input = vec![0u8; len];
+                for byte in &mut input {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    *byte = state as u8;
+                }
+
+                let mut reader = Cursor::new(input.as_slice());
+                match ($decode)(&mut reader) {
+                    Ok(value) => {
+                        let mut canonical = Vec::new();
+                        ($encode)(value, &mut canonical).unwrap();
+                        assert_eq!(canonical, input[..reader.position()]);
+                    }
+                    Err(_) => assert_eq!(reader.position(), 0),
+                }
+            }
+        }};
+    }
+
+    fuzz_like!(Lencode::decode_varint_u16, Lencode::encode_varint_u16);
+    fuzz_like!(Lencode::decode_varint_u32, Lencode::encode_varint_u32);
+    fuzz_like!(Lencode::decode_varint_u64, Lencode::encode_varint_u64);
+    fuzz_like!(Lencode::decode_varint_u128, Lencode::encode_varint_u128);
+    fuzz_like!(
+        Lencode::decode_varint::<crate::u256::U256>,
+        Lencode::encode_varint
+    );
+    fuzz_like!(
+        Lencode::decode_varint_signed::<i64>,
+        Lencode::encode_varint_signed
+    );
+}
+
+#[test]
+fn streaming_native_decoders_handle_partial_reads_and_truncation() {
+    struct OneByteReader<'a> {
+        input: &'a [u8],
+        position: usize,
+    }
+
+    impl Read for OneByteReader<'_> {
+        fn read(&mut self, output: &mut [u8]) -> Result<usize> {
+            if self.position == self.input.len() {
+                return Ok(0);
+            }
+            if output.is_empty() {
+                return Ok(0);
+            }
+            output[0] = self.input[self.position];
+            self.position += 1;
+            Ok(1)
+        }
+    }
+
+    let mut encoded = Vec::new();
+    Lencode::encode_varint_u128(u128::MAX, &mut encoded).unwrap();
+    let mut reader = OneByteReader {
+        input: &encoded,
+        position: 0,
+    };
+    assert_eq!(Lencode::decode_varint_u128(&mut reader).unwrap(), u128::MAX);
+    assert_eq!(reader.position, encoded.len());
+
+    let mut truncated = OneByteReader {
+        input: &encoded[..encoded.len() - 1],
+        position: 0,
+    };
+    assert!(Lencode::decode_varint_u128(&mut truncated).is_err());
+
+    let oversized = [0xff];
+    let mut oversized = OneByteReader {
+        input: &oversized,
+        position: 0,
+    };
+    assert!(Lencode::decode_varint_u64(&mut oversized).is_err());
+    assert_eq!(oversized.position, 1, "payload must not be requested");
 }

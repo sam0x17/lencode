@@ -1,7 +1,7 @@
 //! Benchmarks that isolate the `looks_incompressible` entropy heuristic.
 //!
 //! The heuristic runs on every `&[u8]` / `Vec<u8>` / `String` encode with
-//! len >= MIN_COMPRESS_LEN (64). It samples 32 bytes and counts distinct
+//! len >= MIN_COMPRESS_LEN (512). It samples 32 bytes and counts distinct
 //! values. These benchmarks measure the cost difference between:
 //!   - Payloads below MIN_COMPRESS_LEN (heuristic skipped entirely)
 //!   - Random payloads ≥64 bytes (heuristic runs, detects incompressible, skips zstd)
