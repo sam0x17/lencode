@@ -614,8 +614,9 @@ impl VarintEncodingScheme for Lencode {
             }
             #[cfg(target_endian = "big")]
             {
+                let value = from_le_bytes::<I>(payload);
                 reader.advance(1 + n);
-                return Ok(from_le_bytes::<I>(payload));
+                return Ok(value);
             }
         }
 
