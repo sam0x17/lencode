@@ -3,7 +3,7 @@
 This file records user-visible changes to lencode. Versions follow Semantic
 Versioning.
 
-## [2.0.0] - 2026-09-01
+## [2.0.0] - 2026-09-06
 
 ### Breaking changes
 
